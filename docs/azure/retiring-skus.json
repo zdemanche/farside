@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "publishedAt": "2026-11-02",
+  "source": "docs/azure/retiring-skus.json",
+  "note": "In-repo Farside test catalogue. Not a live Azure retirement announcement. Refresh by editing this file.",
+  "entries": [
+    {
+      "skuName": "Standard_B1ls",
+      "resourceType": "Microsoft.Compute/virtualMachines",
+      "retirementDate": "2026-12-31",
+      "announcementId": "farside-test-b1ls",
+      "source": "docs/azure/retiring-skus.json"
+    }
+  ]
+}

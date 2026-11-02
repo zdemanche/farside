@@ -40,6 +40,12 @@ export function factsFromManifest(manifest: GroundTruthManifest): ResourceFacts[
       fields.sqlResourceId = item.id;
       fields.databaseId = item.id;
     }
+    if (item.type === "Microsoft.Web/certificates") {
+      fields.certificateId = item.id;
+    }
+    if (item.type === "Microsoft.Network/applicationGateways") {
+      fields.gatewayId = item.id;
+    }
     return { resourceUri: resourceUriFor(item), fields };
   });
 }
