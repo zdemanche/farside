@@ -127,6 +127,7 @@ export class ScanRunner {
         inventory: result.inventory,
         facts: result.facts,
         checkIds: Object.keys(CHECK_REGISTRY),
+        settings,
       });
       this.store.putFindings(orgId, checked.findings);
       for (const entry of checked.coverage) {

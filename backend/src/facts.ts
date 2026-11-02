@@ -18,6 +18,15 @@ export function factsFromManifest(manifest: GroundTruthManifest): ResourceFacts[
     if (item.type === "Microsoft.Compute/disks") {
       fields.diskId = item.id;
     }
+    if (item.type === "Microsoft.Compute/snapshots") {
+      fields.snapshotId = item.id;
+    }
+    if (item.type === "Microsoft.Network/publicIPAddresses") {
+      fields.publicIpId = item.id;
+    }
+    if (item.type === "Microsoft.Compute/virtualMachines") {
+      fields.vmId = item.id;
+    }
     return { resourceUri: resourceUriFor(item), fields };
   });
 }

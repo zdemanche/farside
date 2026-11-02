@@ -3,6 +3,7 @@ import { BlindSpots } from "./BlindSpots";
 import { Connect } from "./Connect";
 import { Estate } from "./Estate";
 import { Inventory } from "./Inventory";
+import { Issues } from "./Issues";
 import { Settings } from "./Settings";
 import { EMPTY_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
 
@@ -37,9 +38,11 @@ export function App() {
           ? "estate"
           : hash === "inventory"
             ? "inventory"
-            : hash === "settings"
-              ? "settings"
-              : "empty";
+            : hash === "issues"
+              ? "issues"
+              : hash === "settings"
+                ? "settings"
+                : "empty";
 
   return (
     <div>
@@ -67,6 +70,8 @@ export function App() {
           <Estate />
         ) : page === "inventory" ? (
           <Inventory />
+        ) : page === "issues" ? (
+          <Issues />
         ) : page === "settings" ? (
           <Settings />
         ) : (

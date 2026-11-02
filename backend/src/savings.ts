@@ -43,3 +43,21 @@ export function diskMonthlySavings(sizeGb: number): NamedSavingsRange {
     basis: DISK_SAVINGS_BASIS,
   });
 }
+
+export const SNAPSHOT_SAVINGS_BASIS =
+  "Monthly list price of snapshot storage for the retained size, as a range";
+export const PUBLIC_IP_SAVINGS_BASIS = "Monthly list price of the unused public IP SKU, as a range";
+export const STOPPED_VM_SAVINGS_BASIS =
+  "Monthly compute list price of the VM size while stopped-but-allocated, as a range";
+
+export function snapshotMonthlySavings(): NamedSavingsRange {
+  return savingsRange({ min: 1, max: 3, currency: "USD", basis: SNAPSHOT_SAVINGS_BASIS });
+}
+
+export function publicIpMonthlySavings(): NamedSavingsRange {
+  return savingsRange({ min: 3, max: 5, currency: "USD", basis: PUBLIC_IP_SAVINGS_BASIS });
+}
+
+export function stoppedVmMonthlySavings(): NamedSavingsRange {
+  return savingsRange({ min: 30.4, max: 45.6, currency: "USD", basis: STOPPED_VM_SAVINGS_BASIS });
+}
