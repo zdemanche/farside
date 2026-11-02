@@ -11,6 +11,7 @@ export type GroundTruthItem = {
   type: string;
   title: string;
   tags: Record<string, string>;
+  properties?: Record<string, string | number | boolean | null>;
 };
 
 export type GroundTruthManifest = {

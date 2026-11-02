@@ -69,6 +69,7 @@ describe("scan job runner", () => {
       inventory,
       coverage: [],
       coveredScopes: ["main:azure-inventory-all-resources"],
+      facts: [],
     });
     const finished = await first.done;
     expect(finished.status).toBe("succeeded");

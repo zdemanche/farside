@@ -270,6 +270,13 @@ export function buildApp(
     return sendClean(reply, scan.started ? 202 : 200, { scan: scan.job, scanStarted: scan.started });
   });
 
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/findings", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    return sendClean(reply, 200, { findings: store.snapshot(request.params.orgId).findings });
+  });
+
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/estate", async (request, reply) => {
     if (!requireOrg(request, reply)) {
       return reply;

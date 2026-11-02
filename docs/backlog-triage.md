@@ -22,8 +22,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 5. **E2 in-repo (org/connect/inventory)** — merged (#226).
 6. **E2-S4** — merged (#232).
 7. **E2-S5** — merged (#233).
-8. **E2-S6** — this change: scan job runner, connect trigger, overlap lock. Live unattended federated leftover.
-9. **E3+ remaining** — check engine and later screens against fixtures.
+8. **E2-S6** — merged (#234).
+9. **E3-S1** — this change: check engine, savings helper, registry, unattached-disk check against fixtures.
+10. **E3+ remaining** — more waste checks and Issues/Scans screens against fixtures.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -137,13 +138,13 @@ Phase 2 findings must be proven live. Engine and UI can be built against fixture
 | Key | Issue | Title | Class | Why |
 |---|---|---|---|---|
 | `E3` | #83 | Real Azure issues with proof of coverage | (c) live Azure / GCP / test tenant | Phase 2 findings must be proven live. Engine and UI can be built against fixtures first. |
-| `E3-S1` | #84 | Check engine and first check end to end | (a) doable in code now | Check engine, evidence rules, savings helper, unattached-disk check against fixtures. Live seeded-disk proof is (c). |
-| `E3-S1-T1` | #85 | Build the check runner over stored inventory | (a) doable in code now | Runner over stored inventory. |
-| `E3-S1-T2` | #86 | Enforce evidence and undetermined rules | (a) doable in code now | Evidence and undetermined rejection tests. |
-| `E3-S1-T3` | #87 | Build the shared savings range helper | (a) doable in code now | Savings range helper. |
-| `E3-S1-T4` | #88 | Add a check registry tied to the spec | (a) doable in code now | Check registry tied to the spec. |
+| `E3-S1` | #84 | Check engine and first check end to end | (a) this change | Engine + unattached-disk against fixtures. Live portal proof is (c). |
+| `E3-S1-T1` | #85 | Build the check runner over stored inventory | (a) this change | Runner over stored inventory and facts. No provider calls. |
+| `E3-S1-T2` | #86 | Enforce evidence and undetermined rules | (a) this change | Missing evidence and missing closer are rejected. |
+| `E3-S1-T3` | #87 | Build the shared savings range helper | (a) this change | min/max + named basis; point values rejected. |
+| `E3-S1-T4` | #88 | Add a check registry tied to the spec | (a) this change | Unregistered spec ids cannot run. |
 | `E3-S1-T5` | #89 | Add metrics harvest via Monitoring Reader | (c) live Azure / GCP / test tenant | Metrics harvest via Monitoring Reader on the test subscription. |
-| `E3-S1-T6` | #90 | Implement the unattached disk check end to end | (c) live Azure / GCP / test tenant | Unattached disk end-to-end against seeded positives/negatives. Fixture path is (a). |
+| `E3-S1-T6` | #90 | Implement the unattached disk check end to end | (a) this change | Fixture positives/negatives via API. Live ARM leftover. |
 | `E3-S2` | #91 | Leftover waste checks prove the engine end to end | (a) doable in code now | Three waste checks against fixtures; scan-to-console proof on the test estate is (c). |
 | `E3-S2-T1` | #92 | Implement the old snapshot check | (a) doable in code now | Old snapshot check. |
 | `E3-S2-T2` | #93 | Implement the unassociated public IP check | (a) doable in code now | Unassociated public IP check. |
