@@ -1,7 +1,9 @@
 import type { Finding, Inventory } from "@farside/scan-contracts";
 import type { CoverageEntry } from "./coverage.js";
+import { applyOwnerTag } from "./inventory.js";
 import { REQUIRED_AZURE_ROLES } from "./roles.js";
 import { assertNoSecrets } from "./secrets.js";
+import { DEFAULT_SETTINGS, type OrgSettings } from "./settings.js";
 
 export type Connection = {
   id: string;
@@ -16,10 +18,17 @@ export type OrgState = {
   inventory: Inventory | null;
   coverage: CoverageEntry[];
   findings: Finding[];
+  settings: OrgSettings;
 };
 
 function emptyOrg(): OrgState {
-  return { connections: [], inventory: null, coverage: [], findings: [] };
+  return {
+    connections: [],
+    inventory: null,
+    coverage: [],
+    findings: [],
+    settings: { ...DEFAULT_SETTINGS },
+  };
 }
 
 export class MemoryStore {
@@ -73,6 +82,16 @@ export class MemoryStore {
     assertNoSecrets(findings);
     this.org(orgId).findings = findings;
     return findings;
+  }
+
+  putSettings(orgId: string, settings: OrgSettings): OrgSettings {
+    assertNoSecrets(settings);
+    const org = this.org(orgId);
+    org.settings = settings;
+    if (org.inventory) {
+      org.inventory = applyOwnerTag(org.inventory, settings.ownerTagKey);
+    }
+    return settings;
   }
 
   deleteConnection(orgId: string, connectionId: string): boolean {

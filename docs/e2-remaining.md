@@ -15,6 +15,9 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 | E2-S4-T2 | #66 | `scoreHealth` from `@farside/scan-contracts` is the only scorer. Adding unassessed scopes leaves the score unchanged. |
 | E2-S4-T3 | #67 | Blind spots screen lists why and what would close it. Vitest e2e + axe. |
 | E2-S4-T4 | #68 | Missing role, throttling, unsupported type, and failed call map to plain-language copy. |
+| E2-S5-T1 | #70 | Estate overview: totals, no-owner, coverage, no Phase 1 health score. Empty state points to Connect. |
+| E2-S5-T2 | #71 | Inventory browse with owner/service/subscription/region filters and owner/service grouping. |
+| E2-S5-T3 | #72 | Settings store owner tag and production marker per org; changing the owner key updates no-owner totals. |
 
 ## Leftovers
 

@@ -20,8 +20,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 3. **E1-S4** (#27) — this change: reuse review of reachable Moonaan repos; no client names copied.
 4. **E1-S5** (#31) — this change: seed plan + ground-truth **fixtures**; live subscription provision stays (c).
 5. **E2 in-repo (org/connect/inventory)** — merged (#226).
-6. **E2-S4** — this change: coverage states, shared scorer, Blind spots, cause copy.
-7. **E2+ remaining** — estate/inventory/settings screens, scan runner against mocks.
+6. **E2-S4** — merged (#232).
+7. **E2-S5** — this change: Estate, Inventory, Settings.
+8. **E2+ remaining** — scan runner against mocks.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -113,10 +114,10 @@ Phase 1 needs Identity, a live Azure connect, and a test tenant.
 | `E2-S4-T2` | #66 | Use the contract scoring helper for coverage | (a) this change | `scoreHealth` only; unassessed scopes leave the score unchanged. |
 | `E2-S4-T3` | #67 | Build the Blind spots screen | (a) this change | Table of why/closer; axe + e2e. |
 | `E2-S4-T4` | #68 | Write plain-language reasons for each cause | (a) this change | missing_role, throttling, unsupported_type, failed_call copy. |
-| `E2-S5` | #69 | Estate overview, Inventory and Settings screens | (a) doable in code now | Estate/Inventory/Settings screens over stored data. Empty states do not need Azure. |
-| `E2-S5-T1` | #70 | Build the Estate overview | (a) doable in code now | Estate overview. |
-| `E2-S5-T2` | #71 | Build the Inventory screen | (a) doable in code now | Inventory screen. |
-| `E2-S5-T3` | #72 | Build Settings for owner tag and production marker | (a) doable in code now | Settings for owner tag and production marker. |
+| `E2-S5` | #69 | Estate overview, Inventory and Settings screens | (a) this change | Screens over stored/fixture data. Phone-width is jsdom 375 + axe; Playwright device leftover. |
+| `E2-S5-T1` | #70 | Build the Estate overview | (a) this change | Totals, no-owner, coverage; no Phase 1 health score. |
+| `E2-S5-T2` | #71 | Build the Inventory screen | (a) this change | Filters and grouping; counts compared to the browse API. |
+| `E2-S5-T3` | #72 | Build Settings for owner tag and production marker | (a) this change | Changing the owner tag key updates no-owner totals. |
 | `E2-S6` | #73 | First scan on connect, running unattended | (c) live Azure / GCP / test tenant | Unattended scan with federated credentials on the test subscription. |
 | `E2-S6-T1` | #74 | Build the scan job runner | (a) doable in code now | Job runner can be unit-tested without Azure. |
 | `E2-S6-T2` | #75 | Trigger a scan on connect | (a) doable in code now | Trigger-on-connect wiring; end-to-end on the test subscription is (c). |
