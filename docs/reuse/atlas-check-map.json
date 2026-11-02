@@ -1,0 +1,386 @@
+{
+  "version": 1,
+  "readAt": "2026-11-02",
+  "atlasCatalog": "Moonaan/atlas-aws skills/control-catalog (AWS-only, 130 controls, eight domains). Neutral ATLAS-* ids are portable as method, not as code.",
+  "costReporter": "Moonaan/moonaan-cost-reporter README and src/analyze/{floor,rules}.ts. Method only; no client data.",
+  "sharedAtlasMethod": [
+    "Harvest and check as separate steps",
+    "No finding without evidence",
+    "undetermined results that say what would close them",
+    "Savings as ranges, never a point"
+  ],
+  "checks": [
+    {
+      "id": "azure-inventory-all-resources",
+      "cloud": "azure",
+      "title": "All resources by subscription, type, and region",
+      "atlas": {
+        "kind": "method",
+        "id": "discover-harvest",
+        "title": "Atlas /discover then /harvest, then assess",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-inventory-no-owner-tag",
+      "cloud": "azure",
+      "title": "Resources with no owner tag",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-041",
+        "title": "Taggable resources carry the tags cost allocation depends on",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-waste-unattached-disks",
+      "cloud": "azure",
+      "title": "Unattached disks",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-020",
+        "title": "Idle-resource inventory (unattached volumes); per-resource detection cited as ATLAS-DATA-011",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-waste-unassociated-public-ips",
+      "cloud": "azure",
+      "title": "Unassociated public IPs",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-020",
+        "title": "Idle-resource inventory (unattached EIPs)",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-waste-old-snapshots",
+      "cloud": "azure",
+      "title": "Old snapshots",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-021",
+        "title": "Data retention in practice matches stated policy (snapshot accumulation)",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-waste-stopped-not-deallocated-vms",
+      "cloud": "azure",
+      "title": "VMs stopped but not deallocated",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-020",
+        "title": "Idle-resource inventory (stopped-but-EBS-bearing instances)",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-waste-empty-app-service-plans",
+      "cloud": "azure",
+      "title": "Empty App Service plans",
+      "atlas": {
+        "kind": "new",
+        "id": null,
+        "title": "Azure App Service plans have no Atlas AWS equivalent",
+        "relation": "new"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-waste-idle-load-balancers",
+      "cloud": "azure",
+      "title": "Idle load balancers",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-020",
+        "title": "Idle-resource inventory (idle load balancers); per-resource detection cited as ATLAS-NET-024",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-waste-idle-nat-gateways",
+      "cloud": "azure",
+      "title": "Idle NAT gateways",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-020",
+        "title": "Idle-resource inventory (idle NAT gateways); per-resource detection cited as ATLAS-NET-024",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-cost-spend-by-service",
+      "cloud": "azure",
+      "title": "Spend by service",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-001",
+        "title": "Cost and Usage Report / billing telemetry as ground truth, decomposed by service",
+        "relation": "follows"
+      },
+      "costReporter": "Cost Explorer GetCostAndUsage grouped by service; pagination is required"
+    },
+    {
+      "id": "azure-cost-month-on-month",
+      "cloud": "azure",
+      "title": "Month-on-month spend change",
+      "atlas": {
+        "kind": "method",
+        "id": "cost-usage-method",
+        "title": "Atlas cost-usage method: compare periods at the same billing scope",
+        "relation": "follows"
+      },
+      "costReporter": "Trailing-window series construction in analyze/series.ts"
+    },
+    {
+      "id": "azure-cost-reservation-use",
+      "cloud": "azure",
+      "title": "Reservation use",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-011",
+        "title": "Existing commitments are utilized and expiry is managed",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-cost-savings-plan-use",
+      "cloud": "azure",
+      "title": "Savings plan use",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-011",
+        "title": "Existing commitments are utilized and expiry is managed (Savings Plans)",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-cost-subscriptions-without-budgets",
+      "cloud": "azure",
+      "title": "Subscriptions without budgets",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-030",
+        "title": "Budgets and anomaly detection guard every account",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-resilience-prod-vms-outside-backup",
+      "cloud": "azure",
+      "title": "Production VMs outside Azure Backup",
+      "atlas": {
+        "kind": "method",
+        "id": "backup-coverage",
+        "title": "Atlas evidence-before-assertion on backup coverage; AWS Backup checks are AWS-only so the Azure check is new code",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-resilience-prod-sql-outside-backup",
+      "cloud": "azure",
+      "title": "Production SQL outside Azure Backup",
+      "atlas": {
+        "kind": "method",
+        "id": "backup-coverage",
+        "title": "Same backup-coverage method as VMs, Azure SQL specific",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-resilience-db-zone-or-geo",
+      "cloud": "azure",
+      "title": "Databases without zone redundancy or geo-backup",
+      "atlas": {
+        "kind": "new",
+        "id": null,
+        "title": "Azure zone / geo-backup flags have no Atlas AWS control to port",
+        "relation": "new"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-lifecycle-retiring-skus",
+      "cloud": "azure",
+      "title": "Retiring SKUs",
+      "atlas": {
+        "kind": "method",
+        "id": "engine-versions",
+        "title": "Atlas engine-version / out-of-support checks; Azure retirement catalogue is new data",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-lifecycle-expiring-app-service-certs",
+      "cloud": "azure",
+      "title": "Expiring App Service certificates",
+      "atlas": {
+        "kind": "method",
+        "id": "certificate-lifecycle",
+        "title": "Atlas certificate-lifecycle posture checks (AWS ACM); Azure App Service certs are new code",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "azure-lifecycle-expiring-gateway-certs",
+      "cloud": "azure",
+      "title": "Expiring gateway certificates",
+      "atlas": {
+        "kind": "method",
+        "id": "certificate-lifecycle",
+        "title": "Atlas certificate-lifecycle posture checks; Azure gateway / Front Door / APIM certs are new code",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "gcp-inventory-all-assets",
+      "cloud": "gcp",
+      "title": "All assets by project and type",
+      "atlas": {
+        "kind": "method",
+        "id": "discover-harvest",
+        "title": "Atlas /discover then /harvest",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "gcp-inventory-no-owner-label",
+      "cloud": "gcp",
+      "title": "Resources with no owner label",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-041",
+        "title": "Taggable resources carry the tags cost allocation depends on (GCP labels)",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "gcp-waste-unattached-disks",
+      "cloud": "gcp",
+      "title": "Unattached disks",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-020",
+        "title": "Idle-resource inventory (unattached volumes)",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "gcp-waste-unused-external-ips",
+      "cloud": "gcp",
+      "title": "Reserved but unused external IPs",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-020",
+        "title": "Idle-resource inventory (unattached EIPs)",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "gcp-waste-old-snapshots-and-images",
+      "cloud": "gcp",
+      "title": "Old snapshots and images",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-021",
+        "title": "Data retention in practice matches stated policy",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "gcp-waste-idle-vm-and-disk-recommendations",
+      "cloud": "gcp",
+      "title": "Idle VM and disk recommendations",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-022",
+        "title": "Over-provisioning findings from utilization sources are triaged (Recommender ≈ Compute Optimizer)",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "gcp-cost-spend-by-service",
+      "cloud": "gcp",
+      "title": "Spend by service and project",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-001",
+        "title": "Billing export as ground truth (BigQuery export is the GCP analogue of CUR)",
+        "relation": "follows"
+      },
+      "costReporter": "Floor/burst and service grouping apply once an export series exists"
+    },
+    {
+      "id": "gcp-cost-committed-use",
+      "cloud": "gcp",
+      "title": "Committed-use discount use",
+      "atlas": {
+        "kind": "control",
+        "id": "ATLAS-CST-011",
+        "title": "Existing commitments are utilized and expiry is managed",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "gcp-resilience-sql-ha-or-backup",
+      "cloud": "gcp",
+      "title": "Cloud SQL without high availability or backups",
+      "atlas": {
+        "kind": "method",
+        "id": "backup-coverage",
+        "title": "Atlas backup-coverage method; Cloud SQL HA/backup flags are new code",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "gcp-lifecycle-sql-gke-support",
+      "cloud": "gcp",
+      "title": "Out-of-support SQL and GKE versions",
+      "atlas": {
+        "kind": "method",
+        "id": "engine-versions",
+        "title": "Atlas engine-version checks; GCP support calendars are new data",
+        "relation": "follows"
+      },
+      "costReporter": null
+    },
+    {
+      "id": "gcp-lifecycle-expiring-certs",
+      "cloud": "gcp",
+      "title": "Expiring certificates",
+      "atlas": {
+        "kind": "method",
+        "id": "certificate-lifecycle",
+        "title": "Atlas certificate-lifecycle posture checks; Certificate Manager is new code",
+        "relation": "follows"
+      },
+      "costReporter": null
+    }
+  ]
+}
