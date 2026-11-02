@@ -18,6 +18,9 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 | E2-S5-T1 | #70 | Estate overview: totals, no-owner, coverage, no Phase 1 health score. Empty state points to Connect. |
 | E2-S5-T2 | #71 | Inventory browse with owner/service/subscription/region filters and owner/service grouping. |
 | E2-S5-T3 | #72 | Settings store owner tag and production marker per org; changing the owner key updates no-owner totals. |
+| E2-S6-T1 | #74 | Background scan job with stored success and failure status. |
+| E2-S6-T2 | #75 | Connect (connection PUT) starts the first scan. |
+| E2-S6-T4 | #77 | One running scan per subscription; mid-failure stores covered scopes and is not marked complete. |
 
 ## Leftovers
 
@@ -36,3 +39,7 @@ Inventory is mapped from the ground-truth fixture. Resource Graph, management-gr
 ### Live coverage proof
 
 Blind spots is fixture-backed. A missing-role or failed-call row from a live scan waits on E1-S7 / E2-S6.
+
+### Unattended federated scan (#76)
+
+The job runner can start as `actor: system` without a user request. Token exchange against a live subscription is still leftover.
