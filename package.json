@@ -12,11 +12,13 @@
     "infra"
   ],
   "scripts": {
-    "lint": "npm run lint --workspaces --if-present && npm run lint:azure-spec",
+    "lint": "npm run lint --workspaces --if-present && npm run lint:azure-spec && npm run lint:reuse-review",
     "lint:azure-spec": "node scripts/azure-spec/lint.mjs",
+    "lint:reuse-review": "node scripts/reuse-review/lint.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test:azure-spec && npm run test --workspaces --if-present",
+    "test": "npm run test:azure-spec && npm run test:reuse-review && npm run test --workspaces --if-present",
     "test:azure-spec": "vitest run --config scripts/azure-spec/vitest.config.ts",
+    "test:reuse-review": "vitest run --config scripts/reuse-review/vitest.config.ts",
     "build": "npm run build --workspaces --if-present"
   },
   "devDependencies": {

@@ -15,9 +15,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 
 ## This batch (dependency order)
 
-1. **E1-S1** (#10) + **E1-S6** (#36) + D1–D8 — this change.
-2. **E1-S2** (#16) — contract validators and scoring helper on fixtures; dashmeta formats used only if the repo is readable.
-3. **E1-S4** (#27) — reuse review of whatever Moonaan repos are readable; no client names copied.
+1. **E1-S1** (#10) + **E1-S6** (#36) + D1–D8 — merged.
+2. **E1-S2** (#16) — merged (`@farside/scan-contracts` 0.1.0).
+3. **E1-S4** (#27) — this change: reuse review of reachable Moonaan repos; no client names copied.
 4. **E1-S5** (#31) — seed scripts and ground-truth **fixtures**; live subscription provision stays (c).
 5. **E2+** — screens, engine, and harvest against mocks; Identity/AIF/live Azure leftover called out.
 
@@ -36,7 +36,7 @@ Recorded in `docs/decisions.md`. Physical leftovers stay on the story that needs
 | `D5` | #5 | Trademark search for the Farside name | adopted | Formal counsel search; working clone name |
 | `D6` | #6 | Go or no-go | adopted: go for in-repo work | Live Azure data still needs the D3 estate |
 | `D7` | #7 | Fund a GCP test project | adopted as a decision | Physical project (E6-S1) |
-| `D8` | #8 | Billing approach and suspension rule | adopted (7/14/30-day ladder) | Read dashmeta billing UI when reachable |
+| `D8` | #8 | Billing approach and suspension rule | adopted (7/14/30-day ladder) | Billing UI read 2026-11-02; implement in E5-S3 |
 
 ## E1: Cleared to build and provable on a real Azure estate (#9)
 
@@ -58,14 +58,14 @@ In-repo Phase 0 (boundary, spec, CI) can finish. Live proof still needs the Azur
 | `E1-S2-T4` | #20 | Publish the contracts as a versioned package | (a) | After T3. |
 | `E1-S2-T5` | #21 | Define the health score formula and own the scoring helper | (a) | After T3. |
 | `E1-S3` | #22 | Farside repo with CI and a deploy skeleton | switch-on-later | Layout+CI done. Deploy/iac-hub ready to switch on; not blockers. |
-| `E1-S3-T1` | #23 | Create the repo and project layout | (a) mostly done | Branch protection is on. Leftover: org transfer to `Moonaan/moonaan-farside`. |
-| `E1-S3-T2` | #24 | Add CI for lint, types and tests | (a) done | Required check is on. |
+| `E1-S3-T1` | #23 | Create the repo and project layout | (a) mostly done | Branch protection is on (owner, 2026-11-02). Leftover: org transfer to `Moonaan/moonaan-farside`. |
+| `E1-S3-T2` | #24 | Add CI for lint, types and tests | (a) done | Required check **lint, types and tests** is on. Closed by #222. |
 | `E1-S3-T3` | #25 | Deploy an empty service and shell to dev | switch-on-later | Skip when credentials are missing; do not fail CI. |
 | `E1-S3-T4` | #26 | Register Farside in iac-hub PRODUCTS | switch-on-later | In-repo `PRODUCTS` sketch only; merge is in iac-hub. |
-| `E1-S4` | #27 | Reuse review of existing patterns and adapters | (d) | Read what is reachable; do not invent the rest. |
-| `E1-S4-T1` | #28 | Review dashmeta Azure adapter and billing screen | (d) | `Moonaan/moonaan-dashmeta-web` exists; other dashmeta repos may not. |
-| `E1-S4-T2` | #29 | Review AIF connectors and scan for client names | (d) | No AIF clone in this workspace. |
-| `E1-S4-T3` | #30 | Map Atlas and cost reporter patterns to checks | (d) | Atlas / cost-reporter repos if readable. |
+| `E1-S4` | #27 | Reuse review of existing patterns and adapters | (a) this change | `docs/reuse-review.md`. Sources were readable. |
+| `E1-S4-T1` | #28 | Review dashmeta Azure adapter and billing screen | (a) this change | Adapter: one type, fakes-only, extend plan. Billing: plan/usage/amount due/suspend, no invoices. |
+| `E1-S4-T2` | #29 | Review AIF connectors and scan for client names | (a) this change | Port vs not-ported lists; scan attached; neither connector live. |
+| `E1-S4-T3` | #30 | Map Atlas and cost reporter patterns to checks | (a) this change | Every Azure and GCP launch check is in `docs/reuse/atlas-check-map.json`. |
 | `E1-S5` | #31 | Azure test estate seeded with deliberate waste | (c) | Decision D3 adopted; provision is still live Azure. Fixtures can be written first. |
 | `E1-S5-T1` | #32 | Provision the subscriptions and cost guard | (c) | Live Azure. |
 | `E1-S5-T2` | #33 | Seed waste, resilience and lifecycle cases from code | (c) + (a) scripts | Scripts in-repo; apply needs a subscription. |
@@ -231,8 +231,8 @@ Sell-ready path uses iac-hub, Identity, billing (D8), and a test tenant.
 | `E5-S2-T2` | #165 | Add overlap skip, retry and missed-run detection | (a) doable in code now | Overlap skip, retry, missed-run. |
 | `E5-S2-T3` | #166 | Add schedule control to Settings | (a) doable in code now | Schedule control in Settings. |
 | `E5-S2-T4` | #167 | Run a soak test on the test subscription | (c) live Azure / GCP / test tenant | Unattended soak on the test subscription. |
-| `E5-S3` | #168 | Contract and billing for a Farside customer | (b) human decision / sign-off | Blocked on D8 (#8) and the dashmeta billing review (d). |
-| `E5-S3-T1` | #169 | Settle the billing approach and suspension rule | (b) human decision / sign-off | Apply D8 (#8) and the E1-S4 billing review; Ryan and Kevin read it. |
+| `E5-S3` | #168 | Contract and billing for a Farside customer | (a) after this review | D8 adopted; dashmeta billing review is in `docs/reuse-review.md`. Implement in E5-S3. |
+| `E5-S3-T1` | #169 | Settle the billing approach and suspension rule | adopted | D8 + E1-S4 billing review in `docs/reuse-review.md`. Agreement-only sign-off satisfied by owner direction. |
 | `E5-S3-T2` | #170 | Store plan and contract state per org | (a) doable in code now | Store plan/contract state after T1. |
 | `E5-S3-T3` | #171 | Build the billing screen | (a) doable in code now | Billing screen after T2. Reuse from dashmeta is (d). |
 | `E5-S3-T4` | #172 | Apply contract state to scanning | (a) doable in code now | Gate scans on contract state. |
