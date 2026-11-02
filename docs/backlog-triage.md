@@ -25,8 +25,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 8. **E2-S6** — merged (#234).
 9. **E3-S1** — merged (#235).
 10. **E3-S2** — merged (#236).
-11. **E3-S3** — this change: empty App Service plan, idle LB/NAT, missing-metrics undetermined, Issues list against fixtures. Busy-gateway live negative is (c).
-12. **E3+ remaining** — Recovery/Lifecycle, Issues store, Scans screens against fixtures.
+11. **E3-S3** — merged (#237).
+12. **E3-S4** — this change: production backup and zone/geo checks plus Recovery page against fixtures. Live Backup Reader is (c).
+13. **E3+ remaining** — Lifecycle, Issues store, Scans screens against fixtures.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -157,11 +158,11 @@ Phase 2 findings must be proven live. Engine and UI can be built against fixture
 | `E3-S3-T2` | #98 | Implement idle load balancer check | (a) this change | Idle load balancer check. |
 | `E3-S3-T3` | #99 | Implement idle NAT gateway check | (a) this change | Idle NAT gateway check. |
 | `E3-S3-T4` | #100 | Add the undetermined path for missing metrics | (a) this change | Undetermined path when metrics are missing. |
-| `E3-S4` | #101 | Backup and redundancy gaps found, with a Recovery page | (a) doable in code now | Backup/redundancy checks and Recovery page against fixtures; live Backup Reader behaviour is (c). |
-| `E3-S4-T1` | #102 | Implement VM and SQL backup coverage check | (c) live Azure / GCP / test tenant | Compare production systems to Azure Backup protected items. |
-| `E3-S4-T2` | #103 | Implement zone redundancy and geo-backup check | (a) doable in code now | Zone redundancy / geo-backup from stored settings; live confirmation (c). |
-| `E3-S4-T3` | #104 | Handle unknown production status and missing role | (a) doable in code now | Undetermined paths for unknown production and missing role. |
-| `E3-S4-T4` | #105 | Build the Recovery page | (a) doable in code now | Recovery page. |
+| `E3-S4` | #101 | Backup and redundancy gaps found, with a Recovery page | (a) this change | Backup/redundancy checks and Recovery page against fixtures; live Backup Reader behaviour is (c). |
+| `E3-S4-T1` | #102 | Implement VM and SQL backup coverage check | (a) this change | Fixture protected/unprotected cases. Live vault list is (c). |
+| `E3-S4-T2` | #103 | Implement zone redundancy and geo-backup check | (a) this change | Zone redundancy / geo-backup from stored settings; live confirmation (c). |
+| `E3-S4-T3` | #104 | Handle unknown production status and missing role | (a) this change | Undetermined paths for unknown production and missing role. |
+| `E3-S4-T4` | #105 | Build the Recovery page | (a) this change | Recovery page. |
 | `E3-S5` | #106 | Retiring SKUs and expiring certificates, with a Lifecycle page | (a) doable in code now | Retirement data and Lifecycle page are in-repo; near-expiry cert proof is (c). |
 | `E3-S5-T1` | #107 | Build the retiring SKU data source | (a) doable in code now | Retiring SKU data with sources. |
 | `E3-S5-T2` | #108 | Implement retiring SKU check | (a) doable in code now | Retiring SKU check. |

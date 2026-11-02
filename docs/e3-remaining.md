@@ -1,6 +1,6 @@
 # E3 remaining work
 
-In-repo check engine, leftover waste checks, idle plan/LB/NAT checks, and an Issues list run against ground-truth fixtures. Live Azure proof of those findings stays leftover.
+In-repo check engine, leftover waste checks, idle plan/LB/NAT checks, Recovery gaps, and an Issues list run against ground-truth fixtures. Live Azure proof of those findings stays leftover.
 
 ## Done here
 
@@ -19,6 +19,10 @@ In-repo check engine, leftover waste checks, idle plan/LB/NAT checks, and an Iss
 | E3-S3-T2 | #98 | Idle load balancer: fail `lb-idle` with metricWindow, pass `lb-busy`. |
 | E3-S3-T3 | #99 | Idle NAT gateway: fail `nat-idle` with metricWindow, pass `nat-attached`. |
 | E3-S3-T4 | #100 | Missing traffic metrics return `undetermined` with a Monitoring Reader closer. |
+| E3-S4-T1 | #102 | Production VM/SQL backup: fail unprotected, pass protected, counted as N of M. |
+| E3-S4-T2 | #103 | Zone/geo: fail `db-no-zone-geo` with the missing setting, pass `db-zone-geo`. |
+| E3-S4-T3 | #104 | Missing production marker or Backup Reader evidence is `undetermined`. |
+| E3-S4-T4 | #105 | Console `#recovery` lists the gaps with N of M and coverage. |
 
 ## Leftovers
 
@@ -32,4 +36,4 @@ Monitoring Reader on the test subscription.
 
 ### Later E3 stories
 
-Busy-gateway negative on the live test estate (#96). Recovery, Lifecycle, close-only-if-covered Issues store, Scans screens, and live accuracy (#101–#125).
+Busy-gateway negative on the live test estate (#96). Live Backup Reader against vault items (#102). Lifecycle, close-only-if-covered Issues store, Scans screens, and live accuracy (#106–#125).
