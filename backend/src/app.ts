@@ -1,5 +1,20 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
-import { validateInventory, type Inventory } from "@farside/scan-contracts";
+import {
+  HEALTH_SCORE_FORMULA,
+  validateInventory,
+  type Inventory,
+} from "@farside/scan-contracts";
+import {
+  AZURE_LAUNCH_CHECK_IDS,
+  applyCoverageResult,
+  blindSpots,
+  coverageFromHarvest,
+  coverageHealth,
+  recordCoverageScope,
+  toContractCoverage,
+  type CoverageState,
+} from "./coverage.js";
+import type { CoverageCauseId } from "./causes.js";
 import { noOwnerTotal } from "./inventory.js";
 import { SecretLeakError, assertNoSecrets } from "./secrets.js";
 import { assertOrgAccess, sessionFromHeaders, type Session } from "./session.js";
@@ -153,8 +168,94 @@ export function buildApp(store: MemoryStore = new MemoryStore()) {
       return problem(reply, 400, "Invalid inventory", { errors });
     }
     const stored = store.putInventory(request.params.orgId, request.body as Inventory);
+    const subscriptions = [...new Set(stored.resources.map((row) => row.resourceUri.split("/")[2] ?? ""))].filter(
+      Boolean,
+    );
+    store.putCoverage(request.params.orgId, coverageFromHarvest(subscriptions, AZURE_LAUNCH_CHECK_IDS));
     return sendClean(reply, 200, stored);
   });
 
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/coverage", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    const org = store.snapshot(request.params.orgId);
+    const health = coverageHealth(org.coverage, org.findings);
+    return sendClean(reply, 200, {
+      coverage: toContractCoverage(org.coverage),
+      entries: org.coverage,
+      health,
+      formula: HEALTH_SCORE_FORMULA,
+    });
+  });
+
+  app.put<{ Params: OrgParams }>("/v1/orgs/:orgId/coverage", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    if (rejectSecrets(request.body, reply)) {
+      return reply;
+    }
+    const result = coverageResultInput(request.body);
+    if (!result) {
+      return problem(reply, 400, "Invalid coverage", {
+        errors: [{ path: "body", message: "checkId, subscriptionOrProject, and state are required" }],
+      });
+    }
+    const next = applyCoverageResult(store.snapshot(request.params.orgId).coverage, result);
+    store.putCoverage(request.params.orgId, next);
+    return sendClean(reply, 200, recordCoverageScope(result));
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/blind-spots", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    const org = store.snapshot(request.params.orgId);
+    const spots = blindSpots(org.coverage);
+    const health = coverageHealth(org.coverage, org.findings);
+    return sendClean(reply, 200, { spots, health, formula: HEALTH_SCORE_FORMULA });
+  });
+
   return app;
+}
+
+function coverageResultInput(body: unknown): {
+  subscriptionOrProject: string;
+  checkId: string;
+  state: CoverageState;
+  causeId?: CoverageCauseId;
+  closer?: string;
+} | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return null;
+  }
+  const record = body as Record<string, unknown>;
+  if (typeof record.checkId !== "string" || record.checkId.length === 0) {
+    return null;
+  }
+  if (typeof record.subscriptionOrProject !== "string" || record.subscriptionOrProject.length === 0) {
+    return null;
+  }
+  if (record.state !== "assessed" && record.state !== "unassessed" && record.state !== "undetermined") {
+    return null;
+  }
+  const result: {
+    subscriptionOrProject: string;
+    checkId: string;
+    state: CoverageState;
+    causeId?: CoverageCauseId;
+    closer?: string;
+  } = {
+    subscriptionOrProject: record.subscriptionOrProject,
+    checkId: record.checkId,
+    state: record.state,
+  };
+  if (typeof record.causeId === "string") {
+    result.causeId = record.causeId as CoverageCauseId;
+  }
+  if (typeof record.closer === "string") {
+    result.closer = record.closer;
+  }
+  return result;
 }

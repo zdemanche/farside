@@ -18,6 +18,9 @@ const ROUTES = [
   { method: "GET" as const, url: "/v1/orgs/org-a/connections" },
   { method: "PUT" as const, url: "/v1/orgs/org-a/connections" },
   { method: "PUT" as const, url: "/v1/orgs/org-a/inventory" },
+  { method: "GET" as const, url: "/v1/orgs/org-a/coverage" },
+  { method: "PUT" as const, url: "/v1/orgs/org-a/coverage" },
+  { method: "GET" as const, url: "/v1/orgs/org-a/blind-spots" },
   { method: "DELETE" as const, url: "/v1/orgs/org-a/connections/conn-1" },
 ];
 
