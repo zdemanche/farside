@@ -11,6 +11,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@farside/scan-contracts": "*",
     "fastify": "^5.6.1"
   },
   "devDependencies": {

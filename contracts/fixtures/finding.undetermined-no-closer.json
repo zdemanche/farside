@@ -1,0 +1,12 @@
+{
+  "checkId": "azure-waste-unattached-disks",
+  "result": "undetermined",
+  "evidence": {
+    "fields": { "reason": "diskState missing" }
+  },
+  "scope": {
+    "id": "sub-1:azure-waste-unattached-disks",
+    "cloud": "azure",
+    "subscriptionOrProject": "sub-1"
+  }
+}

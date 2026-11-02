@@ -1,0 +1,13 @@
+{
+  "checkId": "azure-waste-unattached-disks",
+  "result": "fail",
+  "evidence": {
+    "fields": { "diskId": "disk-1" }
+  },
+  "scope": {
+    "id": "sub-1:azure-waste-unattached-disks",
+    "cloud": "azure",
+    "subscriptionOrProject": "sub-1"
+  },
+  "savings": 10
+}
