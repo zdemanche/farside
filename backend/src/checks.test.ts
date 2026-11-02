@@ -7,8 +7,11 @@ import { buildApp } from "./app.js";
 import {
   EMPTY_PLANS,
   IDLE_LOAD_BALANCERS,
+  DB_ZONE_OR_GEO,
   IDLE_NAT_GATEWAYS,
   OLD_SNAPSHOTS,
+  PROD_SQL_BACKUP,
+  PROD_VM_BACKUP,
   STOPPED_VMS,
   UNASSOCIATED_IPS,
   UNATTACHED_DISKS,
@@ -16,8 +19,11 @@ import {
   acceptFinding,
   checkEmptyPlans,
   checkIdleLoadBalancers,
+  checkDbZoneOrGeo,
   checkIdleNatGateways,
   checkOldSnapshots,
+  checkProdSqlBackup,
+  checkProdVmBackup,
   checkStoppedVms,
   checkUnassociatedIps,
   checkUnattachedDisks,
@@ -314,6 +320,78 @@ describe("missing metrics undetermined path", () => {
   });
 });
 
+describe("production backup coverage", () => {
+  it("fails unprotected production VMs and SQL as N of M and passes protected lookalikes", () => {
+    const vms = checkProdVmBackup(inventory, facts, DEFAULT_SETTINGS);
+    const sql = checkProdSqlBackup(inventory, facts, DEFAULT_SETTINGS);
+    const vmFail = vms.find((finding) => finding.result === "fail");
+    const sqlFail = sql.find((finding) => finding.result === "fail");
+    expect(vmFail?.checkId).toBe(PROD_VM_BACKUP);
+    expect(vmFail?.evidence.fields.vmId).toBe("vm-prod-no-backup");
+    expect(vmFail?.evidence.fields.protected).toBe(false);
+    expect(vmFail?.evidence.fields.productionMarker).toBe("environment=prod");
+    expect(vmFail?.evidence.fields.unprotectedCount).toBe(1);
+    expect(vmFail?.evidence.fields.productionCount).toBe(2);
+    expect(vms.find((finding) => finding.evidence.fields.vmId === "vm-prod-backed-up")?.result).toBe(
+      "pass",
+    );
+    expect(vms.some((finding) => finding.evidence.fields.vmId === "vm-deallocated")).toBe(false);
+    expect(sqlFail?.checkId).toBe(PROD_SQL_BACKUP);
+    expect(sqlFail?.evidence.fields.sqlResourceId).toBe("sql-prod-no-backup");
+    expect(sqlFail?.evidence.fields.unprotectedCount).toBe(1);
+    expect(sqlFail?.evidence.fields.productionCount).toBe(2);
+    expect(sql.find((finding) => finding.evidence.fields.sqlResourceId === "sql-prod-backed-up")?.result).toBe(
+      "pass",
+    );
+    expect(validateFinding(vmFail!)).toEqual([]);
+    expect(validateFinding(sqlFail!)).toEqual([]);
+  });
+
+  it("is undetermined when the production marker or Backup Reader evidence is removed", () => {
+    const noMarker = checkProdVmBackup(inventory, facts, {
+      ...DEFAULT_SETTINGS,
+      productionTagKey: "",
+      productionTagValue: "",
+    });
+    expect(noMarker.every((finding) => finding.result === "undetermined")).toBe(true);
+    expect(noMarker[0]?.closer).toMatch(/production tag or name pattern/);
+    expect(noMarker.some((finding) => finding.evidence.fields.productionCount != null)).toBe(false);
+    const noRole = checkProdSqlBackup(
+      inventory,
+      facts.map((row) =>
+        row.fields.sqlResourceId === "sql-prod-no-backup"
+          ? { ...row, fields: { sqlResourceId: "sql-prod-no-backup" } }
+          : row,
+      ),
+    );
+    const missing = noRole.find((finding) => finding.evidence.fields.sqlResourceId === "sql-prod-no-backup");
+    expect(missing?.result).toBe("undetermined");
+    expect(missing?.closer).toMatch(/Backup Reader/);
+  });
+});
+
+describe("database zone and geo-backup check", () => {
+  it("fails the seeded database missing zone or geo and passes the redundant lookalike", () => {
+    const findings = checkDbZoneOrGeo(inventory, facts);
+    const fail = findings.find((finding) => finding.result === "fail");
+    const pass = findings.find((finding) => finding.result === "pass");
+    expect(fail?.checkId).toBe(DB_ZONE_OR_GEO);
+    expect(fail?.evidence.fields.databaseId).toBe("db-no-zone-geo");
+    expect(fail?.evidence.fields.missingSetting).toBe("zone redundancy and geo-backup");
+    expect(pass?.evidence.fields.databaseId).toBe("db-zone-geo");
+    expect(validateFinding(fail!)).toEqual([]);
+  });
+
+  it("returns undetermined when redundancy properties cannot be read", () => {
+    const uri = inventory.resources.find((row) => row.displayName.includes("without zone"))!.resourceUri;
+    const findings = checkDbZoneOrGeo(inventory, [
+      { resourceUri: uri, fields: { databaseId: "db-no-zone-geo", engine: "sql" } },
+    ]);
+    expect(findings[0]?.result).toBe("undetermined");
+    expect(findings[0]?.closer).toMatch(/those properties/);
+  });
+});
+
 describe("unattached disk harvest to API", () => {
   const store = new MemoryStore();
   const app = buildApp(store, { harvester: defaultHarvester() });
@@ -330,7 +408,11 @@ describe("unattached disk harvest to API", () => {
       payload: { tenantId: "tenant-1", subscriptionId: "main" },
     });
     expect(created.statusCode).toBe(201);
-    let findings: Array<{ result: string; evidence: { fields: Record<string, unknown> } }> = [];
+    let findings: Array<{
+      result: string;
+      checkId?: string;
+      evidence: { fields: Record<string, unknown> };
+    }> = [];
     for (let attempt = 0; attempt < 30; attempt += 1) {
       const response = await app.inject({
         method: "GET",
@@ -375,6 +457,24 @@ describe("unattached disk harvest to API", () => {
     expect(findings.some((finding) => finding.evidence.fields.natGatewayId === "nat-attached" && finding.result === "fail")).toBe(
       false,
     );
+    const prodVm = findings.find(
+      (finding) =>
+        finding.evidence.fields.vmId === "vm-prod-no-backup" &&
+        finding.checkId === "azure-resilience-prod-vms-outside-backup",
+    );
+    const prodSql = findings.find(
+      (finding) => finding.evidence.fields.sqlResourceId === "sql-prod-no-backup",
+    );
+    const db = findings.find((finding) => finding.evidence.fields.databaseId === "db-no-zone-geo");
+    expect(prodVm?.result).toBe("fail");
+    expect(prodVm?.evidence.fields.unprotectedCount).toBe(1);
+    expect(prodVm?.evidence.fields.productionCount).toBe(2);
+    expect(prodSql?.result).toBe("fail");
+    expect(db?.result).toBe("fail");
+    expect(db?.evidence.fields.missingSetting).toBe("zone redundancy and geo-backup");
+    expect(
+      findings.some((finding) => finding.evidence.fields.vmId === "vm-prod-backed-up" && finding.result === "fail"),
+    ).toBe(false);
   });
 });
 
@@ -406,7 +506,11 @@ describe("snapshot retention from settings", () => {
       payload: { tenantId: "tenant-1", subscriptionId: "main" },
     });
     expect(created.statusCode).toBe(201);
-    let findings: Array<{ result: string; evidence: { fields: Record<string, unknown> } }> = [];
+    let findings: Array<{
+      result: string;
+      checkId?: string;
+      evidence: { fields: Record<string, unknown> };
+    }> = [];
     for (let attempt = 0; attempt < 30; attempt += 1) {
       const response = await app.inject({
         method: "GET",

@@ -25,6 +25,11 @@ export const STOPPED_VMS = "azure-waste-stopped-not-deallocated-vms";
 export const EMPTY_PLANS = "azure-waste-empty-app-service-plans";
 export const IDLE_LOAD_BALANCERS = "azure-waste-idle-load-balancers";
 export const IDLE_NAT_GATEWAYS = "azure-waste-idle-nat-gateways";
+export const PROD_VM_BACKUP = "azure-resilience-prod-vms-outside-backup";
+export const PROD_SQL_BACKUP = "azure-resilience-prod-sql-outside-backup";
+export const DB_ZONE_OR_GEO = "azure-resilience-db-zone-or-geo";
+
+const MARKER_CLOSER = "Set the production tag or name pattern in Settings";
 
 const METRICS_CLOSER = "Monitoring Reader and a metric series over a longer window";
 
@@ -557,6 +562,203 @@ export function checkIdleNatGateways(
     });
 }
 
+function configuredMarker(settings: OrgSettings): string | null {
+  if (settings.productionTagKey.length === 0 || settings.productionTagValue.length === 0) {
+    return null;
+  }
+  return `${settings.productionTagKey}=${settings.productionTagValue}`;
+}
+
+function checkProductionBackup(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  settings: OrgSettings,
+  spec: {
+    checkId: string;
+    resourceType: string;
+    idField: "vmId" | "sqlResourceId";
+    roleCloser: string;
+  },
+): Finding[] {
+  const byUri = new Map(facts.map((row) => [row.resourceUri, row]));
+  const resources = inventory.resources.filter((resource) => resource.resourceType === spec.resourceType);
+  const marker = configuredMarker(settings);
+  if (!marker) {
+    return resources.map((resource) => {
+      const row = byUri.get(resource.resourceUri);
+      const subscriptionOrProject = subscriptionOf(resource.resourceUri);
+      const rawId = row?.fields[spec.idField];
+      const id = typeof rawId === "string" ? rawId : resource.displayName;
+      return acceptFinding({
+        checkId: spec.checkId,
+        result: "undetermined",
+        closer: MARKER_CLOSER,
+        evidence: {
+          fields: { [spec.idField]: id, productionMarker: null, vaultId: null, protected: null },
+        },
+        scope: {
+          id: `${subscriptionOrProject}:${spec.checkId}`,
+          cloud: "azure",
+          subscriptionOrProject,
+        },
+      });
+    });
+  }
+  const production = resources.filter(
+    (resource) => resource.tags[settings.productionTagKey] === settings.productionTagValue,
+  );
+  const productionCount = production.length;
+  const unprotectedCount = production.filter(
+    (resource) => byUri.get(resource.resourceUri)?.fields.protected === false,
+  ).length;
+  return production.map((resource) => {
+    const row = byUri.get(resource.resourceUri);
+    const subscriptionOrProject = subscriptionOf(resource.resourceUri);
+    const scope = {
+      id: `${subscriptionOrProject}:${spec.checkId}`,
+      cloud: "azure" as const,
+      subscriptionOrProject,
+    };
+    const rawId = row?.fields[spec.idField];
+    const id = typeof rawId === "string" ? rawId : resource.displayName;
+    const vaultId = typeof row?.fields.vaultId === "string" ? row.fields.vaultId : null;
+    if (typeof row?.fields.protected !== "boolean") {
+      return acceptFinding({
+        checkId: spec.checkId,
+        result: "undetermined",
+        closer: spec.roleCloser,
+        evidence: {
+          fields: { [spec.idField]: id, productionMarker: marker, vaultId, protected: null },
+        },
+        scope,
+      });
+    }
+    if (row.fields.protected === false) {
+      return acceptFinding({
+        checkId: spec.checkId,
+        result: "fail",
+        evidence: {
+          fields: {
+            [spec.idField]: id,
+            productionMarker: marker,
+            vaultId,
+            protected: false,
+            unprotectedCount,
+            productionCount,
+          },
+        },
+        scope,
+      });
+    }
+    return acceptFinding({
+      checkId: spec.checkId,
+      result: "pass",
+      evidence: {
+        fields: {
+          [spec.idField]: id,
+          productionMarker: marker,
+          vaultId,
+          protected: true,
+          productionCount,
+        },
+      },
+      scope,
+    });
+  });
+}
+
+export function checkProdVmBackup(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  settings: OrgSettings = DEFAULT_SETTINGS,
+): Finding[] {
+  return checkProductionBackup(inventory, facts, settings, {
+    checkId: PROD_VM_BACKUP,
+    resourceType: "Microsoft.Compute/virtualMachines",
+    idField: "vmId",
+    roleCloser: "Backup Reader on the vaults in scope",
+  });
+}
+
+export function checkProdSqlBackup(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  settings: OrgSettings = DEFAULT_SETTINGS,
+): Finding[] {
+  return checkProductionBackup(inventory, facts, settings, {
+    checkId: PROD_SQL_BACKUP,
+    resourceType: "Microsoft.Sql/servers/databases",
+    idField: "sqlResourceId",
+    roleCloser: "Backup Reader on the relevant vaults and a list of SQL backup items",
+  });
+}
+
+export function checkDbZoneOrGeo(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  _settings: OrgSettings = DEFAULT_SETTINGS,
+): Finding[] {
+  const byUri = new Map(facts.map((row) => [row.resourceUri, row]));
+  return inventory.resources
+    .filter((resource) => resource.resourceType === "Microsoft.Sql/servers/databases")
+    .map((database) => {
+      const row = byUri.get(database.resourceUri);
+      const subscriptionOrProject = subscriptionOf(database.resourceUri);
+      const scope = {
+        id: `${subscriptionOrProject}:${DB_ZONE_OR_GEO}`,
+        cloud: "azure" as const,
+        subscriptionOrProject,
+      };
+      const databaseId =
+        typeof row?.fields.databaseId === "string" ? row.fields.databaseId : database.displayName;
+      const engine = typeof row?.fields.engine === "string" ? row.fields.engine : null;
+      const zoneRedundant = row?.fields.zoneRedundant;
+      const backupRedundancy = row?.fields.backupRedundancy;
+      if (typeof zoneRedundant !== "boolean" || typeof backupRedundancy !== "string") {
+        return acceptFinding({
+          checkId: DB_ZONE_OR_GEO,
+          result: "undetermined",
+          closer: "A database read that includes those properties for that engine",
+          evidence: {
+            fields: {
+              databaseId,
+              engine,
+              zoneRedundant: typeof zoneRedundant === "boolean" ? zoneRedundant : null,
+              backupRedundancy: typeof backupRedundancy === "string" ? backupRedundancy : null,
+            },
+          },
+          scope,
+        });
+      }
+      const missing = [
+        zoneRedundant === true ? null : "zone redundancy",
+        /geo/i.test(backupRedundancy) ? null : "geo-backup",
+      ].filter((item): item is string => item !== null);
+      if (missing.length > 0) {
+        return acceptFinding({
+          checkId: DB_ZONE_OR_GEO,
+          result: "fail",
+          evidence: {
+            fields: {
+              databaseId,
+              engine,
+              zoneRedundant,
+              backupRedundancy,
+              missingSetting: missing.join(" and "),
+            },
+          },
+          scope,
+        });
+      }
+      return acceptFinding({
+        checkId: DB_ZONE_OR_GEO,
+        result: "pass",
+        evidence: { fields: { databaseId, engine, zoneRedundant, backupRedundancy } },
+        scope,
+      });
+    });
+}
+
 type CheckFn = (inventory: Inventory, facts: ResourceFacts[], settings: OrgSettings) => Finding[];
 
 export const CHECK_REGISTRY: Record<string, CheckFn> = {
@@ -567,6 +769,9 @@ export const CHECK_REGISTRY: Record<string, CheckFn> = {
   [EMPTY_PLANS]: checkEmptyPlans,
   [IDLE_LOAD_BALANCERS]: checkIdleLoadBalancers,
   [IDLE_NAT_GATEWAYS]: checkIdleNatGateways,
+  [PROD_VM_BACKUP]: checkProdVmBackup,
+  [PROD_SQL_BACKUP]: checkProdSqlBackup,
+  [DB_ZONE_OR_GEO]: checkDbZoneOrGeo,
 };
 
 export function runChecks(input: {

@@ -36,6 +36,10 @@ export function factsFromManifest(manifest: GroundTruthManifest): ResourceFacts[
     if (item.type === "Microsoft.Network/natGateways") {
       fields.natGatewayId = item.id;
     }
+    if (item.type === "Microsoft.Sql/servers/databases") {
+      fields.sqlResourceId = item.id;
+      fields.databaseId = item.id;
+    }
     return { resourceUri: resourceUriFor(item), fields };
   });
 }
