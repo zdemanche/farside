@@ -21,8 +21,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 4. **E1-S5** (#31) — this change: seed plan + ground-truth **fixtures**; live subscription provision stays (c).
 5. **E2 in-repo (org/connect/inventory)** — merged (#226).
 6. **E2-S4** — merged (#232).
-7. **E2-S5** — this change: Estate, Inventory, Settings.
-8. **E2+ remaining** — scan runner against mocks.
+7. **E2-S5** — merged (#233).
+8. **E2-S6** — this change: scan job runner, connect trigger, overlap lock. Live unattended federated leftover.
+9. **E3+ remaining** — check engine and later screens against fixtures.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -118,11 +119,11 @@ Phase 1 needs Identity, a live Azure connect, and a test tenant.
 | `E2-S5-T1` | #70 | Build the Estate overview | (a) this change | Totals, no-owner, coverage; no Phase 1 health score. |
 | `E2-S5-T2` | #71 | Build the Inventory screen | (a) this change | Filters and grouping; counts compared to the browse API. |
 | `E2-S5-T3` | #72 | Build Settings for owner tag and production marker | (a) this change | Changing the owner tag key updates no-owner totals. |
-| `E2-S6` | #73 | First scan on connect, running unattended | (c) live Azure / GCP / test tenant | Unattended scan with federated credentials on the test subscription. |
-| `E2-S6-T1` | #74 | Build the scan job runner | (a) doable in code now | Job runner can be unit-tested without Azure. |
-| `E2-S6-T2` | #75 | Trigger a scan on connect | (a) doable in code now | Trigger-on-connect wiring; end-to-end on the test subscription is (c). |
-| `E2-S6-T3` | #76 | Prove the unattended path | (c) live Azure / GCP / test tenant | Prove the unattended path live. |
-| `E2-S6-T4` | #77 | Prevent overlapping scans and store failures | (a) doable in code now | Overlap lock and failure persistence. |
+| `E2-S6` | #73 | First scan on connect, running unattended | (c) live leftover | In-repo runner + connect trigger. Live federated unattended is (c). |
+| `E2-S6-T1` | #74 | Build the scan job runner | (a) this change | Success and failure job tests. |
+| `E2-S6-T2` | #75 | Trigger a scan on connect | (a) this change | Connection PUT starts a scan; live Azure e2e is (c). |
+| `E2-S6-T3` | #76 | Prove the unattended path | (c) live Azure / GCP / test tenant | System actor exists in-repo; live federated leftover. |
+| `E2-S6-T4` | #77 | Prevent overlapping scans and store failures | (a) this change | Concurrent start and mid-failure tests. |
 | `E2-S7` | #78 | Week 8 walk-through and continue-or-stop check | (b) human decision / sign-off | Blocked on D4 (#4). Walk-through itself is (c) on the test estate or the prospect's tenant. |
 | `E2-S7-T1` | #79 | Write the demo script and rehearse it | (c) live Azure / GCP / test tenant | Rehearse the sitting on the test subscription. |
 | `E2-S7-T2` | #80 | Run the prospect session and record feedback | (b) human decision / sign-off | Prospect session; needs D4 (#4). |

@@ -2,6 +2,7 @@ import type { Finding, Inventory } from "@farside/scan-contracts";
 import type { CoverageEntry } from "./coverage.js";
 import { applyOwnerTag } from "./inventory.js";
 import { REQUIRED_AZURE_ROLES } from "./roles.js";
+import type { ScanJob } from "./scans.js";
 import { assertNoSecrets } from "./secrets.js";
 import { DEFAULT_SETTINGS, type OrgSettings } from "./settings.js";
 
@@ -19,6 +20,7 @@ export type OrgState = {
   coverage: CoverageEntry[];
   findings: Finding[];
   settings: OrgSettings;
+  scans: ScanJob[];
 };
 
 function emptyOrg(): OrgState {
@@ -28,6 +30,7 @@ function emptyOrg(): OrgState {
     coverage: [],
     findings: [],
     settings: { ...DEFAULT_SETTINGS },
+    scans: [],
   };
 }
 
@@ -92,6 +95,38 @@ export class MemoryStore {
       org.inventory = applyOwnerTag(org.inventory, settings.ownerTagKey);
     }
     return settings;
+  }
+
+  putJob(input: Omit<ScanJob, "id">): ScanJob {
+    assertNoSecrets(input);
+    const job: ScanJob = { ...input, id: `scan-${this.org(input.orgId).scans.length + 1}` };
+    this.org(input.orgId).scans.push(job);
+    return job;
+  }
+
+  getJob(orgId: string, jobId: string): ScanJob | undefined {
+    return this.org(orgId).scans.find((job) => job.id === jobId);
+  }
+
+  patchJob(orgId: string, jobId: string, patch: Partial<ScanJob>): ScanJob {
+    const org = this.org(orgId);
+    const index = org.scans.findIndex((job) => job.id === jobId);
+    const current = org.scans[index];
+    if (index < 0 || !current) {
+      throw new Error(`scan ${jobId} missing`);
+    }
+    const next = { ...current, ...patch, id: current.id, orgId: current.orgId };
+    assertNoSecrets(next);
+    org.scans[index] = next;
+    return next;
+  }
+
+  runningScan(orgId: string, subscriptionId: string): ScanJob | undefined {
+    return this.org(orgId).scans.find(
+      (job) =>
+        job.subscriptionId === subscriptionId &&
+        (job.status === "queued" || job.status === "running"),
+    );
   }
 
   deleteConnection(orgId: string, connectionId: string): boolean {

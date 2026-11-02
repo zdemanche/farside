@@ -18,6 +18,7 @@ import type { CoverageCauseId } from "./causes.js";
 import { estateOverview } from "./estate.js";
 import { applyOwnerTag, filterInventory, groupInventory, noOwnerTotal } from "./inventory.js";
 import { SecretLeakError, assertNoSecrets } from "./secrets.js";
+import { defaultHarvester, ScanRunner, type Harvester } from "./scans.js";
 import { parseSettings } from "./settings.js";
 import { assertOrgAccess, sessionFromHeaders, type Session } from "./session.js";
 import { MemoryStore } from "./store.js";
@@ -91,7 +92,11 @@ function connectionInput(body: unknown): { tenantId: string; subscriptionId: str
   return { tenantId: record.tenantId, subscriptionId: record.subscriptionId };
 }
 
-export function buildApp(store: MemoryStore = new MemoryStore()) {
+export function buildApp(
+  store: MemoryStore = new MemoryStore(),
+  options: { harvester?: Harvester } = {},
+) {
+  const runner = new ScanRunner(store, options.harvester ?? defaultHarvester());
   const app = Fastify({ logger: false });
 
   app.get("/health", async () => ({
@@ -142,7 +147,12 @@ export function buildApp(store: MemoryStore = new MemoryStore()) {
       });
     }
     const connection = store.putConnection(request.params.orgId, input);
-    return sendClean(reply, 201, connection);
+    const scan = runner.start({
+      orgId: request.params.orgId,
+      subscriptionId: input.subscriptionId,
+      actor: "user",
+    });
+    return sendClean(reply, 201, { ...connection, scan: scan.job, scanStarted: scan.started });
   });
 
   app.delete<{ Params: ConnectionParams }>(
@@ -221,6 +231,43 @@ export function buildApp(store: MemoryStore = new MemoryStore()) {
     const spots = blindSpots(org.coverage);
     const health = coverageHealth(org.coverage, org.findings);
     return sendClean(reply, 200, { spots, health, formula: HEALTH_SCORE_FORMULA });
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/scans", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    return sendClean(reply, 200, { scans: store.snapshot(request.params.orgId).scans });
+  });
+
+  app.get<{ Params: { orgId: string; scanId: string } }>(
+    "/v1/orgs/:orgId/scans/:scanId",
+    async (request, reply) => {
+      if (!requireOrg(request, reply)) {
+        return reply;
+      }
+      const job = store.getJob(request.params.orgId, request.params.scanId);
+      if (!job) {
+        return problem(reply, 404, "Not found");
+      }
+      return sendClean(reply, 200, job);
+    },
+  );
+
+  app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/scans", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    const body = request.body as Record<string, unknown> | null;
+    const subscriptionId = body && typeof body.subscriptionId === "string" ? body.subscriptionId : "";
+    const actor = body && body.actor === "system" ? "system" : "user";
+    if (!subscriptionId) {
+      return problem(reply, 400, "Invalid scan", {
+        errors: [{ path: "subscriptionId", message: "required string" }],
+      });
+    }
+    const scan = runner.start({ orgId: request.params.orgId, subscriptionId, actor });
+    return sendClean(reply, scan.started ? 202 : 200, { scan: scan.job, scanStarted: scan.started });
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/estate", async (request, reply) => {

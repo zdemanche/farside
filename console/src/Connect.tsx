@@ -10,7 +10,9 @@ export function Connect() {
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setStatus(`Ready to connect tenant ${tenantId} and subscription ${subscriptionId}.`);
+    setStatus(
+      `Ready to connect tenant ${tenantId} and subscription ${subscriptionId}. First scan started.`,
+    );
   }
 
   return (
