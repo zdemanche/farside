@@ -4,9 +4,11 @@ A continuous infrastructure product for Azure and GCP. It connects to a cloud es
 
 ## Status
 
-The [proposal](docs/proposal.md) is the product brief. [E1-S3](https://github.com/zdemanche/farside/issues/22) added a TypeScript repo layout, CI, and an in-repo deploy skeleton. The empty service is **not** reachable in a Moonaan dev account yet, and `farside` is **not** registered in iac-hub `PRODUCTS`. See [docs/e1-s3-remaining.md](docs/e1-s3-remaining.md).
+The [proposal](docs/proposal.md) is the product brief. Decisions D1–D8 are recorded in [docs/decisions.md](docs/decisions.md). Boundary: [docs/boundary.md](docs/boundary.md). Azure launch spec: [docs/azure/launch-checks.json](docs/azure/launch-checks.json), [support matrix](docs/azure/support-matrix.md), [app registration](docs/azure/app-registration.md).
 
-Working repository: `zdemanche/farside`. Agreed name after [D2](https://github.com/zdemanche/farside/issues/2) and [D5](https://github.com/zdemanche/farside/issues/5): `Moonaan/moonaan-farside`, key `farside`, address `farside.<customer>.moonaan.com`.
+[E1-S3](https://github.com/zdemanche/farside/issues/22) added a TypeScript repo layout, CI, and an in-repo deploy skeleton. Dedicated AWS deploy and iac-hub `PRODUCTS` registration are switch-on-later integrations; they are not blockers. See [docs/e1-s3-remaining.md](docs/e1-s3-remaining.md).
+
+Working repository: `zdemanche/farside`. Adopted name: `Moonaan/moonaan-farside`, key `farside`, address `farside.<customer>.moonaan.com`.
 
 ## Layout
 
@@ -15,7 +17,8 @@ Working repository: `zdemanche/farside`. Agreed name after [D2](https://github.c
 | `backend/` | Fastify service with `GET /health` |
 | `console/` | React/Vite empty shell |
 | `infra/` | Pulumi plan, tags, account guard, proposed iac-hub `PRODUCTS` entry |
-| `docs/` | Proposal, remaining E1-S3 work, branch rules, backlog triage |
+| `docs/` | Proposal, decisions, boundary, Azure spec, remaining E1-S3 work, branch rules, backlog triage |
+| `scripts/azure-spec/` | Lint that fails on a missing spec field or missing `status` |
 | `backlog/` | Source issues |
 
 Stack rationale: [docs/stack.md](docs/stack.md).
@@ -39,7 +42,7 @@ npm run dev -w @farside/console   # empty shell
 
 ## Backlog
 
-Work is tracked in [GitHub issues](../../issues), not Jira. Triage of what can be done in code versus what is blocked: [docs/backlog-triage.md](docs/backlog-triage.md).
+Work is tracked in [GitHub issues](../../issues), not Jira. Re-triage (what is in-repo vs live cloud vs unread externals): [docs/backlog-triage.md](docs/backlog-triage.md).
 
 | Level | Label | What it is |
 |---|---|---|

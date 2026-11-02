@@ -27,8 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Refuse to destroy until a real stack exists
+      - name: Skip destroy until a real stack exists
         run: |
           echo "No Farside Pulumi stack has been created yet. Nothing to destroy."
           echo "See docs/e1-s3-remaining.md."
-          exit 1
+          exit 0

@@ -1,6 +1,6 @@
 # Branch rules
 
-These are the rules E1-S3-T1 calls for. They are not applied as GitHub branch protection from this change; that needs repository admin settings.
+These are the rules E1-S3-T1 calls for. Branch protection on `main` (required check **lint, types and tests**) was turned on by the owner on 2026-11-02.
 
 ## `main`
 

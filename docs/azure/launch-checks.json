@@ -1,0 +1,399 @@
+{
+  "version": 1,
+  "cloud": "azure",
+  "sharedContractNote": "E1-S2 dashmeta scan-contract sources were not readable in this workspace. Fields here are Farside-local (id, group, title, role, dataSource, evidenceFields, savingsBasis, undetermined, status, support, liveRunAt) and will be mapped when those contracts are available. Do not invent dashmeta field names.",
+  "statusRule": "An entry is unverified until a dated live run exists. Unverified entries are labelled not-supported. Live verification is E1-S7.",
+  "rolesFromProposal": [
+    "Reader",
+    "Cost Management Reader",
+    "Monitoring Reader",
+    "Reservations Reader",
+    "Backup Reader"
+  ],
+  "checks": [
+    {
+      "id": "azure-inventory-all-resources",
+      "group": "inventory",
+      "title": "All resources by subscription, type, and region",
+      "role": "Reader",
+      "dataSource": "Azure Resource Graph `Resources` table (resource id, type, location, subscriptionId)",
+      "evidenceFields": ["subscriptionId", "resourceId", "type", "location", "countByType"],
+      "savingsBasis": null,
+      "undetermined": [
+        {
+          "when": "Resource Graph returns incomplete or forbidden results for a subscription",
+          "closer": "Grant Reader on that subscription and a successful ARG query"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-inventory-no-owner-tag",
+      "group": "inventory",
+      "title": "Resources with no owner tag",
+      "role": "Reader",
+      "dataSource": "Azure Resource Graph `Resources` tags column; owner tag name is a Settings value",
+      "evidenceFields": ["resourceId", "type", "tagsPresent", "ownerTagKey", "ownerTagValue"],
+      "savingsBasis": null,
+      "undetermined": [
+        {
+          "when": "The owner tag key has not been configured for the org",
+          "closer": "Set the owner tag key in Settings"
+        },
+        {
+          "when": "Tags are not returned for a resource type",
+          "closer": "A Resource Graph row for that type that includes tags"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-waste-unattached-disks",
+      "group": "waste",
+      "title": "Unattached disks",
+      "role": "Reader",
+      "dataSource": "Azure Resource Graph / Microsoft.Compute/disks where diskState is Unattached (or managedBy is empty)",
+      "evidenceFields": ["diskId", "diskState", "skuName", "sizeGb", "location"],
+      "savingsBasis": "Monthly list price of the unused disk SKU and size, as a range",
+      "undetermined": [
+        {
+          "when": "diskState or managedBy is missing on a disk row",
+          "closer": "A disk read that includes diskState and managedBy"
+        },
+        {
+          "when": "No price for that SKU and region is available",
+          "closer": "A retail or agreement price row for the SKU in that region"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-waste-unassociated-public-ips",
+      "group": "waste",
+      "title": "Unassociated public IPs",
+      "role": "Reader",
+      "dataSource": "Microsoft.Network/publicIPAddresses where ipConfiguration is empty",
+      "evidenceFields": ["publicIpId", "skuName", "allocationMethod", "associatedTo"],
+      "savingsBasis": "Monthly list price of the unused public IP SKU, as a range",
+      "undetermined": [
+        {
+          "when": "Association properties are not returned",
+          "closer": "A public IP read that includes ipConfiguration / natGateway / associated resource"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-waste-old-snapshots",
+      "group": "waste",
+      "title": "Old snapshots",
+      "role": "Reader",
+      "dataSource": "Microsoft.Compute/snapshots with timeCreated older than the org retention threshold",
+      "evidenceFields": ["snapshotId", "timeCreated", "ageDays", "skuName", "sourceDiskId"],
+      "savingsBasis": "Monthly list price of snapshot storage for the retained size, as a range",
+      "undetermined": [
+        {
+          "when": "The retention threshold is not configured",
+          "closer": "Set snapshot retention days in Settings"
+        },
+        {
+          "when": "timeCreated is missing",
+          "closer": "A snapshot read that includes timeCreated"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-waste-stopped-not-deallocated-vms",
+      "group": "waste",
+      "title": "VMs stopped but not deallocated",
+      "role": "Reader",
+      "dataSource": "Microsoft.Compute/virtualMachines instance view powerState (stopped vs deallocated)",
+      "evidenceFields": ["vmId", "powerState", "vmSize", "location"],
+      "savingsBasis": "Monthly compute list price of the VM size while stopped-but-allocated, as a range",
+      "undetermined": [
+        {
+          "when": "Instance view / powerState is not available",
+          "closer": "A VM instance-view read that includes powerState"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-waste-empty-app-service-plans",
+      "group": "waste",
+      "title": "Empty App Service plans",
+      "role": "Reader",
+      "dataSource": "Microsoft.Web/serverfarms with numberOfSites = 0 (or no Microsoft.Web/sites on the plan)",
+      "evidenceFields": ["planId", "skuName", "numberOfSites", "kind"],
+      "savingsBasis": "Monthly list price of the empty plan SKU, as a range",
+      "undetermined": [
+        {
+          "when": "numberOfSites is missing and site-to-plan links cannot be listed",
+          "closer": "A plan read that includes numberOfSites, or a complete sites list"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-waste-idle-load-balancers",
+      "group": "waste",
+      "title": "Idle load balancers",
+      "role": "Reader",
+      "dataSource": "Microsoft.Network/loadBalancers with no backend addresses, plus Monitoring Reader metrics if traffic is required to call it idle",
+      "evidenceFields": ["loadBalancerId", "skuName", "backendAddressCount", "metricWindow"],
+      "savingsBasis": "Monthly list price of the unused load balancer SKU, as a range",
+      "undetermined": [
+        {
+          "when": "Backend pools are not returned",
+          "closer": "A load balancer read that includes backend address pools"
+        },
+        {
+          "when": "Idle is defined by traffic and metrics are missing",
+          "closer": "Monitoring Reader and a metric series for the balancer"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-waste-idle-nat-gateways",
+      "group": "waste",
+      "title": "Idle NAT gateways",
+      "role": "Reader",
+      "dataSource": "Microsoft.Network/natGateways with no attached subnets, plus Monitoring Reader metrics if traffic is required",
+      "evidenceFields": ["natGatewayId", "attachedSubnetCount", "skuName"],
+      "savingsBasis": "Monthly list price of the unused NAT gateway, as a range",
+      "undetermined": [
+        {
+          "when": "Subnet associations are not returned",
+          "closer": "A NAT gateway read that includes subnets"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-cost-spend-by-service",
+      "group": "cost",
+      "title": "Spend by service",
+      "role": "Cost Management Reader",
+      "dataSource": "Cost Management Query API, grouped by ServiceName for the selected billing scope and currency",
+      "evidenceFields": ["billingScope", "currency", "periodStart", "periodEnd", "serviceName", "costAmount"],
+      "savingsBasis": null,
+      "undetermined": [
+        {
+          "when": "The billing scope (subscription, billing account, or MCA profile) cannot be resolved",
+          "closer": "Cost Management Reader on the right billing scope"
+        },
+        {
+          "when": "Currency or amortised vs actual cost is not stated on the response",
+          "closer": "A query that returns currency and cost type"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-cost-month-on-month",
+      "group": "cost",
+      "title": "Month-on-month spend change",
+      "role": "Cost Management Reader",
+      "dataSource": "Cost Management Query API for the current and previous full months at the same billing scope and currency",
+      "evidenceFields": ["billingScope", "currency", "currentMonthCost", "previousMonthCost", "deltaAmount", "deltaPercent"],
+      "savingsBasis": null,
+      "undetermined": [
+        {
+          "when": "Fewer than two complete months of cost data exist",
+          "closer": "Two complete months of Cost Management data at that scope"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-cost-reservation-use",
+      "group": "cost",
+      "title": "Reservation use",
+      "role": "Reservations Reader",
+      "dataSource": "Reservations Summaries / Benefits utilisation APIs (usedHours vs reservedHours, coverage)",
+      "evidenceFields": ["reservationId", "skuName", "usedHours", "reservedHours", "utilisationPercent", "expiryDate"],
+      "savingsBasis": "Unused committed reservation spend for the period, as a range",
+      "undetermined": [
+        {
+          "when": "Reservations Reader is missing or the billing account is not in scope",
+          "closer": "Reservations Reader on the billing account that owns the reservation"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-cost-savings-plan-use",
+      "group": "cost",
+      "title": "Savings plan use",
+      "role": "Reservations Reader",
+      "dataSource": "Savings plan utilisation APIs (committed amount vs used amount)",
+      "evidenceFields": ["savingsPlanId", "committedAmount", "usedAmount", "utilisationPercent", "expiryDate", "currency"],
+      "savingsBasis": "Unused committed savings-plan spend for the period, as a range",
+      "undetermined": [
+        {
+          "when": "Savings plan utilisation is not returned",
+          "closer": "A benefits utilisation read that includes the savings plan"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-cost-subscriptions-without-budgets",
+      "group": "cost",
+      "title": "Subscriptions without budgets",
+      "role": "Cost Management Reader",
+      "dataSource": "Cost Management budgets API listed per subscription",
+      "evidenceFields": ["subscriptionId", "budgetCount", "budgetNames"],
+      "savingsBasis": null,
+      "undetermined": [
+        {
+          "when": "Budgets cannot be listed for a subscription",
+          "closer": "Cost Management Reader and a successful budgets list on that subscription"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-resilience-prod-vms-outside-backup",
+      "group": "resilience",
+      "title": "Production VMs outside Azure Backup",
+      "role": "Backup Reader",
+      "dataSource": "Recovery Services vault backup items (VM) compared to VMs tagged or marked production in Settings",
+      "evidenceFields": ["vmId", "productionMarker", "vaultId", "protected"],
+      "savingsBasis": null,
+      "undetermined": [
+        {
+          "when": "The production marker is not configured",
+          "closer": "Set the production tag or name pattern in Settings"
+        },
+        {
+          "when": "Vault items cannot be listed",
+          "closer": "Backup Reader on the vaults in scope"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-resilience-prod-sql-outside-backup",
+      "group": "resilience",
+      "title": "Production SQL outside Azure Backup",
+      "role": "Backup Reader",
+      "dataSource": "Recovery Services / backup items for Azure SQL compared to production SQL servers or databases",
+      "evidenceFields": ["sqlResourceId", "productionMarker", "vaultId", "protected"],
+      "savingsBasis": null,
+      "undetermined": [
+        {
+          "when": "SQL backup items cannot be listed",
+          "closer": "Backup Reader on the relevant vaults and a list of SQL backup items"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-resilience-db-zone-or-geo",
+      "group": "resilience",
+      "title": "Databases without zone redundancy or geo-backup",
+      "role": "Reader",
+      "dataSource": "Azure SQL / Cosmos / MySQL / PostgreSQL properties: zoneRedundant, geoRedundantBackup / backup storage redundancy",
+      "evidenceFields": ["databaseId", "engine", "zoneRedundant", "backupRedundancy"],
+      "savingsBasis": null,
+      "undetermined": [
+        {
+          "when": "Zone or backup redundancy properties are not returned for an engine",
+          "closer": "A database read that includes those properties for that engine"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-lifecycle-retiring-skus",
+      "group": "lifecycle",
+      "title": "Retiring SKUs",
+      "role": "Reader",
+      "dataSource": "Resource SKU plus Azure retirement / service health announcements matched by SKU or resource type",
+      "evidenceFields": ["resourceId", "skuName", "retirementDate", "announcementId"],
+      "savingsBasis": null,
+      "undetermined": [
+        {
+          "when": "No retirement catalogue is available for that SKU",
+          "closer": "A dated retirement announcement or SKU retirement list that includes the SKU"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-lifecycle-expiring-app-service-certs",
+      "group": "lifecycle",
+      "title": "Expiring App Service certificates",
+      "role": "Reader",
+      "dataSource": "Microsoft.Web/certificates (and custom hostname bindings) expirationDate",
+      "evidenceFields": ["certificateId", "hostName", "expirationDate", "daysRemaining"],
+      "savingsBasis": null,
+      "undetermined": [
+        {
+          "when": "expirationDate is missing on a certificate or binding",
+          "closer": "A certificate read that includes expirationDate"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "azure-lifecycle-expiring-gateway-certs",
+      "group": "lifecycle",
+      "title": "Expiring gateway certificates",
+      "role": "Reader",
+      "dataSource": "Application Gateway / Front Door / API Management SSL certificate expiry",
+      "evidenceFields": ["gatewayId", "certificateName", "expirationDate", "daysRemaining"],
+      "savingsBasis": null,
+      "undetermined": [
+        {
+          "when": "Gateway certificate expiry is not returned",
+          "closer": "A gateway HTTPS listener / custom domain read that includes certificate expiry"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    }
+  ]
+}
