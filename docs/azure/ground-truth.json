@@ -109,7 +109,7 @@
       "subscription": "main",
       "type": "Microsoft.Network/loadBalancers",
       "title": "Load balancer with no backend addresses",
-      "properties": { "backendAddressCount": 0 },
+      "properties": { "backendAddressCount": 0, "skuName": "Standard", "metricWindow": "7d", "byteCount": 0 },
       "tags": { "owner": "farside-test" }
     },
     {
@@ -117,7 +117,7 @@
       "subscription": "main",
       "type": "Microsoft.Network/loadBalancers",
       "title": "Load balancer with backends",
-      "properties": { "backendAddressCount": 2 },
+      "properties": { "backendAddressCount": 2, "skuName": "Standard", "metricWindow": "7d", "byteCount": 1000 },
       "tags": { "owner": "farside-test" }
     },
     {
@@ -125,7 +125,7 @@
       "subscription": "main",
       "type": "Microsoft.Network/natGateways",
       "title": "NAT gateway with no subnets",
-      "properties": { "attachedSubnetCount": 0 },
+      "properties": { "attachedSubnetCount": 0, "skuName": "Standard", "metricWindow": "7d", "byteCount": 0 },
       "tags": { "owner": "farside-test" }
     },
     {
@@ -133,7 +133,7 @@
       "subscription": "main",
       "type": "Microsoft.Network/natGateways",
       "title": "NAT gateway attached to a subnet",
-      "properties": { "attachedSubnetCount": 1 },
+      "properties": { "attachedSubnetCount": 1, "skuName": "Standard", "metricWindow": "7d", "byteCount": 1000 },
       "tags": { "owner": "farside-test" }
     },
     {

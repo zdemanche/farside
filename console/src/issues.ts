@@ -36,4 +36,25 @@ export const ISSUE_ROWS: IssueRow[] = [
     savings:
       "$30.40–$45.60 USD (Monthly compute list price of the VM size while stopped-but-allocated, as a range)",
   },
+  {
+    id: "plan-empty",
+    checkId: "azure-waste-empty-app-service-plans",
+    resourceId: "plan-empty",
+    evidence: "numberOfSites 0, skuName S1",
+    savings: "$70.00–$105.00 USD (Monthly list price of the empty plan SKU, as a range)",
+  },
+  {
+    id: "lb-idle",
+    checkId: "azure-waste-idle-load-balancers",
+    resourceId: "lb-idle",
+    evidence: "backendAddressCount 0, metricWindow 7d",
+    savings: "$18.00–$27.00 USD (Monthly list price of the unused load balancer SKU, as a range)",
+  },
+  {
+    id: "nat-idle",
+    checkId: "azure-waste-idle-nat-gateways",
+    resourceId: "nat-idle",
+    evidence: "attachedSubnetCount 0, metricWindow 7d",
+    savings: "$32.00–$48.00 USD (Monthly list price of the unused NAT gateway, as a range)",
+  },
 ];

@@ -61,3 +61,20 @@ export function publicIpMonthlySavings(): NamedSavingsRange {
 export function stoppedVmMonthlySavings(): NamedSavingsRange {
   return savingsRange({ min: 30.4, max: 45.6, currency: "USD", basis: STOPPED_VM_SAVINGS_BASIS });
 }
+
+export const EMPTY_PLAN_SAVINGS_BASIS = "Monthly list price of the empty plan SKU, as a range";
+export const IDLE_LB_SAVINGS_BASIS =
+  "Monthly list price of the unused load balancer SKU, as a range";
+export const IDLE_NAT_SAVINGS_BASIS = "Monthly list price of the unused NAT gateway, as a range";
+
+export function emptyPlanMonthlySavings(): NamedSavingsRange {
+  return savingsRange({ min: 70, max: 105, currency: "USD", basis: EMPTY_PLAN_SAVINGS_BASIS });
+}
+
+export function idleLbMonthlySavings(): NamedSavingsRange {
+  return savingsRange({ min: 18, max: 27, currency: "USD", basis: IDLE_LB_SAVINGS_BASIS });
+}
+
+export function idleNatMonthlySavings(): NamedSavingsRange {
+  return savingsRange({ min: 32, max: 48, currency: "USD", basis: IDLE_NAT_SAVINGS_BASIS });
+}

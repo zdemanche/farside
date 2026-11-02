@@ -10,6 +10,9 @@ import type { OrgSettings } from "./settings.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
 import {
   diskMonthlySavings,
+  emptyPlanMonthlySavings,
+  idleLbMonthlySavings,
+  idleNatMonthlySavings,
   publicIpMonthlySavings,
   snapshotMonthlySavings,
   stoppedVmMonthlySavings,
@@ -19,6 +22,23 @@ export const UNATTACHED_DISKS = "azure-waste-unattached-disks";
 export const OLD_SNAPSHOTS = "azure-waste-old-snapshots";
 export const UNASSOCIATED_IPS = "azure-waste-unassociated-public-ips";
 export const STOPPED_VMS = "azure-waste-stopped-not-deallocated-vms";
+export const EMPTY_PLANS = "azure-waste-empty-app-service-plans";
+export const IDLE_LOAD_BALANCERS = "azure-waste-idle-load-balancers";
+export const IDLE_NAT_GATEWAYS = "azure-waste-idle-nat-gateways";
+
+const METRICS_CLOSER = "Monitoring Reader and a metric series over a longer window";
+
+function trafficMetrics(fields: ResourceFacts["fields"] | undefined): {
+  metricWindow: string;
+  byteCount: number;
+} | null {
+  const metricWindow = fields?.metricWindow;
+  const byteCount = fields?.byteCount;
+  if (typeof metricWindow !== "string" || metricWindow.length === 0 || typeof byteCount !== "number") {
+    return null;
+  }
+  return { metricWindow, byteCount };
+}
 
 export class UnregisteredCheckError extends Error {
   constructor(checkId: string) {
@@ -327,6 +347,216 @@ export function checkStoppedVms(
     });
 }
 
+export function checkEmptyPlans(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  _settings: OrgSettings = DEFAULT_SETTINGS,
+): Finding[] {
+  const byUri = new Map(facts.map((row) => [row.resourceUri, row]));
+  return inventory.resources
+    .filter((resource) => resource.resourceType === "Microsoft.Web/serverfarms")
+    .map((plan) => {
+      const row = byUri.get(plan.resourceUri);
+      const subscriptionOrProject = subscriptionOf(plan.resourceUri);
+      const scope = {
+        id: `${subscriptionOrProject}:${EMPTY_PLANS}`,
+        cloud: "azure" as const,
+        subscriptionOrProject,
+      };
+      const numberOfSites = row?.fields.numberOfSites;
+      const planId = typeof row?.fields.planId === "string" ? row.fields.planId : plan.displayName;
+      const skuName = typeof row?.fields.skuName === "string" ? row.fields.skuName : null;
+      const kind = typeof row?.fields.kind === "string" ? row.fields.kind : null;
+      if (typeof numberOfSites !== "number") {
+        return acceptFinding({
+          checkId: EMPTY_PLANS,
+          result: "undetermined",
+          closer: "A plan read that includes numberOfSites, or a complete sites list",
+          evidence: { fields: { planId, skuName, numberOfSites: null, kind } },
+          scope,
+        });
+      }
+      if (numberOfSites === 0) {
+        const savings = emptyPlanMonthlySavings();
+        return acceptFinding({
+          checkId: EMPTY_PLANS,
+          result: "fail",
+          evidence: {
+            fields: {
+              planId,
+              skuName,
+              numberOfSites,
+              kind,
+              savingsBasis: savings.basis,
+            },
+          },
+          scope,
+          savings: { min: savings.min, max: savings.max, currency: savings.currency },
+        });
+      }
+      return acceptFinding({
+        checkId: EMPTY_PLANS,
+        result: "pass",
+        evidence: { fields: { planId, skuName, numberOfSites, kind } },
+        scope,
+      });
+    });
+}
+
+export function checkIdleLoadBalancers(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  _settings: OrgSettings = DEFAULT_SETTINGS,
+): Finding[] {
+  const byUri = new Map(facts.map((row) => [row.resourceUri, row]));
+  return inventory.resources
+    .filter((resource) => resource.resourceType === "Microsoft.Network/loadBalancers")
+    .map((lb) => {
+      const row = byUri.get(lb.resourceUri);
+      const subscriptionOrProject = subscriptionOf(lb.resourceUri);
+      const scope = {
+        id: `${subscriptionOrProject}:${IDLE_LOAD_BALANCERS}`,
+        cloud: "azure" as const,
+        subscriptionOrProject,
+      };
+      const loadBalancerId =
+        typeof row?.fields.loadBalancerId === "string" ? row.fields.loadBalancerId : lb.displayName;
+      const skuName = typeof row?.fields.skuName === "string" ? row.fields.skuName : null;
+      const backendAddressCount = row?.fields.backendAddressCount;
+      if (typeof backendAddressCount !== "number") {
+        return acceptFinding({
+          checkId: IDLE_LOAD_BALANCERS,
+          result: "undetermined",
+          closer: "A load balancer read that includes backend address pools",
+          evidence: {
+            fields: { loadBalancerId, skuName, backendAddressCount: null, metricWindow: null },
+          },
+          scope,
+        });
+      }
+      const metrics = trafficMetrics(row?.fields);
+      if (!metrics) {
+        return acceptFinding({
+          checkId: IDLE_LOAD_BALANCERS,
+          result: "undetermined",
+          closer: METRICS_CLOSER,
+          evidence: {
+            fields: { loadBalancerId, skuName, backendAddressCount, metricWindow: null },
+          },
+          scope,
+        });
+      }
+      if (backendAddressCount === 0 || metrics.byteCount === 0) {
+        const savings = idleLbMonthlySavings();
+        return acceptFinding({
+          checkId: IDLE_LOAD_BALANCERS,
+          result: "fail",
+          evidence: {
+            fields: {
+              loadBalancerId,
+              skuName,
+              backendAddressCount,
+              metricWindow: metrics.metricWindow,
+              savingsBasis: savings.basis,
+            },
+          },
+          scope,
+          savings: { min: savings.min, max: savings.max, currency: savings.currency },
+        });
+      }
+      return acceptFinding({
+        checkId: IDLE_LOAD_BALANCERS,
+        result: "pass",
+        evidence: {
+          fields: {
+            loadBalancerId,
+            skuName,
+            backendAddressCount,
+            metricWindow: metrics.metricWindow,
+          },
+        },
+        scope,
+      });
+    });
+}
+
+export function checkIdleNatGateways(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  _settings: OrgSettings = DEFAULT_SETTINGS,
+): Finding[] {
+  const byUri = new Map(facts.map((row) => [row.resourceUri, row]));
+  return inventory.resources
+    .filter((resource) => resource.resourceType === "Microsoft.Network/natGateways")
+    .map((nat) => {
+      const row = byUri.get(nat.resourceUri);
+      const subscriptionOrProject = subscriptionOf(nat.resourceUri);
+      const scope = {
+        id: `${subscriptionOrProject}:${IDLE_NAT_GATEWAYS}`,
+        cloud: "azure" as const,
+        subscriptionOrProject,
+      };
+      const natGatewayId =
+        typeof row?.fields.natGatewayId === "string" ? row.fields.natGatewayId : nat.displayName;
+      const skuName = typeof row?.fields.skuName === "string" ? row.fields.skuName : null;
+      const attachedSubnetCount = row?.fields.attachedSubnetCount;
+      if (typeof attachedSubnetCount !== "number") {
+        return acceptFinding({
+          checkId: IDLE_NAT_GATEWAYS,
+          result: "undetermined",
+          closer: "A NAT gateway read that includes subnets",
+          evidence: {
+            fields: { natGatewayId, attachedSubnetCount: null, skuName, metricWindow: null },
+          },
+          scope,
+        });
+      }
+      const metrics = trafficMetrics(row?.fields);
+      if (!metrics) {
+        return acceptFinding({
+          checkId: IDLE_NAT_GATEWAYS,
+          result: "undetermined",
+          closer: METRICS_CLOSER,
+          evidence: {
+            fields: { natGatewayId, attachedSubnetCount, skuName, metricWindow: null },
+          },
+          scope,
+        });
+      }
+      if (attachedSubnetCount === 0 || metrics.byteCount === 0) {
+        const savings = idleNatMonthlySavings();
+        return acceptFinding({
+          checkId: IDLE_NAT_GATEWAYS,
+          result: "fail",
+          evidence: {
+            fields: {
+              natGatewayId,
+              attachedSubnetCount,
+              skuName,
+              metricWindow: metrics.metricWindow,
+              savingsBasis: savings.basis,
+            },
+          },
+          scope,
+          savings: { min: savings.min, max: savings.max, currency: savings.currency },
+        });
+      }
+      return acceptFinding({
+        checkId: IDLE_NAT_GATEWAYS,
+        result: "pass",
+        evidence: {
+          fields: {
+            natGatewayId,
+            attachedSubnetCount,
+            skuName,
+            metricWindow: metrics.metricWindow,
+          },
+        },
+        scope,
+      });
+    });
+}
+
 type CheckFn = (inventory: Inventory, facts: ResourceFacts[], settings: OrgSettings) => Finding[];
 
 export const CHECK_REGISTRY: Record<string, CheckFn> = {
@@ -334,6 +564,9 @@ export const CHECK_REGISTRY: Record<string, CheckFn> = {
   [OLD_SNAPSHOTS]: checkOldSnapshots,
   [UNASSOCIATED_IPS]: checkUnassociatedIps,
   [STOPPED_VMS]: checkStoppedVms,
+  [EMPTY_PLANS]: checkEmptyPlans,
+  [IDLE_LOAD_BALANCERS]: checkIdleLoadBalancers,
+  [IDLE_NAT_GATEWAYS]: checkIdleNatGateways,
 };
 
 export function runChecks(input: {
