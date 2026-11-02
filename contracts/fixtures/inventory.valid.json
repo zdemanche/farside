@@ -1,0 +1,14 @@
+{
+  "cloud": "azure",
+  "observedAt": "2026-11-02T00:00:00Z",
+  "resources": [
+    {
+      "resourceUri": "/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.Compute/disks/disk-1",
+      "resourceType": "Microsoft.Compute/disks",
+      "region": "eastus",
+      "displayName": "disk-1",
+      "tags": { "env": "dev" },
+      "ownerTag": null
+    }
+  ]
+}

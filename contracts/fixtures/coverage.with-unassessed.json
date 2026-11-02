@@ -1,0 +1,6 @@
+{
+  "scopes": [
+    { "id": "sub-1:azure-waste-unattached-disks", "checkId": "azure-waste-unattached-disks", "assessed": true },
+    { "id": "sub-2:azure-waste-unattached-disks", "checkId": "azure-waste-unattached-disks", "assessed": false }
+  ]
+}

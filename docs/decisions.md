@@ -23,5 +23,6 @@ Physical Azure/GCP tenants, a named paying prospect, and repos this workspace ca
 |---|---|---|---|
 | E1-S1-T4 (#14) | Ryan Morris and Kevin sign-off on D1 | Satisfied by this owner direction. The boundary document records the adoption; it does not claim a personal comment from Ryan or Kevin. | Sign-off steps that only existed to get agreement count as satisfied. |
 | E1-S6-T2 (#38) | App registration, federated credentials, cross-tenant test subscription | Multi-tenant app in a Moonaan-owned Entra tenant; **no client secrets**; federated credentials for customer tenants; test subscription in a **different** tenant from the registration. See `docs/azure/app-registration.md`. | Matches the proposal and Entra workload-identity practice. |
+| E1-S2-T2 (#18) | Contract additions and Ryan’s sign-off | Farside-local `@farside/scan-contracts` 0.1.0 with evidence, undetermined+closer, savings range, aggregate-only, assessed-only health score. Dashmeta 0.11.0 is not vendored. | Agreement-only sign-off satisfied by owner direction. Additions listed in `docs/scan-contracts.md`. |
 
 Deploy to a dedicated AWS account and iac-hub `PRODUCTS` registration are **switch-on-later integrations**, not blockers. Missing credentials skip those workflows; they do not fail the required CI check.
