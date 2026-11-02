@@ -28,6 +28,7 @@ const ROUTES = [
   { method: "GET" as const, url: "/v1/orgs/org-a/scans" },
   { method: "POST" as const, url: "/v1/orgs/org-a/scans" },
   { method: "GET" as const, url: "/v1/orgs/org-a/scans/scan-1" },
+  { method: "GET" as const, url: "/v1/orgs/org-a/findings" },
   { method: "DELETE" as const, url: "/v1/orgs/org-a/connections/conn-1" },
 ];
 

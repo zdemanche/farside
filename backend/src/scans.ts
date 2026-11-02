@@ -3,7 +3,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Inventory } from "@farside/scan-contracts";
 import { AZURE_LAUNCH_CHECK_IDS, coverageFromHarvest, type CoverageEntry } from "./coverage.js";
+import { applyCoverageResult } from "./coverage.js";
+import { factsFromManifest, type ResourceFacts } from "./facts.js";
 import { applyOwnerTag, inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
+import { CHECK_REGISTRY, runChecks } from "./checks.js";
 import type { OrgSettings } from "./settings.js";
 import type { MemoryStore } from "./store.js";
 
@@ -27,6 +30,7 @@ export type HarvestResult = {
   inventory: Inventory;
   coverage: CoverageEntry[];
   coveredScopes: string[];
+  facts: ResourceFacts[];
 };
 
 export type Harvester = {
@@ -47,7 +51,7 @@ export class ScanFailedError extends Error {
   }
 }
 
-export function fixtureHarvester(inventory: Inventory): Harvester {
+export function fixtureHarvester(inventory: Inventory, facts: ResourceFacts[] = []): Harvester {
   return {
     async harvest(input) {
       const coverage = coverageFromHarvest([input.subscriptionId], AZURE_LAUNCH_CHECK_IDS);
@@ -57,6 +61,7 @@ export function fixtureHarvester(inventory: Inventory): Harvester {
         coveredScopes: coverage
           .filter((entry) => entry.state === "assessed")
           .map((entry) => entry.id),
+        facts,
       };
     },
   };
@@ -66,7 +71,7 @@ export function defaultHarvester(): Harvester {
   const manifest = JSON.parse(
     readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/ground-truth.json"), "utf8"),
   ) as GroundTruthManifest;
-  return fixtureHarvester(inventoryFromManifest(manifest));
+  return fixtureHarvester(inventoryFromManifest(manifest), factsFromManifest(manifest));
 }
 
 export class ScanRunner {
@@ -116,7 +121,24 @@ export class ScanRunner {
         settings,
       });
       this.store.putInventory(orgId, result.inventory);
-      this.store.putCoverage(orgId, result.coverage);
+      this.store.putFacts(orgId, result.facts);
+      let coverage = result.coverage;
+      const checked = runChecks({
+        inventory: result.inventory,
+        facts: result.facts,
+        checkIds: Object.keys(CHECK_REGISTRY),
+      });
+      this.store.putFindings(orgId, checked.findings);
+      for (const entry of checked.coverage) {
+        coverage = applyCoverageResult(coverage, {
+          subscriptionOrProject: entry.subscriptionOrProject,
+          checkId: entry.checkId,
+          state: entry.state,
+          ...(entry.causeId ? { causeId: entry.causeId } : {}),
+          ...(entry.closer ? { closer: entry.closer } : {}),
+        });
+      }
+      this.store.putCoverage(orgId, coverage);
       return this.store.patchJob(orgId, jobId, {
         status: "succeeded",
         complete: true,
