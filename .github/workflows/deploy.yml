@@ -1,0 +1,80 @@
+# Product-dev deploy: empty health route + console shell.
+# Runs on merge to main. Does not talk to AWS until a dedicated Farside
+# (or moonaan-dev) account and GitHub OIDC role are configured. Missing
+# credentials skip the apply; they do not pretend a URL is live.
+name: deploy-dev
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      customerName:
+        description: Tenant slug (default moonaan-dev)
+        required: false
+        default: moonaan-dev
+      accountId:
+        description: 12-digit dedicated AWS account id
+        required: false
+      environment:
+        description: Moonaan environment tag
+        required: false
+        default: dev
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: farside-dev-build
+          path: |
+            backend/dist
+            console/dist
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: farside-dev-build
+      - name: Apply to the dedicated dev account, or skip
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          CUSTOMER_NAME: ${{ github.event.inputs.customerName || 'moonaan-dev' }}
+          ACCOUNT_ID: ${{ github.event.inputs.accountId || secrets.FARSIDE_DEV_ACCOUNT_ID }}
+          ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ROLE_ARN:-}" ] || [ -z "${ACCOUNT_ID:-}" ]; then
+            echo "Skipping pulumi up: AWS_ROLE_ARN and FARSIDE_DEV_ACCOUNT_ID are not configured."
+            echo "The empty service is built, but it is not reachable in a dev account yet."
+            echo "Remaining work is in docs/e1-s3-remaining.md (E1-S3-T3)."
+            exit 0
+          fi
+          echo "Dedicated-account apply is not wired in this skeleton. See docs/e1-s3-remaining.md."
+          exit 1

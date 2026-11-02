@@ -1,0 +1,47 @@
+# iac-hub stage Web. workflow_dispatch only.
+name: ui-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      customerName:
+        required: true
+        type: string
+      accountId:
+        required: true
+        type: string
+      run_identifier:
+        required: true
+        type: string
+      initialAdmins:
+        required: false
+        type: string
+      firstOwnerEmail:
+        required: false
+        type: string
+      adoptingProducts:
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @farside/console
+      - name: Record that console sync is not yet possible
+        env:
+          CUSTOMER_NAME: ${{ inputs.customerName }}
+        run: |
+          echo "Built console shell for $CUSTOMER_NAME."
+          echo "Sync to the tenant console bucket is blocked until Infra has run in a dedicated account."
+          echo "See docs/e1-s3-remaining.md."
+          exit 1

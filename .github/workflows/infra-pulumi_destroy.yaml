@@ -1,0 +1,34 @@
+# iac-hub destroy for the Infra stage. workflow_dispatch only.
+name: infra-pulumi_destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      customerName:
+        required: true
+        type: string
+      accountId:
+        required: true
+        type: string
+      run_identifier:
+        required: true
+        type: string
+      destroy:
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse to destroy until a real stack exists
+        run: |
+          echo "No Farside Pulumi stack has been created yet. Nothing to destroy."
+          echo "See docs/e1-s3-remaining.md."
+          exit 1
