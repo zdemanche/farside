@@ -23,8 +23,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 6. **E2-S4** — merged (#232).
 7. **E2-S5** — merged (#233).
 8. **E2-S6** — merged (#234).
-9. **E3-S1** — this change: check engine, savings helper, registry, unattached-disk check against fixtures.
-10. **E3+ remaining** — more waste checks and Issues/Scans screens against fixtures.
+9. **E3-S1** — merged (#235).
+10. **E3-S2** — this change: old snapshots, unassociated IPs, stopped-not-deallocated VMs, Issues list against fixtures.
+11. **E3+ remaining** — idle plan/LB/NAT, Recovery/Lifecycle, Issues store, Scans screens against fixtures.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -145,11 +146,11 @@ Phase 2 findings must be proven live. Engine and UI can be built against fixture
 | `E3-S1-T4` | #88 | Add a check registry tied to the spec | (a) this change | Unregistered spec ids cannot run. |
 | `E3-S1-T5` | #89 | Add metrics harvest via Monitoring Reader | (c) live Azure / GCP / test tenant | Metrics harvest via Monitoring Reader on the test subscription. |
 | `E3-S1-T6` | #90 | Implement the unattached disk check end to end | (a) this change | Fixture positives/negatives via API. Live ARM leftover. |
-| `E3-S2` | #91 | Leftover waste checks prove the engine end to end | (a) doable in code now | Three waste checks against fixtures; scan-to-console proof on the test estate is (c). |
-| `E3-S2-T1` | #92 | Implement the old snapshot check | (a) doable in code now | Old snapshot check. |
-| `E3-S2-T2` | #93 | Implement the unassociated public IP check | (a) doable in code now | Unassociated public IP check. |
-| `E3-S2-T3` | #94 | Implement the stopped-not-deallocated VM check | (a) doable in code now | Stopped-not-deallocated VM check. |
-| `E3-S2-T4` | #95 | Prove the path from scan to console | (c) live Azure / GCP / test tenant | Full scan on the test subscription into the console. |
+| `E3-S2` | #91 | Leftover waste checks prove the engine end to end | (a) this change | Three waste checks + Issues list against fixtures. Live scan-to-console is (c). |
+| `E3-S2-T1` | #92 | Implement the old snapshot check | (a) this change | Old snapshot vs `snapshot-old` / `snapshot-fresh`; retention from Settings. |
+| `E3-S2-T2` | #93 | Implement the unassociated public IP check | (a) this change | Unassociated IP vs `pip-unassociated` / `pip-associated`. |
+| `E3-S2-T3` | #94 | Implement the stopped-not-deallocated VM check | (a) this change | Stopped allocated vs deallocated/running. |
+| `E3-S2-T4` | #95 | Prove the path from scan to console | (c) live leftover | Fixture Issues list is in this change. Full scan on the test subscription is leftover. |
 | `E3-S3` | #96 | Idle plans, load balancers and NAT gateways found | (a) doable in code now | Idle plan/LB/NAT checks against fixtures; busy-gateway negative on the estate is (c). |
 | `E3-S3-T1` | #97 | Implement empty App Service plan check | (a) doable in code now | Empty App Service plan check. |
 | `E3-S3-T2` | #98 | Implement idle load balancer check | (a) doable in code now | Idle load balancer check. |

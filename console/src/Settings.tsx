@@ -4,30 +4,41 @@ export function Settings({
   ownerTagKey = "owner",
   productionTagKey = "environment",
   productionTagValue = "prod",
+  snapshotRetentionDays = 30,
   onSave,
 }: {
   ownerTagKey?: string;
   productionTagKey?: string;
   productionTagValue?: string;
+  snapshotRetentionDays?: number;
   onSave?: (next: {
     ownerTagKey: string;
     productionTagKey: string;
     productionTagValue: string;
+    snapshotRetentionDays: number;
   }) => void;
 }) {
   const ownerId = useId();
   const prodKeyId = useId();
   const prodValueId = useId();
+  const retentionId = useId();
   const [owner, setOwner] = useState(ownerTagKey);
   const [prodKey, setProdKey] = useState(productionTagKey);
   const [prodValue, setProdValue] = useState(productionTagValue);
+  const [retention, setRetention] = useState(String(snapshotRetentionDays));
   const [status, setStatus] = useState("");
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSave?.({ ownerTagKey: owner, productionTagKey: prodKey, productionTagValue: prodValue });
+    const snapshotRetentionDays = Number(retention);
+    onSave?.({
+      ownerTagKey: owner,
+      productionTagKey: prodKey,
+      productionTagValue: prodValue,
+      snapshotRetentionDays,
+    });
     setStatus(
-      `Saved owner tag ${owner} and production marker ${prodKey}=${prodValue}. The next scan will use these conventions.`,
+      `Saved owner tag ${owner}, production marker ${prodKey}=${prodValue}, and snapshot retention ${snapshotRetentionDays} days. The next scan will use these conventions.`,
     );
   }
 
@@ -66,6 +77,19 @@ export function Settings({
             name="productionTagValue"
             value={prodValue}
             onChange={(event) => setProdValue(event.target.value)}
+            required
+            aria-required="true"
+          />
+        </div>
+        <div>
+          <label htmlFor={retentionId}>Snapshot retention days</label>
+          <input
+            id={retentionId}
+            name="snapshotRetentionDays"
+            type="number"
+            min={1}
+            value={retention}
+            onChange={(event) => setRetention(event.target.value)}
             required
             aria-required="true"
           />

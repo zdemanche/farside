@@ -89,8 +89,12 @@ describe("Estate, Inventory and Settings", () => {
     fireEvent.change(screen.getByLabelText("Owner tag key"), {
       target: { value: "cost-center" },
     });
+    fireEvent.change(screen.getByLabelText("Snapshot retention days"), {
+      target: { value: "45" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
     expect(screen.getByRole("status").textContent).toMatch(/cost-center/);
+    expect(screen.getByRole("status").textContent).toMatch(/45 days/);
     expect(screen.getByRole("status").textContent).toMatch(/next scan/);
     expect(noOwnerCount(SEEDED_RESOURCES)).toBe(1);
     expect(noOwnerCount(applyOwnerTagKey(SEEDED_RESOURCES, "cost-center"))).toBe(
