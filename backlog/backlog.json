@@ -1,0 +1,2411 @@
+{
+  "epics": [
+    {
+      "key": "E1",
+      "title": "Cleared to build and provable on a real Azure estate",
+      "phase": 0,
+      "goal": "The boundary with dashmeta and Atlas is agreed and the go or no-go conditions are met before build starts. Contracts, repo, control spec and a seeded Azure test estate exist, so every Azure check can be proven live.",
+      "stories": [
+        {
+          "key": "E1-S1",
+          "title": "Boundary with dashmeta and Atlas agreed in writing",
+          "size": "M",
+          "areas": [
+            "docs",
+            "security-boundary"
+          ],
+          "story": "As the Farside owner, I want Farside, dashmeta and Atlas ownership written down and signed off, so that nothing is built twice and security checks stay with dashmeta.",
+          "acceptance": [
+            "Given the boundary document, when a reviewer applies the test 'does the harm need an attacker', then every Azure and GCP launch check is assigned to Farside or dashmeta with that reasoning shown.",
+            "Given the document, when read, then AWS is stated as staying with Atlas and Microsoft 365 licenses and devices are stated as out of scope.",
+            "Given the overlapping dashmeta epics DAS-775 and DAS-776, when compared with Farside's checks, then each overlapping story is listed with a proposed owner and an amendment note.",
+            "Given the go or no-go conditions in decision D6, when the document is reviewed, then each shows a named owner and a status, and build start is recorded only when D1 and D3 are closed and a named Azure prospect has said they would pay.",
+            "Given the document is signed off, then Ryan Morris and Kevin have each recorded agreement and the date, and decision D1 is recorded as closed.",
+            "Given sign-off, when the follow-up task completes, then the DAS-775 and DAS-776 amendments (owner Ryan Morris) and the AIF ticket moves (owner Zach DeManche) are recorded with their dates."
+          ],
+          "notes": "Docs only until sign-off. This story is not blocked by D1: closing D1 is its own last sign-off step. Proposed Jira moves are written as a list first; tickets change only in the post sign-off task.",
+          "blockedBy": [],
+          "tasks": [
+            {
+              "key": "E1-S1-T1",
+              "title": "Write the ownership table and attacker test",
+              "body": "Produce the who-covers-what table and place every launch check on one side of the attacker test. Checked by a second reviewer re-deriving three placements.",
+              "blockedBy": []
+            },
+            {
+              "key": "E1-S1-T2",
+              "title": "List overlaps with DAS-775 and DAS-776",
+              "body": "Map each overlapping dashmeta story (including DAS-923, 942 to 944, 982, 983) to a proposed owner and amendment. Checked by Ryan reading the list.",
+              "blockedBy": []
+            },
+            {
+              "key": "E1-S1-T3",
+              "title": "Record the Jira review and handoff proposal",
+              "body": "Write the proposed AIF review set, the dashmeta handoff set and the rule to scan the AIF repo for client names before porting. Checked by the list matching the proposal.",
+              "blockedBy": [
+                "E1-S1-T2"
+              ]
+            },
+            {
+              "key": "E1-S1-T4",
+              "title": "Get sign-off and close decision D1",
+              "body": "Collect Ryan's and Kevin's written agreement and record D1 as closed with the date. Checked by the signed document being committed.",
+              "blockedBy": [
+                "E1-S1-T1",
+                "E1-S1-T3"
+              ]
+            },
+            {
+              "key": "E1-S1-T5",
+              "title": "After sign-off, amend dashmeta and move AIF tickets",
+              "body": "Ryan Morris amends DAS-775 and DAS-776 and Zach DeManche moves the AIF tickets per the agreed list. Checked by the document linking each changed ticket.",
+              "blockedBy": [
+                "E1-S1-T4"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E1-S2",
+          "title": "Shared scan contracts settled with dashmeta",
+          "size": "M",
+          "areas": [
+            "backend",
+            "docs"
+          ],
+          "story": "As a Farside engineer, I want the checks, inventory, coverage and findings formats settled with dashmeta, so that Azure and GCP results sit beside Atlas results.",
+          "acceptance": [
+            "Given a finding fixture, when validated against the contract, then a finding without evidence fails validation.",
+            "Given an `undetermined` result fixture, when validated, then it must carry a statement of what would close it or it fails.",
+            "Given a coverage fixture with an unassessed scope, when the contract's scoring helper runs, then the unassessed scope contributes nothing to any score.",
+            "Given a savings fixture, when validated, then savings are accepted as a range and a single point value is rejected.",
+            "Given any fixture, when validated, then raw provider payload fields are rejected so only aggregates are stored.",
+            "Given each proposed contract addition, then Ryan's sign-off is recorded before the addition merges.",
+            "Given the health score formula, when computed on fixtures, then it uses only assessed scopes, is documented in the package, and a fixture with no findings yields coverage only and no score."
+          ],
+          "notes": "Contract tests run in CI with valid and invalid fixtures for each of the four formats. Fixtures contain no client data. This package is the single owner of the scoring helper and the health score formula; screens call it and do not reimplement it.",
+          "blockedBy": [
+            "E1-S1",
+            "E1-S3"
+          ],
+          "tasks": [
+            {
+              "key": "E1-S2-T1",
+              "title": "List gaps between dashmeta contracts and Azure/GCP needs",
+              "body": "Read the checks, inventory, coverage and findings formats and list what Azure and GCP need that is missing. Checked by a gap table reviewed by Ryan.",
+              "blockedBy": []
+            },
+            {
+              "key": "E1-S2-T2",
+              "title": "Propose and agree contract additions",
+              "body": "Write each addition with a reason and get Ryan's recorded sign-off. Checked by the sign-off being linked from the proposal.",
+              "blockedBy": [
+                "E1-S2-T1"
+              ]
+            },
+            {
+              "key": "E1-S2-T3",
+              "title": "Build contract validators and fixtures",
+              "body": "Implement validators and valid and invalid fixtures for the evidence, undetermined, unassessed, range and aggregate-only rules. Checked by unit tests covering each rejection.",
+              "blockedBy": [
+                "E1-S2-T2"
+              ]
+            },
+            {
+              "key": "E1-S2-T4",
+              "title": "Publish the contracts as a versioned package",
+              "body": "Expose the types and validators for the backend and console to import. Checked by a consumer test importing the published build.",
+              "blockedBy": [
+                "E1-S2-T3"
+              ]
+            },
+            {
+              "key": "E1-S2-T5",
+              "title": "Define the health score formula and own the scoring helper",
+              "body": "Write the formula, make it use assessed scopes only, and publish it as the one scoring helper. Checked by fixtures with and without unassessed scopes and with no findings.",
+              "blockedBy": [
+                "E1-S2-T3"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E1-S3",
+          "title": "Farside repo with CI and a deploy skeleton",
+          "size": "M",
+          "areas": [
+            "infra",
+            "backend",
+            "ui"
+          ],
+          "story": "As a Farside engineer, I want a new repo with CI and a deployable empty service, so that every later story merges through the same gates and ships to a dev account.",
+          "acceptance": [
+            "Given a pull request, when CI runs, then lint, type check and unit tests run and a failing check blocks merge.",
+            "Given a merge to main, when the deploy job runs, then an empty backend health route and an empty console shell are reachable in the dev account.",
+            "Given a dev deploy, when its resources are listed, then every resource sits in the dedicated dev account with the standard Moonaan tags and no resource is shared with another customer or product account.",
+            "Given the iac-hub, when read, then `farside` is registered in `PRODUCTS` and the repo, key and address follow the agreed name.",
+            "Given the repo, when searched, then it contains no code or data copied from the old repo that holds real client data."
+          ],
+          "notes": "Depends on decision D2 (separate vs inside dashmeta) and D5 (trademark) for the final repo name and address. If D2 goes the other way, the same work moves into dashmeta.",
+          "blockedBy": [
+            "E1-S1"
+          ],
+          "tasks": [
+            {
+              "key": "E1-S3-T1",
+              "title": "Create the repo and project layout",
+              "body": "Create `Moonaan/moonaan-farside` with backend, console and infra folders and the agreed branch rules. Checked by a clean clone building locally.",
+              "blockedBy": []
+            },
+            {
+              "key": "E1-S3-T2",
+              "title": "Add CI for lint, types and tests",
+              "body": "Add the pipeline with required checks on pull requests. Checked by a deliberately failing branch being blocked.",
+              "blockedBy": [
+                "E1-S3-T1"
+              ]
+            },
+            {
+              "key": "E1-S3-T3",
+              "title": "Deploy an empty service and shell to dev",
+              "body": "Add the infrastructure code and deploy job for a health route and static shell. Checked by hitting the dev URL after a merge.",
+              "blockedBy": [
+                "E1-S3-T2"
+              ]
+            },
+            {
+              "key": "E1-S3-T4",
+              "title": "Register Farside in iac-hub PRODUCTS",
+              "body": "Add the `farside` entry and address pattern following the existing products. Checked by the iac-hub plan showing the new entry.",
+              "blockedBy": [
+                "E1-S3-T1"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E1-S4",
+          "title": "Reuse review of existing patterns and adapters",
+          "size": "S",
+          "areas": [
+            "docs",
+            "azure",
+            "cost"
+          ],
+          "story": "As a Farside engineer, I want a written review of what to reuse, extend or rebuild, so that we port selectively and copy no client data.",
+          "acceptance": [
+            "Given the dashmeta Azure adapter, when reviewed, then its single supported resource type and its fakes-only test status are recorded with an extend plan.",
+            "Given AIF `connector-azure` and `connector-gcp`, when reviewed, then each piece to port is listed and the rest marked not ported, with a note that neither has run live.",
+            "Given the cost reporter, when reviewed, then its floor and burst method and its four alert rules (org spike, account spike, service spike, new service) are listed by name, thresholds are marked 'must become relative and be re-tested', and the digest channel is recorded as customer-configured email.",
+            "Given Atlas's control catalog and cost method, when reviewed, then each Azure and GCP launch check names the Atlas pattern it follows or is marked new.",
+            "Given the AIF repo, when scanned for client names, then the scan result is recorded before any port begins.",
+            "Given dashmeta's billing screen, when reviewed, then what it offers (plan display, invoices, payment mechanism) and what could be reused or must be rebuilt are recorded as input to the billing story E5-S3."
+          ],
+          "notes": "Read Atlas patterns only for method. No client data from any repo is copied into Farside.",
+          "blockedBy": [
+            "E1-S1"
+          ],
+          "tasks": [
+            {
+              "key": "E1-S4-T1",
+              "title": "Review dashmeta Azure adapter and billing screen",
+              "body": "Document the adapter's limits and what the billing screen offers for the sale-to-dashboard gap. Checked by a short review note.",
+              "blockedBy": []
+            },
+            {
+              "key": "E1-S4-T2",
+              "title": "Review AIF connectors and scan for client names",
+              "body": "List portable Azure roles and hierarchy discovery and GCP collectors, and run the client-name scan. Checked by the scan output attached.",
+              "blockedBy": []
+            },
+            {
+              "key": "E1-S4-T3",
+              "title": "Map Atlas and cost reporter patterns to checks",
+              "body": "Map each launch check to an Atlas pattern or mark it new, and list the cost reporter pieces that port. Checked by every launch check appearing in the map.",
+              "blockedBy": []
+            }
+          ]
+        },
+        {
+          "key": "E1-S5",
+          "title": "Azure test estate seeded with deliberate waste",
+          "size": "M",
+          "areas": [
+            "azure",
+            "infra"
+          ],
+          "story": "As a Farside engineer, I want one funded Azure subscription seeded with known waste and gaps, so that every check can be run live and its false positives measured.",
+          "acceptance": [
+            "Given the test subscription, when listed, then it exists in a Moonaan-owned tenant that is different from the tenant holding the Farside app registration, with the Farside reader roles assignable and no customer data in it.",
+            "Given the ground-truth manifest, when compared with the estate, then every Azure launch check has at least one seeded positive and one seeded negative, except checks listed in the manifest as exceptions with the reason and marked unverified.",
+            "Given the estate, when inspected, then it includes a production-tagged VM and SQL database outside Azure Backup, a database without zone redundancy or geo-backup, a resource with no owner tag, a retiring SKU and a gateway certificate near expiry.",
+            "Given the estate, when listed, then a second empty subscription with no budget exists beside the main one, which has a budget.",
+            "Given the estate's monthly cost, when checked, then a budget with an alert protects it from runaway spend.",
+            "Given the estate is torn down and recreated from code, then the manifest still matches."
+          ],
+          "notes": "Blocked by decisions D3 and D6. Seed from code so it is repeatable. Include a few items that look wasteful but are not, to measure false positives. The subscriptions sit in a tenant different from the one holding the Farside app registration, so the cross-tenant connect path is exercised.",
+          "blockedBy": [],
+          "tasks": [
+            {
+              "key": "E1-S5-T1",
+              "title": "Provision the subscriptions and cost guard",
+              "body": "Create the main subscription in a tenant separate from the app registration, plus a budget with alerts. Checked by the budget showing in the portal and an alert test.",
+              "blockedBy": []
+            },
+            {
+              "key": "E1-S5-T2",
+              "title": "Seed waste, resilience and lifecycle cases from code",
+              "body": "Deploy unattached disks, unassociated IPs, old snapshots, stopped-not-deallocated VMs, idle plans, load balancers, NAT gateways, unbacked-up production items, a database without zone redundancy or geo-backup, a retiring SKU and a near-expiry gateway certificate. Checked by the portal listing each.",
+              "blockedBy": [
+                "E1-S5-T1"
+              ]
+            },
+            {
+              "key": "E1-S5-T3",
+              "title": "Write the ground-truth manifest with exceptions",
+              "body": "Record each seeded item, which check should flag it, which items must not be flagged, and any check lacking a positive or negative marked unverified with the reason. Checked by a reviewer matching every launch check to a manifest row or exception.",
+              "blockedBy": [
+                "E1-S5-T2",
+                "E1-S5-T4"
+              ]
+            },
+            {
+              "key": "E1-S5-T4",
+              "title": "Create the empty second subscription with no budget",
+              "body": "Add a second subscription with no resources and no budget for the budget check. Checked by the portal showing it empty with no budget.",
+              "blockedBy": [
+                "E1-S5-T1"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E1-S6",
+          "title": "Azure control spec and app registration settled",
+          "size": "M",
+          "areas": [
+            "azure",
+            "docs"
+          ],
+          "story": "As a Farside engineer, I want every Azure launch check written as a spec and the app registration approach settled, so that building the checks and the connect flow is mechanical and can start before the test subscription exists.",
+          "acceptance": [
+            "Given the spec, when read, then every Azure launch check in the inventory, waste, cost, resilience and lifecycle groups has an entry naming its role, data source, evidence fields and savings basis where it applies.",
+            "Given each entry, when read, then it lists the conditions that make the result `undetermined` and what would close each one.",
+            "Given each entry, when read, then it is marked unverified until a dated live run exists, and unverified entries are labelled not supported.",
+            "Given the app registration decision, when read, then it states how the registration is created, how federated credentials are issued for customer tenants, and that the test subscription must be in a different tenant from the registration.",
+            "Given the spec and the registration decision, when reviewed, then Ryan and Kevin have each commented and the open questions are listed."
+          ],
+          "notes": "Roles and API behavior in the spec come from general knowledge and are verified in the next story, once the test subscription exists. The GCP spec is written in Phase 5.",
+          "blockedBy": [
+            "E1-S2",
+            "E1-S4"
+          ],
+          "tasks": [
+            {
+              "key": "E1-S6-T1",
+              "title": "Write the Azure spec entries",
+              "body": "Write one entry per launch check using the shared contract fields. Checked by a template lint that fails on a missing field.",
+              "blockedBy": []
+            },
+            {
+              "key": "E1-S6-T2",
+              "title": "Settle the app registration approach",
+              "body": "Decide and write down registration, federated credential issuance for customer tenants and the cross-tenant rule for the test subscription. Checked by Ryan and Kevin reviewing the note.",
+              "blockedBy": []
+            },
+            {
+              "key": "E1-S6-T3",
+              "title": "Define the unverified status and the support matrix template",
+              "body": "Add the rule that unverified entries are labelled not supported and a matrix template. Checked by a lint failing on an entry without a status.",
+              "blockedBy": []
+            }
+          ]
+        },
+        {
+          "key": "E1-S7",
+          "title": "Azure roles and APIs verified on the test subscription",
+          "size": "M",
+          "areas": [
+            "azure",
+            "docs"
+          ],
+          "story": "As a Farside engineer, I want each Azure role and API behavior in the spec run on the real test subscription, so that only proven checks are called supported.",
+          "acceptance": [
+            "Given the role list (Reader, Cost Management Reader, Monitoring Reader, Reservations Reader, Backup Reader), when run on the test subscription, then each role is shown sufficient or insufficient for its checks.",
+            "Given each API behavior in the spec, when exercised, then the entry is marked verified with a dated run record, or stays unverified and not supported.",
+            "Given the app registration in its own tenant, when federated access to the test subscription is exercised, then the cross-tenant path works or the failure is recorded.",
+            "Given the manifest exceptions, when listed, then each unverified check keeps that status in the support matrix.",
+            "Given the support matrix, when published, then it matches the run records."
+          ],
+          "notes": "Blocked by decision D3 (test subscription). Spec writing and the connect flow can proceed before this story.",
+          "blockedBy": [
+            "E1-S5",
+            "E1-S6"
+          ],
+          "tasks": [
+            {
+              "key": "E1-S7-T1",
+              "title": "Run each role and query with read-only roles",
+              "body": "Run each spec query with only the proposed roles and record the result. Checked by a recorded run log per entry.",
+              "blockedBy": []
+            },
+            {
+              "key": "E1-S7-T2",
+              "title": "Prove cross-tenant federated access",
+              "body": "Exercise the registration against the test subscription in the other tenant. Checked by a recorded successful token exchange and read.",
+              "blockedBy": []
+            },
+            {
+              "key": "E1-S7-T3",
+              "title": "Update the spec with verified status",
+              "body": "Mark entries verified or unverified with dates. Checked by the lint passing on the updated spec.",
+              "blockedBy": [
+                "E1-S7-T1"
+              ]
+            },
+            {
+              "key": "E1-S7-T4",
+              "title": "Publish the support matrix",
+              "body": "Generate a table showing verified, unverified or not supported. Checked by the matrix agreeing with the run logs.",
+              "blockedBy": [
+                "E1-S7-T3",
+                "E1-S7-T2"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "E2",
+      "title": "Connect Azure and see the estate",
+      "phase": 1,
+      "goal": "A customer signs in, connects an Azure subscription without pasting a secret, and sees their estate and what Farside could not see. A first scan runs on connect and can run unattended.",
+      "stories": [
+        {
+          "key": "E2-S1",
+          "title": "CTO claims the org and signs in",
+          "size": "M",
+          "areas": [
+            "backend",
+            "ui",
+            "infra"
+          ],
+          "story": "As a CTO, I want to claim my organization and sign in with Moonaan Identity, so that only my team sees my estate.",
+          "acceptance": [
+            "Given a new deployment, when the CTO follows the claim link, then the org is claimed and the CTO lands in the console signed in.",
+            "Given a signed-in user of org A, when they request org B's data, then the API refuses.",
+            "Given a signed-out visitor, when they open any console route or API route, then they are sent to sign in.",
+            "Given a sign-in on a test tenant, when run end to end, then it succeeds as the rehearsed flow does today.",
+            "Given a user signs out, then the session ends and the back button shows no estate data.",
+            "Given the console shell, when opened, then navigation to every planned screen is present, screens without data show an empty state, and axe finds no blocking violations."
+          ],
+          "notes": "Uses Moonaan Identity. Tenancy tests cover cross-org access on every route. The console shell (AIF design, navigation, accessibility tests) is built here first. Accessibility check on the sign-in and claim screens.",
+          "blockedBy": [
+            "E1-S3"
+          ],
+          "tasks": [
+            {
+              "key": "E2-S1-T1",
+              "title": "Set up the console shell using the AIF design",
+              "body": "Rebuild navigation and layout in the new app keeping the design and accessibility tests. Checked by an axe scan on the shell.",
+              "blockedBy": []
+            },
+            {
+              "key": "E2-S1-T2",
+              "title": "Wire Moonaan Identity into the backend",
+              "body": "Validate tokens and map users to an org on every request. Checked by unit tests for valid, expired and wrong-org tokens.",
+              "blockedBy": []
+            },
+            {
+              "key": "E2-S1-T3",
+              "title": "Build the sign-in and org claim screens",
+              "body": "Add the claim landing, sign-in and sign-out in the console. Checked by an end-to-end test and an axe scan.",
+              "blockedBy": [
+                "E2-S1-T1",
+                "E2-S1-T2"
+              ]
+            },
+            {
+              "key": "E2-S1-T4",
+              "title": "Enforce org scoping in data access",
+              "body": "Scope every read and write by org id. Checked by a cross-org test on each route.",
+              "blockedBy": [
+                "E2-S1-T2"
+              ]
+            },
+            {
+              "key": "E2-S1-T5",
+              "title": "Rehearse the claim on a test tenant",
+              "body": "Run the flow against a test tenant from a fresh deployment. Checked by a recorded pass.",
+              "blockedBy": [
+                "E2-S1-T3"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E2-S2",
+          "title": "Connect an Azure subscription with federated credentials",
+          "size": "L",
+          "areas": [
+            "backend",
+            "ui",
+            "azure",
+            "security-boundary"
+          ],
+          "story": "As a CTO, I want to connect my Azure subscription with read-only access and no stored secret, so that Farside can scan without a person present.",
+          "acceptance": [
+            "Given the Connect screen, when a user follows the steps, then they grant only Reader, Cost Management Reader, Monitoring Reader and Reservations Reader, with Backup Reader shown as optional.",
+            "Given a connection, when stored, then no client secret or pasted token exists in the database, logs or API responses.",
+            "Given a connected subscription missing a role, when validated, then the screen names the missing role and the checks it blocks, and those checks are shown unassessed.",
+            "Given a revoked grant, when the next validation runs, then the connection shows as broken with a reason and the last good scan is not shown as current.",
+            "Given a user disconnects, then the credentials are removed and further scans of that subscription stop.",
+            "Given the test subscription in a tenant different from the app registration, when connected end to end, then validation succeeds using federated credentials."
+          ],
+          "notes": "Dashmeta's Azure auth is a client secret, so this is new work. Federated credentials are required because scans run unattended. The multi-tenant app registration approach is settled in the spec from E1-S6.",
+          "blockedBy": [
+            "E2-S1",
+            "E1-S6",
+            "E1-S7"
+          ],
+          "tasks": [
+            {
+              "key": "E2-S2-T1",
+              "title": "Implement federated credential exchange",
+              "body": "Exchange the platform identity for short-lived Azure tokens with no stored secret. Checked by an integration run on the test subscription.",
+              "blockedBy": []
+            },
+            {
+              "key": "E2-S2-T2",
+              "title": "Build the guided Connect screen",
+              "body": "Show the exact roles and steps and collect tenant and subscription ids. Checked by an end-to-end test and an axe scan.",
+              "blockedBy": [
+                "E2-S2-T1"
+              ]
+            },
+            {
+              "key": "E2-S2-T3",
+              "title": "Validate roles and report gaps",
+              "body": "Probe each role and store which checks each missing role blocks. Checked by tests with roles removed.",
+              "blockedBy": [
+                "E2-S2-T1"
+              ]
+            },
+            {
+              "key": "E2-S2-T4",
+              "title": "Handle disconnect and revoked grants",
+              "body": "Remove credentials on disconnect and mark broken connections. Checked by a test revoking the grant on the test subscription.",
+              "blockedBy": [
+                "E2-S2-T3"
+              ]
+            },
+            {
+              "key": "E2-S2-T5",
+              "title": "Add a no-secrets guard to CI",
+              "body": "Scan logs, stored records and responses in tests for token and secret patterns. Checked by a deliberate leak failing the build.",
+              "blockedBy": [
+                "E2-S2-T1"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E2-S3",
+          "title": "Azure hierarchy and inventory harvest",
+          "size": "L",
+          "areas": [
+            "backend",
+            "azure"
+          ],
+          "story": "As a CTO, I want every resource across my subscriptions found and counted, so that I know what I own.",
+          "acceptance": [
+            "Given a connected tenant, when the harvest runs, then management groups and subscriptions it can see are discovered and listed.",
+            "Given the test subscription, when harvested, then inventory counts by subscription, type and region match the ground-truth manifest.",
+            "Given a result larger than one page, when harvested, then all pages are read and none dropped.",
+            "Given a throttled call, when retried, then the harvest completes or marks the affected scope `undetermined` with what would close it.",
+            "Given a resource with no owner tag, when harvested, then it is counted in the no-owner total.",
+            "Given the stored inventory, when inspected, then it holds identifiers, types, regions and tags only, with no raw provider payload."
+          ],
+          "notes": "Extends the dashmeta Resource Graph client, which supports one type today. Proof of 'supported' is a live run on the test subscription.",
+          "blockedBy": [
+            "E2-S2",
+            "E1-S2"
+          ],
+          "tasks": [
+            {
+              "key": "E2-S3-T1",
+              "title": "Extend the Resource Graph client to all types",
+              "body": "Query all resource types with paging and throttle handling. Checked by fakes plus a live run on the test subscription.",
+              "blockedBy": []
+            },
+            {
+              "key": "E2-S3-T2",
+              "title": "Discover management groups and subscriptions",
+              "body": "Port hierarchy discovery selectively from the AIF connector. Checked by a live run listing the test hierarchy.",
+              "blockedBy": []
+            },
+            {
+              "key": "E2-S3-T3",
+              "title": "Store inventory as aggregates and identifiers",
+              "body": "Map results to the shared inventory contract and drop payload fields. Checked by contract validation in tests.",
+              "blockedBy": [
+                "E2-S3-T1"
+              ]
+            },
+            {
+              "key": "E2-S3-T4",
+              "title": "Compute no-owner totals",
+              "body": "Flag resources lacking the configured owner tag. Checked against the seeded manifest.",
+              "blockedBy": [
+                "E2-S3-T3"
+              ]
+            },
+            {
+              "key": "E2-S3-T5",
+              "title": "Compare live inventory to ground truth",
+              "body": "Run the harvest live and diff against the manifest. Checked by a recorded zero-diff or explained diff.",
+              "blockedBy": [
+                "E2-S3-T4",
+                "E2-S3-T2"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E2-S4",
+          "title": "Coverage model and the Blind spots screen",
+          "size": "M",
+          "areas": [
+            "backend",
+            "ui"
+          ],
+          "story": "As a CTO, I want to see what Farside could not check and why, so that I do not mistake silence for health.",
+          "acceptance": [
+            "Given a scan, when stored, then every scope and check has a coverage state of assessed, unassessed or undetermined.",
+            "Given an unassessed scope, when coverage is computed with the contract's scoring helper, then the scope is excluded from any score and the screen reports how much was left out.",
+            "Given an `undetermined` item, when shown on Blind spots, then it states what would close it.",
+            "Given a missing role or a failed call, when the scan completes, then the cause appears on Blind spots in plain language.",
+            "Given the Blind spots screen, when tested with a keyboard and screen reader checks, then every row is reachable and labelled."
+          ],
+          "notes": "Follows the shared coverage contract. This is the foundation of the proof-of-coverage rule used for issues later.",
+          "blockedBy": [
+            "E2-S3"
+          ],
+          "tasks": [
+            {
+              "key": "E2-S4-T1",
+              "title": "Record coverage per scope and check",
+              "body": "Write coverage states during harvest and checks. Checked by unit tests for each state.",
+              "blockedBy": []
+            },
+            {
+              "key": "E2-S4-T2",
+              "title": "Use the contract scoring helper for coverage",
+              "body": "Call the shared scoring helper from E1-S2 and show its disclosure text, with no second implementation. Checked by a test where adding unassessed scopes leaves the score unchanged.",
+              "blockedBy": [
+                "E2-S4-T1"
+              ]
+            },
+            {
+              "key": "E2-S4-T3",
+              "title": "Build the Blind spots screen",
+              "body": "List what could not be checked, why and what would close it. Checked by an end-to-end test and an axe scan.",
+              "blockedBy": [
+                "E2-S4-T1"
+              ]
+            },
+            {
+              "key": "E2-S4-T4",
+              "title": "Write plain-language reasons for each cause",
+              "body": "Map failures such as missing role, throttling and unsupported type to readable text. Checked by a copy review.",
+              "blockedBy": [
+                "E2-S4-T3"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E2-S5",
+          "title": "Estate overview, Inventory and Settings screens",
+          "size": "M",
+          "areas": [
+            "ui",
+            "backend"
+          ],
+          "story": "As a CTO, I want an overview of my estate with an inventory I can browse and settings for my conventions, so that I see ownership gaps at a glance.",
+          "acceptance": [
+            "Given a scanned estate, when the Estate overview opens, then it shows resource totals, the no-owner count and coverage (assessed, unassessed and `undetermined` scopes), and no health score because Phase 1 has no findings.",
+            "Given the Inventory screen, when filtered by owner, service, subscription and region, then the list and counts update and match the stored inventory.",
+            "Given the Settings screen, when the owner tag key and the production marker are set, then the next scan uses them and the change is recorded.",
+            "Given no scan yet, when the overview opens, then an empty state points to Connect.",
+            "Given all three screens, when checked on a phone width and with axe, then there are no blocking accessibility violations."
+          ],
+          "notes": "The console shell is built in the sign-in story. Phase 1 shows coverage only; the health score from the E1-S2 formula and the CTO headline arrive once checks exist. Settings follow the same shape as dashmeta's.",
+          "blockedBy": [
+            "E2-S4"
+          ],
+          "tasks": [
+            {
+              "key": "E2-S5-T1",
+              "title": "Build the Estate overview",
+              "body": "Show totals, no-owner count and coverage with a blind spot summary. Checked by an end-to-end test on seeded data.",
+              "blockedBy": []
+            },
+            {
+              "key": "E2-S5-T2",
+              "title": "Build the Inventory screen",
+              "body": "Add browse, filters and owner and service grouping. Checked by tests comparing counts to the API.",
+              "blockedBy": []
+            },
+            {
+              "key": "E2-S5-T3",
+              "title": "Build Settings for owner tag and production marker",
+              "body": "Store the conventions per org and read them in harvest. Checked by changing the tag and seeing the no-owner count change.",
+              "blockedBy": []
+            }
+          ]
+        },
+        {
+          "key": "E2-S6",
+          "title": "First scan on connect, running unattended",
+          "size": "L",
+          "areas": [
+            "backend",
+            "infra",
+            "azure"
+          ],
+          "story": "As a CTO, I want a scan to start as soon as I connect and keep working without anyone logged in, so that the product is continuous and not a one-off.",
+          "acceptance": [
+            "Given a successful connection, when it completes, then a first scan starts and its progress is visible.",
+            "Given no user is signed in, when a scan job is triggered by the system, then it runs using federated credentials and completes.",
+            "Given a scan that fails partway, when it ends, then the failure and the scopes it covered are stored and no partial result is shown as complete.",
+            "Given two scan requests for one subscription, when both arrive, then only one runs at a time.",
+            "Given the first scan on the test subscription, when it finishes, then inventory and coverage are stored and visible in the console."
+          ],
+          "notes": "No shared scheduler exists. This story delivers an on-demand job runner that works unattended; the recurring scheduler is built in the sell-ready epic.",
+          "blockedBy": [
+            "E2-S3",
+            "E2-S2",
+            "E2-S5"
+          ],
+          "tasks": [
+            {
+              "key": "E2-S6-T1",
+              "title": "Build the scan job runner",
+              "body": "Run a scan as a background job separate from web requests with stored status. Checked by a job test for success and failure.",
+              "blockedBy": []
+            },
+            {
+              "key": "E2-S6-T2",
+              "title": "Trigger a scan on connect",
+              "body": "Start the first scan once validation passes. Checked by an end-to-end test from Connect to a running scan.",
+              "blockedBy": [
+                "E2-S6-T1"
+              ]
+            },
+            {
+              "key": "E2-S6-T3",
+              "title": "Prove the unattended path",
+              "body": "Trigger a scan from a system caller with no user session using only federated credentials. Checked by a live run on the test subscription.",
+              "blockedBy": [
+                "E2-S6-T1"
+              ]
+            },
+            {
+              "key": "E2-S6-T4",
+              "title": "Prevent overlapping scans and store failures",
+              "body": "Lock per subscription and persist scan outcomes. Checked by concurrent-request and mid-failure tests.",
+              "blockedBy": [
+                "E2-S6-T1"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E2-S7",
+          "title": "Week 8 walk-through and continue-or-stop check",
+          "size": "S",
+          "areas": [
+            "docs",
+            "ui"
+          ],
+          "story": "As the Farside owner, I want to show the first Azure estate view to one named prospect and make a recorded continue-or-stop call, so that Phase 2 spend only follows real demand.",
+          "acceptance": [
+            "Given the Phase 1 build, when a rehearsal runs on the test subscription, then sign in, connect, first scan, overview and Blind spots all work in one sitting.",
+            "Given the walk-through, when it ends, then the prospect's answer on willingness to pay is recorded.",
+            "Given the prospect's feedback, when recorded, then it lists which blind spots or inventory views mattered and which did not.",
+            "Given the pricing note, when written, then it states the price must stay above the cost of a dedicated account and shows that cost.",
+            "Given the inputs above, when reviewed, then a continue-or-stop record for Phase 2 exists with an owner, a date and a decision, and no Phase 2 story starts without it."
+          ],
+          "notes": "Blocked by decision D4 (name the prospect). This is separate from the D6 go or no-go before build. Use the prospect's own subscription only with their written consent; otherwise use the test estate.",
+          "blockedBy": [
+            "E2-S5",
+            "E2-S6"
+          ],
+          "tasks": [
+            {
+              "key": "E2-S7-T1",
+              "title": "Write the demo script and rehearse it",
+              "body": "Script the sitting around the overview and Blind spots. Checked by one clean rehearsal on the test subscription.",
+              "blockedBy": []
+            },
+            {
+              "key": "E2-S7-T2",
+              "title": "Run the prospect session and record feedback",
+              "body": "Hold the session and write down the willingness-to-pay answer. Checked by the notes being filed.",
+              "blockedBy": [
+                "E2-S7-T1"
+              ]
+            },
+            {
+              "key": "E2-S7-T3",
+              "title": "Record the continue-or-stop decision for Phase 2",
+              "body": "Write the decision with owner, date and inputs. Checked by the record being filed before any Phase 2 story starts.",
+              "blockedBy": [
+                "E2-S7-T2",
+                "E2-S7-T4"
+              ]
+            },
+            {
+              "key": "E2-S7-T4",
+              "title": "Write the pricing floor note",
+              "body": "Compare an estimated price with the actual cost of a dedicated account and the test estate. Checked by Kevin reading the note.",
+              "blockedBy": [
+                "E2-S7-T2"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "E3",
+      "title": "Real Azure issues with proof of coverage",
+      "phase": 2,
+      "goal": "The customer gets named Azure issues for waste, resilience and lifecycle, each with evidence and a statement of what was and was not covered. Every check has run live at least once.",
+      "stories": [
+        {
+          "key": "E3-S1",
+          "title": "Check engine and first check end to end",
+          "size": "L",
+          "areas": [
+            "backend",
+            "azure"
+          ],
+          "story": "As a Farside engineer, I want the check engine built together with the first real check, so that evidence rules are proven on a real finding from harvest to screen.",
+          "acceptance": [
+            "Given harvested data, when a check runs, then it reads the stored data and makes no provider calls.",
+            "Given a check that finds a problem, when it produces a finding, then the finding carries the resource id and the evidence fields from the spec, or it is rejected.",
+            "Given a check that cannot decide, when it ends, then it returns `undetermined` with what would close it.",
+            "Given a scope the check could not read, when results are stored, then that scope is unassessed and absent from scores.",
+            "Given a check with savings, when stored, then savings are a range with the basis named from the shared savings range helper, and a single point value is rejected.",
+            "Given the seeded unattached disk on the test estate, when a scan runs, then the finding is stored and returned by the API with its evidence.",
+            "Given the stored finding, when inspected, then it holds aggregates and identifiers and no raw provider payload."
+          ],
+          "notes": "Follows Atlas: harvest and check as separate steps, no finding without evidence. Check definitions come from the E1-S6 spec. The savings range helper lives here and is reused by later checks. The next story proves the engine across more checks and in the console.",
+          "blockedBy": [
+            "E2-S4",
+            "E1-S6",
+            "E1-S7",
+            "E2-S7"
+          ],
+          "tasks": [
+            {
+              "key": "E3-S1-T1",
+              "title": "Build the check runner over stored inventory",
+              "body": "Run registered checks against stored data and write results through the contract. Checked by runner unit tests.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S1-T2",
+              "title": "Enforce evidence and undetermined rules",
+              "body": "Reject findings missing evidence and require closing text on `undetermined`. Checked by negative tests.",
+              "blockedBy": [
+                "E3-S1-T1"
+              ]
+            },
+            {
+              "key": "E3-S1-T3",
+              "title": "Build the shared savings range helper",
+              "body": "Compute low and high ranges with the basis named and reject point values. Checked by fixed-input unit tests.",
+              "blockedBy": [
+                "E3-S1-T1"
+              ]
+            },
+            {
+              "key": "E3-S1-T4",
+              "title": "Add a check registry tied to the spec",
+              "body": "Register each check with its spec id so unsupported checks cannot run. Checked by a test failing on an unregistered check.",
+              "blockedBy": [
+                "E3-S1-T1"
+              ]
+            },
+            {
+              "key": "E3-S1-T5",
+              "title": "Add metrics harvest via Monitoring Reader",
+              "body": "Pull the utilization aggregates checks need, aggregates only. Checked by a live run on the test subscription.",
+              "blockedBy": [
+                "E3-S1-T1"
+              ]
+            },
+            {
+              "key": "E3-S1-T6",
+              "title": "Implement the unattached disk check end to end",
+              "body": "Run the check from harvest to a stored finding returned by the API. Checked against seeded positives and negatives.",
+              "blockedBy": [
+                "E3-S1-T2",
+                "E3-S1-T3",
+                "E3-S1-T4"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E3-S2",
+          "title": "Leftover waste checks prove the engine end to end",
+          "size": "M",
+          "areas": [
+            "backend",
+            "azure",
+            "cost"
+          ],
+          "story": "As a CTO, I want old snapshots, unassociated public IPs and stopped-but-billing VMs named beside unattached disks, so that I can remove them.",
+          "acceptance": [
+            "Given the test estate, when the checks run, then each seeded old snapshot, unassociated public IP and stopped-not-deallocated VM is flagged.",
+            "Given a stopped and deallocated VM, when checked, then it is not flagged as stopped-but-billing.",
+            "Given the snapshot age rule, when configured, then only snapshots older than the setting are flagged and the setting is shown with the finding.",
+            "Given a full scan of the test subscription, when it finishes, then the unattached disk and the three findings from this story appear in the Issues list in the console with evidence and a savings range.",
+            "Given an IP or VM power state that cannot be read, when checked, then the result is `undetermined`, not clean."
+          ],
+          "notes": "Uses the engine and savings range helper from E3-S1. Test against the manifest, including seeded negatives, to measure false positives.",
+          "blockedBy": [
+            "E3-S1"
+          ],
+          "tasks": [
+            {
+              "key": "E3-S2-T1",
+              "title": "Implement the old snapshot check",
+              "body": "Check age with a configurable setting. Checked against seeded positives and negatives.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S2-T2",
+              "title": "Implement the unassociated public IP check",
+              "body": "Flag IPs not tied to a resource. Checked against seeded cases.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S2-T3",
+              "title": "Implement the stopped-not-deallocated VM check",
+              "body": "Separate stopped from deallocated power states. Checked against both seeded states.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S2-T4",
+              "title": "Prove the path from scan to console",
+              "body": "Run a full scan on the test subscription and confirm all four waste findings show in the console. Checked by a recorded run and an end-to-end test.",
+              "blockedBy": [
+                "E3-S2-T1",
+                "E3-S2-T2",
+                "E3-S2-T3"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E3-S3",
+          "title": "Idle plans, load balancers and NAT gateways found",
+          "size": "M",
+          "areas": [
+            "backend",
+            "azure",
+            "cost"
+          ],
+          "story": "As a CTO, I want idle App Service plans, load balancers and NAT gateways flagged, so that I stop paying for things nobody uses.",
+          "acceptance": [
+            "Given an App Service plan with no apps, when checked, then it is flagged as empty with its monthly cost range.",
+            "Given a load balancer or NAT gateway with no backends or no traffic over the window, when checked, then it is flagged as idle with the window shown.",
+            "Given metrics that are unavailable, when the check runs, then the result is `undetermined` and states that Monitoring Reader or a longer window would close it.",
+            "Given a busy gateway on the test estate, when checked, then it is not flagged.",
+            "Given the findings, when listed, then every one shows its evidence and savings range."
+          ],
+          "notes": "Idle claims are candidates until utilization is shown; wording must never say 'confirmed idle' when metrics are missing. Reuses the savings range helper from E3-S1.",
+          "blockedBy": [
+            "E3-S1"
+          ],
+          "tasks": [
+            {
+              "key": "E3-S3-T1",
+              "title": "Implement empty App Service plan check",
+              "body": "Flag plans with no apps using stored inventory. Checked against seeded cases.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S3-T2",
+              "title": "Implement idle load balancer check",
+              "body": "Use backend and traffic aggregates over a stated window. Checked against idle and busy seeded cases.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S3-T3",
+              "title": "Implement idle NAT gateway check",
+              "body": "Use traffic aggregates over a stated window. Checked against seeded cases.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S3-T4",
+              "title": "Add the undetermined path for missing metrics",
+              "body": "Return `undetermined` with closing text when metrics cannot be read. Checked by a test with metrics removed.",
+              "blockedBy": [
+                "E3-S3-T2",
+                "E3-S3-T3"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E3-S4",
+          "title": "Backup and redundancy gaps found, with a Recovery page",
+          "size": "L",
+          "areas": [
+            "backend",
+            "ui",
+            "azure"
+          ],
+          "story": "As a CTO, I want to know which production VMs and SQL databases lack backup and which databases lack zone redundancy or geo-backup, so that I can recover from failure.",
+          "acceptance": [
+            "Given production VMs and SQL databases outside Azure Backup, when checked, then each is flagged and counted as N of M production systems.",
+            "Given a system with no production marker, when checked, then it is not counted as production and the gap is listed as `undetermined` with 'set the production marker' as the closer.",
+            "Given a missing Backup Reader role, when the backup check runs, then the result is `undetermined` or unassessed and says which role would close it.",
+            "Given a database without zone redundancy or geo-backup, when checked, then it is flagged with the setting that is missing.",
+            "Given the Recovery page, when opened, then it lists the gaps by system with evidence and the coverage state.",
+            "Given the Recovery page, when run through axe, then there are no blocking violations."
+          ],
+          "notes": "Production is defined by the Settings marker from the overview story. Backup Reader is optional, so many results depend on the undetermined path.",
+          "blockedBy": [
+            "E3-S1",
+            "E2-S5"
+          ],
+          "tasks": [
+            {
+              "key": "E3-S4-T1",
+              "title": "Implement VM and SQL backup coverage check",
+              "body": "Compare production systems against Azure Backup protected items. Checked against seeded protected and unprotected cases.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S4-T2",
+              "title": "Implement zone redundancy and geo-backup check",
+              "body": "Read redundancy and backup settings on databases. Checked against seeded cases.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S4-T3",
+              "title": "Handle unknown production status and missing role",
+              "body": "Return `undetermined` with closing text for both. Checked by tests with the marker and role removed.",
+              "blockedBy": [
+                "E3-S4-T1"
+              ]
+            },
+            {
+              "key": "E3-S4-T4",
+              "title": "Build the Recovery page",
+              "body": "List gaps with the N of M count and coverage. Checked by an end-to-end test and axe scan.",
+              "blockedBy": [
+                "E3-S4-T1",
+                "E3-S4-T2"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E3-S5",
+          "title": "Retiring SKUs and expiring certificates, with a Lifecycle page",
+          "size": "M",
+          "areas": [
+            "backend",
+            "ui",
+            "azure"
+          ],
+          "story": "As a CTO, I want to know what is losing support or about to expire, so that nothing falls over unexpectedly.",
+          "acceptance": [
+            "Given resources on a retiring SKU, when checked, then each is flagged with the retirement date from the retirement source cited in the finding.",
+            "Given an App Service or gateway certificate expiring inside the warning window, when checked, then it is flagged with the expiry date.",
+            "Given a SKU not in the retirement source, when checked, then it is not flagged and the source version and date are shown.",
+            "Given a certificate that cannot be read, when checked, then the result is `undetermined` with what would close it.",
+            "Given the Lifecycle page, when opened, then it lists items by date and shows K things losing support in 90 days.",
+            "Given the Lifecycle page, when run through axe, then there are no blocking violations."
+          ],
+          "notes": "The retirement list is data with a stated source and date, refreshed deliberately, not guessed in code.",
+          "blockedBy": [
+            "E3-S1",
+            "E2-S5"
+          ],
+          "tasks": [
+            {
+              "key": "E3-S5-T1",
+              "title": "Build the retiring SKU data source",
+              "body": "Record retiring SKUs with dates and sources as data. Checked by a test that every entry has a source.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S5-T2",
+              "title": "Implement retiring SKU check",
+              "body": "Match inventory against the data and report dates. Checked against seeded cases.",
+              "blockedBy": [
+                "E3-S5-T1"
+              ]
+            },
+            {
+              "key": "E3-S5-T3",
+              "title": "Implement certificate expiry check",
+              "body": "Read App Service and gateway certificate expiry with a warning window. Checked against the seeded near-expiry certificate.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S5-T4",
+              "title": "Build the Lifecycle page",
+              "body": "List items by date with the 90-day count. Checked by an end-to-end test and axe scan.",
+              "blockedBy": [
+                "E3-S5-T2",
+                "E3-S5-T3"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E3-S6",
+          "title": "Issues queue that closes only when covered",
+          "size": "L",
+          "areas": [
+            "backend",
+            "ui"
+          ],
+          "story": "As a CTO, I want findings turned into issues I can work through, so that I know what is open, what is fixed and what Farside could not confirm.",
+          "acceptance": [
+            "Given a finding, when a scan stores it, then one issue exists for it and a repeat scan updates the same issue and does not duplicate it.",
+            "Given an open issue, when a later scan no longer finds the problem and the scope was fully assessed, then the issue closes with the closing scan shown.",
+            "Given an open issue, when a later scan did not cover its scope, then the issue stays open and is marked 'not confirmed' with the reason.",
+            "Given the Issues screen, when filtered by check, status and subscription, then results match the stored issues and each shows its proof of coverage.",
+            "Given an issue, when opened, then it shows evidence, savings range where relevant, first seen and last confirmed dates.",
+            "Given the Issues screen, when run through axe and a keyboard test, then there are no blocking violations.",
+            "Given findings exist, when the Estate overview opens, then it shows the health score from the E1-S2 formula, computed only from assessed scopes."
+          ],
+          "notes": "The rule 'an issue closes only if its scope was covered' is the core test. Issue store belongs to Farside, separate from dashmeta's.",
+          "blockedBy": [
+            "E3-S1",
+            "E3-S2",
+            "E2-S5"
+          ],
+          "tasks": [
+            {
+              "key": "E3-S6-T1",
+              "title": "Create the issue store and identity rule",
+              "body": "Key issues by check, resource and scope so repeats update. Checked by a duplicate-scan test.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S6-T2",
+              "title": "Implement close-only-if-covered logic",
+              "body": "Close, hold open or mark not confirmed by coverage state. Checked by one test per state.",
+              "blockedBy": [
+                "E3-S6-T1"
+              ]
+            },
+            {
+              "key": "E3-S6-T3",
+              "title": "Build the Issues screen",
+              "body": "Add queue, filters and detail with proof of coverage. Checked by an end-to-end test and axe scan.",
+              "blockedBy": [
+                "E3-S6-T1"
+              ]
+            },
+            {
+              "key": "E3-S6-T4",
+              "title": "Replay scans to test the lifecycle",
+              "body": "Replay fixed, unfixed and uncovered scans through the store. Checked by expected issue states.",
+              "blockedBy": [
+                "E3-S6-T2"
+              ]
+            },
+            {
+              "key": "E3-S6-T5",
+              "title": "Add the health score to the Estate overview",
+              "body": "Call the shared scoring helper and show the score with its coverage disclosure. Checked by a test with unassessed scopes added.",
+              "blockedBy": [
+                "E3-S6-T1"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E3-S7",
+          "title": "Scans screen with history and per-check results",
+          "size": "M",
+          "areas": [
+            "ui",
+            "backend"
+          ],
+          "story": "As a CTO, I want to see each scan, when it ran and what it covered, so that I can trust the issue list is current.",
+          "acceptance": [
+            "Given scan history, when the Scans screen opens, then each scan shows start time, duration, status and coverage summary.",
+            "Given a scan, when opened, then each check shows assessed, unassessed or `undetermined` with reasons.",
+            "Given a failed scan, when shown, then its failure reason is visible and the screen does not present it as current.",
+            "Given a running scan, when viewed, then progress updates without a page reload.",
+            "Given the Scans screen, when run through axe, then there are no blocking violations."
+          ],
+          "notes": "Same shape as dashmeta's Scans screen.",
+          "blockedBy": [
+            "E3-S1",
+            "E2-S6"
+          ],
+          "tasks": [
+            {
+              "key": "E3-S7-T1",
+              "title": "Expose scan history and per-check results in the API",
+              "body": "Return scans with coverage and check outcomes. Checked by API contract tests.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S7-T2",
+              "title": "Build the Scans list and detail screens",
+              "body": "Show history, status and per-check outcomes. Checked by an end-to-end test and axe scan.",
+              "blockedBy": [
+                "E3-S7-T1"
+              ]
+            },
+            {
+              "key": "E3-S7-T3",
+              "title": "Show live scan progress",
+              "body": "Update running scans without reload. Checked by a test with a slow fake scan.",
+              "blockedBy": [
+                "E3-S7-T2"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E3-S8",
+          "title": "Every Azure check run live and accuracy measured",
+          "size": "M",
+          "areas": [
+            "azure",
+            "docs",
+            "backend"
+          ],
+          "story": "As the Farside owner, I want every Azure check proven on a real subscription and its false positives measured, so that only proven checks are called supported.",
+          "acceptance": [
+            "Given each non-cost Azure check, when run on the test subscription, then a dated run record exists, and a check without one is shown as not supported.",
+            "Given the seeded manifest, when findings are compared, then every seeded positive is found and every seeded negative is not flagged, or the difference is listed.",
+            "Given any false positive or missed positive, when found, then a defect is recorded and the check stays out of 'supported' until fixed and rerun.",
+            "Given the support matrix, when published, then it matches the run records."
+          ],
+          "notes": "Blocked by decision D3: without a test subscription this story cannot finish. Cost checks are verified in the cost epic.",
+          "blockedBy": [
+            "E3-S2",
+            "E3-S3",
+            "E3-S4",
+            "E3-S5",
+            "E3-S6"
+          ],
+          "tasks": [
+            {
+              "key": "E3-S8-T1",
+              "title": "Run all non-cost checks live and record results",
+              "body": "Run each check on the test subscription and file the run record. Checked by one record per check.",
+              "blockedBy": []
+            },
+            {
+              "key": "E3-S8-T2",
+              "title": "Diff findings against the manifest",
+              "body": "Compare positives and negatives and list differences. Checked by a diff report with zero unexplained rows.",
+              "blockedBy": [
+                "E3-S8-T1"
+              ]
+            },
+            {
+              "key": "E3-S8-T3",
+              "title": "File and fix defects found",
+              "body": "Fix defects and rerun the affected checks. Checked by the rerun record.",
+              "blockedBy": [
+                "E3-S8-T2"
+              ]
+            },
+            {
+              "key": "E3-S8-T4",
+              "title": "Update the support matrix",
+              "body": "Regenerate the matrix from run records. Checked by the matrix listing only checks with a record.",
+              "blockedBy": [
+                "E3-S8-T3"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "E4",
+      "title": "Azure cost, waste, alerts and the CTO headline",
+      "phase": 3,
+      "goal": "The customer sees what Azure costs, which part is waste Farside can name, and gets alerts when spend jumps. The Estate overview opens with the headline a CTO needs.",
+      "stories": [
+        {
+          "key": "E4-S1",
+          "title": "Azure spend harvested and shown by service and month",
+          "size": "L",
+          "areas": [
+            "backend",
+            "azure",
+            "cost"
+          ],
+          "story": "As a CTO, I want to see Azure spend by service and how it changed month on month, so that I know where the money goes.",
+          "acceptance": [
+            "Given the test subscription, when cost is harvested, then spend by service and by month is stored and matches the portal figures for the same period.",
+            "Given a result larger than one page, when harvested, then all pages are read and the total matches the portal.",
+            "Given subscriptions under different agreement types, when harvested, then the billing scope and currency are recorded with each figure and totals are never summed across currencies.",
+            "Given the latest day, when its cost is not yet final, then it is labelled provisional or excluded.",
+            "Given a missing Cost Management Reader role, when the harvest runs, then cost is unassessed and the Blind spots screen says which role would close it.",
+            "Given the stored cost data, when inspected, then it holds aggregates only."
+          ],
+          "notes": "Pricing and scopes vary by agreement type, so run beyond one subscription type where possible and mark untested types as unverified. Follow the cost reporter lessons on pagination and data lag.",
+          "blockedBy": [
+            "E2-S2",
+            "E1-S6",
+            "E2-S4",
+            "E2-S6",
+            "E2-S7"
+          ],
+          "tasks": [
+            {
+              "key": "E4-S1-T1",
+              "title": "Build the Cost Management harvester with paging",
+              "body": "Read cost by service and day across all pages. Checked by a fake with a multi-page response and a live run.",
+              "blockedBy": []
+            },
+            {
+              "key": "E4-S1-T2",
+              "title": "Record billing scope and currency per figure",
+              "body": "Store scope and currency and block cross-currency sums. Checked by a mixed-currency test.",
+              "blockedBy": [
+                "E4-S1-T1"
+              ]
+            },
+            {
+              "key": "E4-S1-T3",
+              "title": "Compute month-on-month change",
+              "body": "Derive monthly totals and change per service. Checked by fixed-input unit tests.",
+              "blockedBy": [
+                "E4-S1-T1"
+              ]
+            },
+            {
+              "key": "E4-S1-T4",
+              "title": "Verify totals against the portal and note untested agreement types",
+              "body": "Compare to the portal and list agreement types not yet tried. Checked by a recorded comparison.",
+              "blockedBy": [
+                "E4-S1-T3"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E4-S2",
+          "title": "Reservation and savings plan use shown",
+          "size": "M",
+          "areas": [
+            "backend",
+            "azure",
+            "cost"
+          ],
+          "story": "As a CTO, I want to see how much of my reservations and savings plans I actually use, so that I stop paying for unused commitments.",
+          "acceptance": [
+            "Given a subscription with reservations, when checked, then utilization is shown per reservation with the period.",
+            "Given a subscription with a savings plan, when checked, then its utilization is shown the same way.",
+            "Given no commitments, when checked, then the result says none were found, not zero utilization.",
+            "Given a missing Reservations Reader role, when checked, then the result is unassessed or `undetermined` and names the role that would close it.",
+            "Given low utilization, when found, then a finding is raised with the unused amount as a range."
+          ],
+          "notes": "If the test subscription has no commitments, mark the check unverified until it has run live on one.",
+          "blockedBy": [
+            "E4-S1",
+            "E3-S1",
+            "E3-S6"
+          ],
+          "tasks": [
+            {
+              "key": "E4-S2-T1",
+              "title": "Harvest reservation and savings plan utilization",
+              "body": "Read utilization with Reservations Reader. Checked by a live run or a stated unverified status.",
+              "blockedBy": []
+            },
+            {
+              "key": "E4-S2-T2",
+              "title": "Implement the commitment use check",
+              "body": "Raise findings for low use with ranges. Checked by fixed-input tests.",
+              "blockedBy": [
+                "E4-S2-T1"
+              ]
+            },
+            {
+              "key": "E4-S2-T3",
+              "title": "Handle none-found and missing-role cases",
+              "body": "Return the right state for each. Checked by tests for both.",
+              "blockedBy": [
+                "E4-S2-T1"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E4-S3",
+          "title": "Subscriptions without budgets flagged",
+          "size": "S",
+          "areas": [
+            "backend",
+            "azure",
+            "cost"
+          ],
+          "story": "As a CTO, I want to know which subscriptions have no budget, so that overspend cannot happen unnoticed.",
+          "acceptance": [
+            "Given the test estate, when checked, then the seeded empty second subscription with no budget is flagged and the subscription with a budget is not.",
+            "Given a subscription whose budgets cannot be read, when checked, then the result is `undetermined` with what would close it.",
+            "Given the finding, when opened, then it shows the subscription, evidence and the date last confirmed."
+          ],
+          "notes": "Maps to Atlas's budget check pattern.",
+          "blockedBy": [
+            "E4-S1",
+            "E3-S1",
+            "E3-S6"
+          ],
+          "tasks": [
+            {
+              "key": "E4-S3-T1",
+              "title": "Harvest budgets per subscription",
+              "body": "Read budget definitions as aggregates. Checked by a live run.",
+              "blockedBy": []
+            },
+            {
+              "key": "E4-S3-T2",
+              "title": "Implement the no-budget check",
+              "body": "Flag subscriptions without a budget. Checked against seeded cases.",
+              "blockedBy": [
+                "E4-S3-T1"
+              ]
+            },
+            {
+              "key": "E4-S3-T3",
+              "title": "Add the undetermined path",
+              "body": "Return `undetermined` when budgets cannot be read. Checked by a permissions-removed test.",
+              "blockedBy": [
+                "E4-S3-T1"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E4-S4",
+          "title": "Floor, burst and spend alerts",
+          "size": "L",
+          "areas": [
+            "backend",
+            "cost"
+          ],
+          "story": "As a CTO, I want to know when my floor cost rises or spend spikes, so that leaks and runaway workloads are caught early.",
+          "acceptance": [
+            "Given daily cost history, when analysed, then the floor is the rolling minimum and burst is actual minus floor, both shown.",
+            "Given the four rule types (org spike, subscription spike, service spike, new service), when thresholds are set, then each is expressed relative to the customer's own history and not as fixed dollar amounts.",
+            "Given a replayed history fixture, when the rules run, then the alert count equals a stored expected count and a threshold change that moves the count fails the test until the new count is chosen on purpose.",
+            "Given several alerts in one run, when delivered, then they arrive as one digest by email to addresses the customer configures in Settings.",
+            "Given less history than the rules need, when analysed, then alerts are `undetermined` and say how many more days would close them.",
+            "Given the same alert on consecutive days, when raised, then it is not sent again as new."
+          ],
+          "notes": "Port the method from the cost reporter, not its dollar thresholds; the four rules and their relative basis come from the E1-S4 review. Backtest on the test subscription's history and a synthetic spike fixture, with no data copied from any customer.",
+          "blockedBy": [
+            "E4-S1",
+            "E1-S4"
+          ],
+          "tasks": [
+            {
+              "key": "E4-S4-T1",
+              "title": "Port floor and burst analysis",
+              "body": "Implement series construction, floor and burst. Checked by fixed-input unit tests.",
+              "blockedBy": []
+            },
+            {
+              "key": "E4-S4-T2",
+              "title": "Implement the four alert rules with relative thresholds",
+              "body": "Express each rule against the customer's own history. Checked by rule-by-rule tests.",
+              "blockedBy": [
+                "E4-S4-T1"
+              ]
+            },
+            {
+              "key": "E4-S4-T3",
+              "title": "Add a backtest regression suite",
+              "body": "Replay synthetic and test-subscription history and assert alert counts. Checked by the suite failing on drift.",
+              "blockedBy": [
+                "E4-S4-T2"
+              ]
+            },
+            {
+              "key": "E4-S4-T4",
+              "title": "Deliver one digest per run by email",
+              "body": "Group alerts, deduplicate repeats and send to customer-configured recipients set in Settings. Checked by a multi-alert test and a recipient change test.",
+              "blockedBy": [
+                "E4-S4-T2"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E4-S5",
+          "title": "Cost and waste page with named waste",
+          "size": "M",
+          "areas": [
+            "ui",
+            "backend",
+            "cost"
+          ],
+          "story": "As a CTO, I want one page with my spend and the waste Farside can name, so that I can act on the biggest items first.",
+          "acceptance": [
+            "Given a scanned estate, when the page opens, then it shows spend by service, month-on-month change, floor and burst, and commitment use.",
+            "Given waste findings, when listed, then each shows the resource, the evidence, the savings range and a link to its issue.",
+            "Given total waste, when shown, then it is a range built only from assessed findings and states how many scopes were not assessed.",
+            "Given a failed cost harvest, when the page opens, then it says cost could not be read and shows no figures.",
+            "Given the page, when run through axe, then there are no blocking violations."
+          ],
+          "notes": "Waste checks come from the non-cost issues epic; this story pulls them into one view.",
+          "blockedBy": [
+            "E4-S1",
+            "E3-S2",
+            "E3-S3",
+            "E3-S6",
+            "E4-S2",
+            "E4-S4"
+          ],
+          "tasks": [
+            {
+              "key": "E4-S5-T1",
+              "title": "Expose cost and waste in the API",
+              "body": "Return spend, floor and burst, commitments and waste aggregates. Checked by contract tests.",
+              "blockedBy": []
+            },
+            {
+              "key": "E4-S5-T2",
+              "title": "Build the Cost and waste page",
+              "body": "Show spend, change and waste with links to issues. Checked by an end-to-end test and axe scan.",
+              "blockedBy": [
+                "E4-S5-T1"
+              ]
+            },
+            {
+              "key": "E4-S5-T3",
+              "title": "Compute waste totals from assessed findings only",
+              "body": "Sum ranges and state what was left out. Checked by a test adding unassessed scopes.",
+              "blockedBy": [
+                "E4-S5-T1"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E4-S6",
+          "title": "CTO headline on the Estate overview",
+          "size": "M",
+          "areas": [
+            "ui",
+            "backend",
+            "cost"
+          ],
+          "story": "As a CTO, I want one sentence at the top saying what Azure costs, how much is nameable waste, what is not backed up, what loses support and what Farside could not see, so that I get the answer in seconds.",
+          "acceptance": [
+            "Given a scanned estate, when the overview opens, then the headline shows monthly cost, nameable waste as a range, N of M production systems not backed up, K things losing support in 90 days, and a count of what could not be seen.",
+            "Given each figure, when clicked, then it opens the page or issue list that supports it.",
+            "Given a figure whose checks were unassessed, when the headline renders, then it says 'not assessed' and shows no number.",
+            "Given the figures, when compared with the underlying pages, then they match.",
+            "Given the headline, when read by a screen reader, then each figure has a clear label.",
+            "Given a check with no live run record, when the headline renders, then the check is labelled not supported and its result is excluded from every headline figure."
+          ],
+          "notes": "Wording matches the proposal's example. No figure appears without its coverage.",
+          "blockedBy": [
+            "E4-S5",
+            "E3-S4",
+            "E3-S5",
+            "E2-S5",
+            "E4-S3"
+          ],
+          "tasks": [
+            {
+              "key": "E4-S6-T1",
+              "title": "Build the headline data endpoint",
+              "body": "Combine cost, waste, backup, lifecycle and blind spot counts with coverage states. Checked by contract tests.",
+              "blockedBy": []
+            },
+            {
+              "key": "E4-S6-T2",
+              "title": "Render the headline with drill-through links",
+              "body": "Show each figure with a link to its source. Checked by an end-to-end test and axe scan.",
+              "blockedBy": [
+                "E4-S6-T1"
+              ]
+            },
+            {
+              "key": "E4-S6-T3",
+              "title": "Label unproven checks and exclude them from figures",
+              "body": "Read run records and mark checks without one as not supported, leaving them out of headline numbers. Checked by a test with a check's record removed.",
+              "blockedBy": [
+                "E4-S6-T1"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E4-S7",
+          "title": "Every Azure cost check run live and accuracy measured",
+          "size": "M",
+          "areas": [
+            "azure",
+            "cost",
+            "docs"
+          ],
+          "story": "As the Farside owner, I want every Azure cost check proven on a real subscription and its false positives measured, so that only proven cost checks feed the headline.",
+          "acceptance": [
+            "Given each Azure cost check (spend, month-on-month, reservation and savings plan use, budgets, floor and burst, alert rules), when run on the test subscription, then a dated run record exists, and a check without one is shown as not supported.",
+            "Given the seeded manifest, when findings are compared, then every seeded positive is found and every seeded negative, including the subscription that has a budget, is not flagged, or the difference is listed.",
+            "Given any false positive or missed positive, when found, then a defect is recorded and the check stays out of 'supported' until fixed and rerun.",
+            "Given agreement types and currencies not available to test, when listed, then each is marked unverified in the support matrix.",
+            "Given the support matrix, when published, then it matches the run records."
+          ],
+          "notes": "Blocked by decision D3: without a test subscription this story cannot finish. Mirrors the run-record criteria of the non-cost verification story.",
+          "blockedBy": [
+            "E4-S2",
+            "E4-S3",
+            "E4-S4",
+            "E4-S5",
+            "E4-S6"
+          ],
+          "tasks": [
+            {
+              "key": "E4-S7-T1",
+              "title": "Run all cost checks live and record results",
+              "body": "Run each cost check on the test subscription and file the run record. Checked by one record per check.",
+              "blockedBy": []
+            },
+            {
+              "key": "E4-S7-T2",
+              "title": "Diff findings against the manifest",
+              "body": "Compare positives and negatives and list differences. Checked by a diff report with zero unexplained rows.",
+              "blockedBy": [
+                "E4-S7-T1"
+              ]
+            },
+            {
+              "key": "E4-S7-T3",
+              "title": "File and fix defects found",
+              "body": "Fix defects and rerun the affected checks. Checked by the rerun record.",
+              "blockedBy": [
+                "E4-S7-T2"
+              ]
+            },
+            {
+              "key": "E4-S7-T4",
+              "title": "Update the support matrix",
+              "body": "Regenerate the matrix from run records and list untested agreement types. Checked by the matrix listing only checks with a record as supported.",
+              "blockedBy": [
+                "E4-S7-T3"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "E5",
+      "title": "Ready to sell",
+      "phase": 4,
+      "goal": "Farside can be sold and run for a real customer: a new customer is set up end to end, scans run on a schedule, billing exists, and the customer can export their data or leave cleanly.",
+      "stories": [
+        {
+          "key": "E5-S1",
+          "title": "Demo mode with synthetic data",
+          "size": "M",
+          "areas": [
+            "backend",
+            "ui"
+          ],
+          "story": "As a sales lead, I want a demo estate with synthetic data, so that I can show Farside without a customer's subscription.",
+          "acceptance": [
+            "Given demo mode, when opened, then every screen shows a populated synthetic estate with a clear demo label.",
+            "Given the demo data, when inspected, then it contains no real customer names or data from any Moonaan repo.",
+            "Given demo mode, when active, then no provider call is made and no real credentials are used.",
+            "Given a real customer org, when signed in, then demo data never appears in it.",
+            "Given the demo, when run through the end-to-end suite, then every screen renders its populated state."
+          ],
+          "notes": "Synthetic data is generated from code with invented names.",
+          "blockedBy": [
+            "E4-S6",
+            "E3-S7"
+          ],
+          "tasks": [
+            {
+              "key": "E5-S1-T1",
+              "title": "Generate a synthetic estate fixture",
+              "body": "Create inventory, findings, cost and coverage data from code. Checked by contract validation.",
+              "blockedBy": []
+            },
+            {
+              "key": "E5-S1-T2",
+              "title": "Add demo org mode with a visible label",
+              "body": "Serve fixtures for a demo org and block provider calls. Checked by a test that fails on any outbound call.",
+              "blockedBy": [
+                "E5-S1-T1"
+              ]
+            },
+            {
+              "key": "E5-S1-T3",
+              "title": "Run the end-to-end suite against demo mode",
+              "body": "Exercise every screen on demo data. Checked by the suite passing.",
+              "blockedBy": [
+                "E5-S1-T2"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E5-S2",
+          "title": "Scheduled scans that run on their own",
+          "size": "L",
+          "areas": [
+            "backend",
+            "infra"
+          ],
+          "story": "As a CTO, I want scans to run on a schedule without anyone starting them, so that issues and costs stay current.",
+          "acceptance": [
+            "Given a connected subscription with a schedule, when the time arrives, then a scan starts without a user and completes using federated credentials.",
+            "Given a scan still running when the next is due, when the schedule fires, then the new one is skipped and the skip is recorded.",
+            "Given a missed or failed run, when detected, then it is retried within a stated limit and the failure shows on the Scans screen.",
+            "Given a broken connection, when a scheduled scan is due, then the scan does not run and the customer sees the connection needs attention.",
+            "Given a schedule change in Settings, when saved, then the next run follows the new schedule.",
+            "Given a week of scheduled runs on the test subscription, when reviewed, then none required a person to act."
+          ],
+          "notes": "No shared scheduler exists today, so this is new. Builds on the unattended job runner from the connect epic.",
+          "blockedBy": [
+            "E2-S6",
+            "E3-S7"
+          ],
+          "tasks": [
+            {
+              "key": "E5-S2-T1",
+              "title": "Build the recurring scheduler",
+              "body": "Trigger scan jobs per subscription on a schedule. Checked by time-controlled tests.",
+              "blockedBy": []
+            },
+            {
+              "key": "E5-S2-T2",
+              "title": "Add overlap skip, retry and missed-run detection",
+              "body": "Skip overlaps and retry failures within a limit. Checked by one test per case.",
+              "blockedBy": [
+                "E5-S2-T1"
+              ]
+            },
+            {
+              "key": "E5-S2-T3",
+              "title": "Add schedule control to Settings",
+              "body": "Let the customer view and change the schedule. Checked by an end-to-end test.",
+              "blockedBy": [
+                "E5-S2-T1"
+              ]
+            },
+            {
+              "key": "E5-S2-T4",
+              "title": "Run a soak test on the test subscription",
+              "body": "Run scheduled scans unattended for a week and review outcomes. Checked by the recorded run list.",
+              "blockedBy": [
+                "E5-S2-T2"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E5-S3",
+          "title": "Contract and billing for a Farside customer",
+          "size": "L",
+          "areas": [
+            "backend",
+            "ui",
+            "infra"
+          ],
+          "story": "As the Farside owner, I want a customer's contract tied to billing, so that a sale becomes a paid, running account.",
+          "acceptance": [
+            "Given a signed contract, when an operator records it, then the customer's plan and start date are stored against their org.",
+            "Given a customer, when they open the billing screen, then they see their plan and invoices.",
+            "Given the suspension rule recorded in decision D8, when a contract becomes unpaid or ended, then the console shows the state and scans follow the rule (grace, pause, retention), with each transition tested.",
+            "Given the dashmeta billing screen reviewed earlier, when compared with this one, then reuse decisions are written down.",
+            "Given any billing data, when stored, then it holds no card numbers handled by Farside itself."
+          ],
+          "notes": "The proposal lists contract and billing as a gap. The suspension rule and payment approach are settled by decision D8 and the E1-S4 billing review.",
+          "blockedBy": [
+            "E2-S1",
+            "E1-S4",
+            "E5-S2"
+          ],
+          "tasks": [
+            {
+              "key": "E5-S3-T1",
+              "title": "Settle the billing approach and suspension rule",
+              "body": "Apply decision D8 and the dashmeta billing screen review, and write the chosen approach and what is reused. Checked by Ryan and Kevin reading it.",
+              "blockedBy": []
+            },
+            {
+              "key": "E5-S3-T2",
+              "title": "Store plan and contract state per org",
+              "body": "Add plan, start, end and state fields with an operator entry path. Checked by unit tests.",
+              "blockedBy": [
+                "E5-S3-T1"
+              ]
+            },
+            {
+              "key": "E5-S3-T3",
+              "title": "Build the billing screen",
+              "body": "Show plan and invoices. Checked by an end-to-end test and axe scan.",
+              "blockedBy": [
+                "E5-S3-T2"
+              ]
+            },
+            {
+              "key": "E5-S3-T4",
+              "title": "Apply contract state to scanning",
+              "body": "Stop or allow new scans by state. Checked by tests for each state.",
+              "blockedBy": [
+                "E5-S3-T2"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E5-S4",
+          "title": "New customer set up from sale to first scan",
+          "size": "L",
+          "areas": [
+            "infra",
+            "backend",
+            "docs"
+          ],
+          "story": "As an operator, I want a repeatable path from signed sale to the customer's first scan, so that onboarding does not depend on one person's memory.",
+          "acceptance": [
+            "Given a new customer, when the runbook is followed, then the product is registered in iac-hub, the account created, and base, Identity, Launch and Farside deployed in order.",
+            "Given the deployed stack, when the CTO opens the claim link, then they claim the org, sign in, connect Azure and reach a first scan.",
+            "Given a deployment step that fails, when the runbook is followed, then it says how to roll back or retry.",
+            "Given a rehearsal on a test tenant, when run from nothing, then it reaches a completed first scan and the time and manual steps are recorded.",
+            "Given the customer address, when created, then it follows the `farside.<customer>.moonaan.com` pattern once the name is cleared."
+          ],
+          "notes": "Account creation stays operator-run. Customer address depends on decision D5 (trademark).",
+          "blockedBy": [
+            "E1-S3",
+            "E2-S1",
+            "E2-S6",
+            "E3-S8",
+            "E4-S7"
+          ],
+          "tasks": [
+            {
+              "key": "E5-S4-T1",
+              "title": "Write the operator runbook",
+              "body": "List each step from contract to first scan with checks after each. Checked by another engineer following it cold.",
+              "blockedBy": []
+            },
+            {
+              "key": "E5-S4-T2",
+              "title": "Automate the Farside deploy for a customer account",
+              "body": "Make the deploy a parameterised job using the existing mechanism. Checked by a deploy into a fresh account.",
+              "blockedBy": [
+                "E5-S4-T1"
+              ]
+            },
+            {
+              "key": "E5-S4-T3",
+              "title": "Rehearse end to end on a test tenant",
+              "body": "Run the full path and record gaps. Checked by a recorded completed first scan.",
+              "blockedBy": [
+                "E5-S4-T2"
+              ]
+            },
+            {
+              "key": "E5-S4-T4",
+              "title": "Add rollback and retry notes",
+              "body": "Document recovery for each failing step found in the rehearsal. Checked by walking through one injected failure.",
+              "blockedBy": [
+                "E5-S4-T3"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E5-S5",
+          "title": "Customer can leave cleanly",
+          "size": "M",
+          "areas": [
+            "backend",
+            "ui",
+            "security-boundary"
+          ],
+          "story": "As a CTO, I want to offboard from Farside and know my data and access are gone, so that I can leave without leaving risk behind.",
+          "acceptance": [
+            "Given an offboarding request, when confirmed, then scans stop and Farside's credentials for the customer are removed.",
+            "Given offboarding, when it completes, then the customer's stored inventory, findings, cost data and issues are deleted and a deletion record with a date is kept.",
+            "Given the customer's Azure side, when offboarding runs, then the screen lists the grants they should remove in their tenant.",
+            "Given a deleted org, when any API is called for it, then it returns nothing and creates nothing.",
+            "Given offboarding before the customer exports, when requested, then the screen offers export first and requires an explicit choice.",
+            "Given offboarding completes, when the D8 rule applies, then the customer's dedicated account is retired and an account-closure record with a date is kept."
+          ],
+          "notes": "Deletion is tested by confirming no rows remain for the org.",
+          "blockedBy": [
+            "E2-S2",
+            "E3-S6",
+            "E5-S6",
+            "E5-S2"
+          ],
+          "tasks": [
+            {
+              "key": "E5-S5-T1",
+              "title": "Implement data deletion for an org",
+              "body": "Delete all org data across stores and write a deletion record. Checked by a test confirming no rows remain.",
+              "blockedBy": []
+            },
+            {
+              "key": "E5-S5-T2",
+              "title": "Remove credentials and stop scans on offboarding",
+              "body": "Disconnect all subscriptions and cancel schedules. Checked by a test with scheduled scans pending.",
+              "blockedBy": []
+            },
+            {
+              "key": "E5-S5-T3",
+              "title": "Build the offboarding screen and grant list",
+              "body": "Show the export offer, confirmation and tenant grants to remove. Checked by an end-to-end test and axe scan.",
+              "blockedBy": [
+                "E5-S5-T1",
+                "E5-S5-T2"
+              ]
+            },
+            {
+              "key": "E5-S5-T4",
+              "title": "Retire the dedicated account at offboarding",
+              "body": "Close the customer's account per the D8 rule after data deletion and keep a closure record. Checked by a rehearsal on a test account.",
+              "blockedBy": [
+                "E5-S5-T1"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E5-S6",
+          "title": "Export issues, inventory and cost",
+          "size": "S",
+          "areas": [
+            "backend",
+            "ui"
+          ],
+          "story": "As a CTO, I want to export my issues, inventory and cost figures, so that I can use them in my own tools and keep a copy.",
+          "acceptance": [
+            "Given the Issues screen, when export is chosen, then a file with the issues and their coverage states downloads.",
+            "Given the Inventory and Cost pages, when export is chosen, then each downloads the figures on screen.",
+            "Given an export, when inspected, then it contains aggregates and identifiers only and no raw provider payloads.",
+            "Given a user from another org, when they request the export, then the API refuses."
+          ],
+          "notes": "Export doubles as the offboarding export.",
+          "blockedBy": [
+            "E3-S6",
+            "E4-S5"
+          ],
+          "tasks": [
+            {
+              "key": "E5-S6-T1",
+              "title": "Build export endpoints with a fixed format",
+              "body": "Return issues, inventory and cost in a documented format. Checked by schema tests.",
+              "blockedBy": []
+            },
+            {
+              "key": "E5-S6-T2",
+              "title": "Add export buttons to the screens",
+              "body": "Add the controls and downloads. Checked by an end-to-end test and axe scan.",
+              "blockedBy": [
+                "E5-S6-T1"
+              ]
+            },
+            {
+              "key": "E5-S6-T3",
+              "title": "Test export scoping and content",
+              "body": "Check cross-org refusal and absence of payload fields. Checked by negative tests.",
+              "blockedBy": [
+                "E5-S6-T1"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "E6",
+      "title": "Farside covers GCP",
+      "phase": 5,
+      "goal": "A customer can connect GCP, onboard the billing export, and see inventory, issues and cost beside Azure. Every GCP check has run live once.",
+      "stories": [
+        {
+          "key": "E6-S1",
+          "title": "Connect a GCP project with federated credentials",
+          "size": "L",
+          "areas": [
+            "backend",
+            "ui",
+            "gcp",
+            "security-boundary"
+          ],
+          "story": "As a CTO, I want to connect my GCP organization or projects with read-only access and no pasted token, so that Farside can scan without a person present.",
+          "acceptance": [
+            "Given the Connect screen, when a user follows the steps, then they grant only Cloud Asset Viewer, Compute Viewer, Recommender Viewer, Cloud SQL Viewer and Certificate Manager Viewer, plus BigQuery access to the billing export.",
+            "Given a connection, when stored, then no key file or pasted token exists in the database, logs or API responses.",
+            "Given a missing role, when validated, then the screen names it and the checks it blocks, and those checks are unassessed.",
+            "Given a scan with no user signed in, when triggered, then it runs using federated credentials.",
+            "Given disconnect, then credentials are removed and scans stop.",
+            "Given the GCP test project, when connected, then validation succeeds end to end.",
+            "Given the GCP control spec, when read, then every GCP launch check has an entry with role, data source, evidence fields and `undetermined` causes, marked unverified until it has run live."
+          ],
+          "notes": "A GCP test project is needed for this epic and is settled by decision D7. The billing export is enabled in the first task group so history accumulates before cost testing. The GCP control spec is written here, in Phase 5.",
+          "blockedBy": [
+            "E2-S2",
+            "E1-S2",
+            "E2-S6"
+          ],
+          "tasks": [
+            {
+              "key": "E6-S1-T1",
+              "title": "Obtain a GCP test project",
+              "body": "Create a funded project in a Moonaan-owned organization with a cost guard. Checked by the project listing and a budget alert.",
+              "blockedBy": []
+            },
+            {
+              "key": "E6-S1-T2",
+              "title": "Implement federated credential exchange for GCP",
+              "body": "Exchange the platform identity for short-lived tokens with no stored key. Checked by a live run on the test project.",
+              "blockedBy": [
+                "E6-S1-T1"
+              ]
+            },
+            {
+              "key": "E6-S1-T3",
+              "title": "Build the GCP Connect screen and role validation",
+              "body": "Show roles, validate each and report gaps. Checked by an end-to-end test with roles removed and an axe scan.",
+              "blockedBy": [
+                "E6-S1-T2"
+              ]
+            },
+            {
+              "key": "E6-S1-T4",
+              "title": "Verify the role list live",
+              "body": "Run each query with only the listed roles and update the spec from unverified to verified. Checked by run records.",
+              "blockedBy": [
+                "E6-S1-T3",
+                "E6-S1-T5"
+              ]
+            },
+            {
+              "key": "E6-S1-T5",
+              "title": "Write the GCP control spec",
+              "body": "Write one entry per GCP launch check including the billing export dependency, marked unverified. Checked by every GCP check in the proposal table having an entry.",
+              "blockedBy": []
+            },
+            {
+              "key": "E6-S1-T6",
+              "title": "Enable the billing export on the test project early",
+              "body": "Turn on the BigQuery export so history accumulates before cost testing. Checked by rows appearing in the dataset.",
+              "blockedBy": [
+                "E6-S1-T1"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E6-S2",
+          "title": "GCP inventory by project and type",
+          "size": "M",
+          "areas": [
+            "backend",
+            "gcp"
+          ],
+          "story": "As a CTO, I want every GCP asset found by project and type with the unowned ones counted, so that I know what I own.",
+          "acceptance": [
+            "Given the test project, when harvested via Cloud Asset, then counts by project and type match a seeded manifest.",
+            "Given a result larger than one page, when harvested, then all pages are read.",
+            "Given a resource with no owner label, when harvested, then it is counted in the no-owner total.",
+            "Given a project the roles cannot read, when harvested, then the scope is unassessed on Blind spots with what would close it.",
+            "Given the stored inventory, when inspected, then it holds identifiers, types and labels only."
+          ],
+          "notes": "Port the GCP collectors selectively from the AIF connector. Seed the test project with a manifest like the Azure one.",
+          "blockedBy": [
+            "E6-S1"
+          ],
+          "tasks": [
+            {
+              "key": "E6-S2-T1",
+              "title": "Seed the GCP test project and manifest",
+              "body": "Deploy known assets, waste and gaps from code and write ground truth. Checked by a reviewer matching every GCP check to a row.",
+              "blockedBy": []
+            },
+            {
+              "key": "E6-S2-T2",
+              "title": "Implement the Cloud Asset harvest",
+              "body": "Read assets by project and type with paging. Checked by a live run.",
+              "blockedBy": [
+                "E6-S2-T1"
+              ]
+            },
+            {
+              "key": "E6-S2-T3",
+              "title": "Compute owner label gaps",
+              "body": "Count resources with no owner label. Checked against the manifest.",
+              "blockedBy": [
+                "E6-S2-T2"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E6-S3",
+          "title": "GCP waste found",
+          "size": "M",
+          "areas": [
+            "backend",
+            "gcp",
+            "cost"
+          ],
+          "story": "As a CTO, I want unattached disks, reserved unused IPs, old snapshots and images, and idle VM and disk recommendations named, so that I can remove them.",
+          "acceptance": [
+            "Given the test project, when the checks run, then each seeded unattached disk, unused reserved external IP, old snapshot and old image is flagged.",
+            "Given Recommender idle VM and disk recommendations, when present, then each becomes a finding that cites the recommendation as evidence.",
+            "Given a recommender that returns nothing, when checked, then the result says none were returned and does not claim the estate is clean.",
+            "Given each finding, when opened, then it shows evidence and a savings range.",
+            "Given a role gap on Recommender Viewer, when checked, then the result is unassessed and names the role."
+          ],
+          "notes": "Uses the shared check engine; only the GCP collectors and checks are new.",
+          "blockedBy": [
+            "E6-S2",
+            "E3-S1"
+          ],
+          "tasks": [
+            {
+              "key": "E6-S3-T1",
+              "title": "Implement unattached disk and unused IP checks",
+              "body": "Check attachment and reservation use. Checked against seeded cases.",
+              "blockedBy": []
+            },
+            {
+              "key": "E6-S3-T2",
+              "title": "Implement old snapshot and image checks",
+              "body": "Check age with a configurable setting. Checked against seeded positives and negatives.",
+              "blockedBy": []
+            },
+            {
+              "key": "E6-S3-T3",
+              "title": "Turn idle VM and disk recommendations into findings",
+              "body": "Harvest recommendations as aggregates and map them with evidence. Checked by a live run and fakes.",
+              "blockedBy": []
+            },
+            {
+              "key": "E6-S3-T4",
+              "title": "Add savings ranges and the empty-result wording",
+              "body": "Compute ranges and handle no-recommendation results honestly. Checked by unit tests.",
+              "blockedBy": [
+                "E6-S3-T1",
+                "E6-S3-T3"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E6-S4",
+          "title": "GCP resilience and lifecycle checks",
+          "size": "M",
+          "areas": [
+            "backend",
+            "gcp"
+          ],
+          "story": "As a CTO, I want Cloud SQL without high availability or backups, out-of-support SQL and GKE versions, and expiring certificates found, so that nothing fails or loses support unnoticed.",
+          "acceptance": [
+            "Given the test project, when checked, then each seeded Cloud SQL instance without high availability or backups is flagged.",
+            "Given Cloud SQL and GKE versions, when compared with the support data, then out-of-support versions are flagged with the date and source cited.",
+            "Given a certificate in Certificate Manager expiring inside the warning window, when checked, then it is flagged with the expiry date.",
+            "Given a version missing from the support data, when checked, then it is not flagged and the data's source and date are shown.",
+            "Given a read failure, when a check runs, then the result is `undetermined` with what would close it."
+          ],
+          "notes": "Support data is kept as sourced data like the Azure retirement list.",
+          "blockedBy": [
+            "E6-S2",
+            "E3-S1"
+          ],
+          "tasks": [
+            {
+              "key": "E6-S4-T1",
+              "title": "Implement Cloud SQL high availability and backup checks",
+              "body": "Read instance settings and flag gaps. Checked against seeded instances.",
+              "blockedBy": []
+            },
+            {
+              "key": "E6-S4-T2",
+              "title": "Build SQL and GKE support data and checks",
+              "body": "Record out-of-support versions with dates and sources and match inventory. Checked by a test that each entry has a source.",
+              "blockedBy": []
+            },
+            {
+              "key": "E6-S4-T3",
+              "title": "Implement certificate expiry check",
+              "body": "Read Certificate Manager expiry with a warning window. Checked against a seeded certificate.",
+              "blockedBy": []
+            }
+          ]
+        },
+        {
+          "key": "E6-S5",
+          "title": "GCP billing export onboarding with an empty first day",
+          "size": "L",
+          "areas": [
+            "backend",
+            "ui",
+            "gcp",
+            "cost"
+          ],
+          "story": "As a CTO, I want clear help turning on the BigQuery billing export and an honest view while it fills, so that I understand why cost starts empty.",
+          "acceptance": [
+            "Given a connected project without the export, when the Connect screen opens, then it shows the steps to enable the BigQuery billing export and marks cost as not connected.",
+            "Given the export enabled today, when the cost page opens, then it says the export fills from that day forward and shows the start date, with no numbers and no estimate for earlier days.",
+            "Given the export dataset not readable, when validated, then the screen names the missing BigQuery access.",
+            "Given the first day of data arriving, when the next scan runs, then cost appears and the page shows how many days of history exist.",
+            "Given history shorter than a rule needs, when alerts are evaluated, then they are `undetermined` and state how many days would close them.",
+            "Given the empty state, when run through axe, then there are no blocking violations."
+          ],
+          "notes": "There is no GCP cost API to query. The export fills only forward and is enabled in the connect story so the test project has history when cost is tested.",
+          "blockedBy": [
+            "E6-S1"
+          ],
+          "tasks": [
+            {
+              "key": "E6-S5-T1",
+              "title": "Detect export state and show onboarding steps",
+              "body": "Check dataset existence and readability and show steps. Checked by tests for absent, empty and readable states.",
+              "blockedBy": [
+                "E6-S1-T6"
+              ]
+            },
+            {
+              "key": "E6-S5-T2",
+              "title": "Build the empty first-day cost state",
+              "body": "Show the start date and an honest empty message. Checked by an end-to-end test and axe scan.",
+              "blockedBy": [
+                "E6-S5-T1"
+              ]
+            },
+            {
+              "key": "E6-S5-T3",
+              "title": "Show days of history and gate alerts on it",
+              "body": "Count available days and mark alerts `undetermined` until enough exist. Checked by fixed-input tests.",
+              "blockedBy": [
+                "E6-S5-T1"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E6-S6",
+          "title": "GCP spend and committed-use discount use",
+          "size": "M",
+          "areas": [
+            "backend",
+            "gcp",
+            "cost"
+          ],
+          "story": "As a CTO, I want GCP spend by service and project and my committed-use discount use, so that I see where the money goes and whether commitments pay off.",
+          "acceptance": [
+            "Given the billing export has data, when harvested via BigQuery, then spend by service and by project matches the console figures for the same period.",
+            "Given a committed-use discount, when checked, then its use is shown, and with none found the page says none were found.",
+            "Given the shared floor, burst and alert rules, when run on GCP data, then they use relative thresholds and the replay test passes.",
+            "Given mixed currencies, when totals are computed, then they are never summed across currencies.",
+            "Given the stored data, when inspected, then it holds aggregates only."
+          ],
+          "notes": "Reuses the Azure floor, burst and alert code. Needs enough accumulated history from the test project to test alerts.",
+          "blockedBy": [
+            "E6-S5",
+            "E4-S4"
+          ],
+          "tasks": [
+            {
+              "key": "E6-S6-T1",
+              "title": "Harvest spend from BigQuery by service and project",
+              "body": "Query the export and store aggregates. Checked by a comparison with the console.",
+              "blockedBy": []
+            },
+            {
+              "key": "E6-S6-T2",
+              "title": "Implement committed-use discount check",
+              "body": "Read commitment use and handle none-found. Checked by a live run or a stated unverified status.",
+              "blockedBy": [
+                "E6-S6-T1"
+              ]
+            },
+            {
+              "key": "E6-S6-T3",
+              "title": "Run floor, burst and alerts on GCP data",
+              "body": "Reuse the analysis with relative thresholds. Checked by a replay test.",
+              "blockedBy": [
+                "E6-S6-T1"
+              ]
+            }
+          ]
+        },
+        {
+          "key": "E6-S7",
+          "title": "GCP in the console and every GCP check run live",
+          "size": "L",
+          "areas": [
+            "ui",
+            "backend",
+            "gcp",
+            "docs"
+          ],
+          "story": "As a CTO, I want GCP shown beside Azure in one console, and as the Farside owner I want every GCP check proven live, so that only proven checks are called supported.",
+          "acceptance": [
+            "Given an org with Azure and GCP connected, when the Estate overview opens, then the headline covers both clouds and states which parts are assessed per cloud.",
+            "Given Inventory, Issues, Scans, Cost and waste, Lifecycle, Recovery and Blind spots, when opened, then GCP items appear with their cloud labelled and can be filtered.",
+            "Given each GCP launch check, when run on the test project, then a dated run record exists, and a check without one is shown as not supported.",
+            "Given the seeded manifest, when findings are compared, then seeded positives are found and seeded negatives are not flagged, or the difference is recorded as a defect.",
+            "Given the support matrix, when published, then it lists Azure and GCP checks and matches the run records.",
+            "Given a GCP project connected with a schedule, when the time arrives, then a scan runs with no user signed in using federated credentials and completes.",
+            "Given the test project's billing export, when cost checks are verified, then it holds at least the days of history the alert rules require, and if it holds fewer the cost checks stay unverified and not supported."
+          ],
+          "notes": "Cost checks depend on enough export history in the test project, which is why the export is enabled in the connect story.",
+          "blockedBy": [
+            "E6-S3",
+            "E6-S4",
+            "E6-S6",
+            "E4-S6",
+            "E5-S2"
+          ],
+          "tasks": [
+            {
+              "key": "E6-S7-T1",
+              "title": "Add cloud as a dimension across screens and APIs",
+              "body": "Label and filter by cloud on all console screens. Checked by an end-to-end test over both clouds.",
+              "blockedBy": []
+            },
+            {
+              "key": "E6-S7-T2",
+              "title": "Extend the headline to two clouds",
+              "body": "Combine figures per cloud without summing across currencies. Checked by fixed-input tests.",
+              "blockedBy": [
+                "E6-S7-T1"
+              ]
+            },
+            {
+              "key": "E6-S7-T3",
+              "title": "Run all GCP checks live and diff against the manifest",
+              "body": "Run each check on the test project and record results. Checked by one record per check and a zero-unexplained-row diff.",
+              "blockedBy": []
+            },
+            {
+              "key": "E6-S7-T4",
+              "title": "Fix defects and update the support matrix",
+              "body": "Fix any difference, rerun, and regenerate the matrix. Checked by the matrix matching the records.",
+              "blockedBy": [
+                "E6-S7-T3"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "key": "D1",
+      "title": "Who builds Azure and GCP infrastructure",
+      "body": "Question: does Farside or dashmeta own Azure and GCP infrastructure and cost? Recommendation: Farside builds infrastructure and cost, dashmeta keeps security. Why: dashmeta's DAS-775 and DAS-776 cover the same cost scope, no work has started on them, and without agreement the work gets built twice. Needs Ryan Morris and Kevin to agree and dashmeta's roadmap amended. It is closed by the sign-off step of E1-S1, which is itself not blocked by it.",
+      "owner": "Kevin and Ryan Morris",
+      "blocks": [
+        "E1-S2",
+        "E1-S3",
+        "E1-S4",
+        "E1-S5"
+      ]
+    },
+    {
+      "key": "D2",
+      "title": "Separate product or inside dashmeta",
+      "body": "Question: is Farside a separate product or the Azure and GCP edition of Atlas inside dashmeta? Recommendation: separate product on shared formats, so it can be sold alone and run continuously. If the owners prefer dashmeta, the same work moves there and only the packaging changes. Why: Atlas is merging into dashmeta, so this needs a deliberate answer.",
+      "owner": "Kevin and Ryan Morris",
+      "blocks": [
+        "E1-S3"
+      ]
+    },
+    {
+      "key": "D3",
+      "title": "Fund an Azure test subscription",
+      "body": "Question: what do we test on? Recommendation: fund one Azure subscription now and seed it with deliberate waste, ready by week 4, plus a second empty subscription with no budget for the budget check. Put both in a tenant different from the one holding the Farside app registration. Why: no Moonaan Azure subscription or GCP project was found, so without one there is no real data at week 8 and no way to measure false positives, and the cross-tenant connect path needs a separate tenant to be tested. The GCP test project is a separate decision, D7.",
+      "owner": "Zach DeManche and Kevin",
+      "blocks": [
+        "E1-S5",
+        "E1-S7",
+        "E3-S8",
+        "E4-S7"
+      ]
+    },
+    {
+      "key": "D4",
+      "title": "Name the first buyer",
+      "body": "Question: who buys first? Recommendation: name one prospect running mainly on Azure and show them the Phase 1 version around week 8. Why: this tests demand before the larger spend, and pricing should stay above the cost of a dedicated account. The prospect named here is the same one D6 needs to have said they would pay.",
+      "owner": "Kevin and sales lead",
+      "blocks": [
+        "E2-S7"
+      ]
+    },
+    {
+      "key": "D5",
+      "title": "Trademark search for the Farside name",
+      "body": "Question: does the name Farside clear a trademark search? Recommendation: run the search before the name appears in a repo address, customer address or sales material. Why: no Moonaan repo uses the name and two web searches found no security company with it (the closest is Farsight Security), but a trademark search is still needed.",
+      "owner": "Zach DeManche",
+      "blocks": [
+        "E1-S3",
+        "E5-S4"
+      ]
+    },
+    {
+      "key": "D6",
+      "title": "Go or no-go: all conditions met",
+      "body": "Question: may build start? Recommendation: build starts only when D1 is closed, D3 is closed, and a named Azure prospect has said they would pay. This is separate from the week 8 continue-or-stop check in E2-S7, which gates Phase 2 spend. Why: it stops the larger spend until demand, ownership and a test estate exist.",
+      "owner": "Kevin and Zach DeManche",
+      "blocks": [
+        "E1-S2",
+        "E1-S3",
+        "E1-S4",
+        "E1-S5"
+      ]
+    },
+    {
+      "key": "D7",
+      "title": "Fund a GCP test project",
+      "body": "Question: what do we test GCP on? Recommendation: fund one GCP project in a Moonaan-owned organization, with a cost guard, and enable the BigQuery billing export on it as soon as it exists. Why: the proposal found no GCP project, and GCP cost history only accumulates from the day the export is enabled, so it must start early.",
+      "owner": "Zach DeManche",
+      "blocks": [
+        "E6-S1"
+      ]
+    },
+    {
+      "key": "D8",
+      "title": "Billing approach and suspension rule",
+      "body": "Question: how is Farside billed, and what happens when a contract is unpaid or ends? Recommendation: review dashmeta's billing screen first, then set a rule with a warning state, a grace period, a pause of new scans, a data retention period and then offboarding with retirement of the dedicated account. The period lengths are to be set in this decision. Why: billing is a gap in the sale-to-dashboard path, and scanning and account cost continue unless a rule stops them.",
+      "owner": "Zach DeManche",
+      "blocks": [
+        "E5-S3",
+        "E5-S5"
+      ]
+    }
+  ]
+}
