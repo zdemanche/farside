@@ -18,7 +18,7 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 1. **E1-S1** (#10) + **E1-S6** (#36) + D1–D8 — merged.
 2. **E1-S2** (#16) — merged (`@farside/scan-contracts` 0.1.0).
 3. **E1-S4** (#27) — this change: reuse review of reachable Moonaan repos; no client names copied.
-4. **E1-S5** (#31) — seed scripts and ground-truth **fixtures**; live subscription provision stays (c).
+4. **E1-S5** (#31) — this change: seed plan + ground-truth **fixtures**; live subscription provision stays (c).
 5. **E2+** — screens, engine, and harvest against mocks; Identity/AIF/live Azure leftover called out.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
@@ -66,11 +66,11 @@ In-repo Phase 0 (boundary, spec, CI) can finish. Live proof still needs the Azur
 | `E1-S4-T1` | #28 | Review dashmeta Azure adapter and billing screen | (a) this change | Adapter: one type, fakes-only, extend plan. Billing: plan/usage/amount due/suspend, no invoices. |
 | `E1-S4-T2` | #29 | Review AIF connectors and scan for client names | (a) this change | Port vs not-ported lists; scan attached; neither connector live. |
 | `E1-S4-T3` | #30 | Map Atlas and cost reporter patterns to checks | (a) this change | Every Azure and GCP launch check is in `docs/reuse/atlas-check-map.json`. |
-| `E1-S5` | #31 | Azure test estate seeded with deliberate waste | (c) | Decision D3 adopted; provision is still live Azure. Fixtures can be written first. |
-| `E1-S5-T1` | #32 | Provision the subscriptions and cost guard | (c) | Live Azure. |
-| `E1-S5-T2` | #33 | Seed waste, resilience and lifecycle cases from code | (c) + (a) scripts | Scripts in-repo; apply needs a subscription. |
-| `E1-S5-T3` | #34 | Write the ground-truth manifest with exceptions | (a) | Manifest file; live diff is (c). |
-| `E1-S5-T4` | #35 | Create the empty second subscription with no budget | (c) | Live Azure. |
+| `E1-S5` | #31 | Azure test estate seeded with deliberate waste | (c) live leftover | Manifest + skip-apply seed in this change. Subscriptions are not created. |
+| `E1-S5-T1` | #32 | Provision the subscriptions and cost guard | (c) | Live Azure. Declared in the manifest, not provisioned. |
+| `E1-S5-T2` | #33 | Seed waste, resilience and lifecycle cases from code | (c) + (a) this change | Plan in `docs/azure/ground-truth.json`; ARM apply skipped. Portal listing leftover. |
+| `E1-S5-T3` | #34 | Write the ground-truth manifest with exceptions | (a) this change | Every launch check is a case or an exception. |
+| `E1-S5-T4` | #35 | Create the empty second subscription with no budget | (c) | Declared as `empty-no-budget`; creating it is live. |
 | `E1-S6` | #36 | Azure control spec and app registration settled | (a) this change | Spec, lint, matrix, registration note. Live verify is E1-S7. |
 | `E1-S6-T1` | #37 | Write the Azure spec entries | (a) this change | `docs/azure/launch-checks.json`. |
 | `E1-S6-T2` | #38 | Settle the app registration approach | adopted | `docs/azure/app-registration.md`. |

@@ -1,0 +1,374 @@
+{
+  "version": 1,
+  "story": "E1-S5",
+  "ownerTagKey": "owner",
+  "productionTagKey": "environment",
+  "productionTagValue": "prod",
+  "snapshotRetentionDays": 30,
+  "certExpiryFlagDays": 60,
+  "tenantRule": "Main and empty subscriptions must sit in a Moonaan-owned tenant that is not the Farside app-registration tenant. No customer data.",
+  "provisioned": false,
+  "provisionedNote": "Physical subscriptions, budgets, and ARM apply are E1-S5-T1/T2/T4 leftovers. This file is the repeatable seed + ground truth. Recreate from this file; do not hand-edit a live estate.",
+  "subscriptions": [
+    {
+      "id": "main",
+      "role": "seeded-waste",
+      "budget": { "present": true, "alert": true, "name": "farside-test-guard" },
+      "empty": false
+    },
+    {
+      "id": "empty-no-budget",
+      "role": "budget-positive",
+      "budget": { "present": false },
+      "empty": true
+    }
+  ],
+  "items": [
+    {
+      "id": "disk-unattached",
+      "subscription": "main",
+      "type": "Microsoft.Compute/disks",
+      "title": "Unattached managed disk",
+      "properties": { "diskState": "Unattached", "sizeGb": 128 },
+      "tags": {}
+    },
+    {
+      "id": "disk-attached",
+      "subscription": "main",
+      "type": "Microsoft.Compute/disks",
+      "title": "Disk attached to the deallocated VM",
+      "properties": { "diskState": "Attached", "attachedTo": "vm-deallocated" },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "pip-unassociated",
+      "subscription": "main",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "title": "Public IP with no ipConfiguration",
+      "properties": { "associatedTo": null },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "pip-associated",
+      "subscription": "main",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "title": "Public IP on the deallocated VM NIC",
+      "properties": { "associatedTo": "vm-deallocated" },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "snapshot-old",
+      "subscription": "main",
+      "type": "Microsoft.Compute/snapshots",
+      "title": "Snapshot older than retention",
+      "properties": { "ageDays": 90 },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "snapshot-fresh",
+      "subscription": "main",
+      "type": "Microsoft.Compute/snapshots",
+      "title": "Snapshot inside retention (looks retained, must not flag)",
+      "properties": { "ageDays": 5 },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "vm-stopped-allocated",
+      "subscription": "main",
+      "type": "Microsoft.Compute/virtualMachines",
+      "title": "VM stopped but still allocated",
+      "properties": { "powerState": "stopped", "vmSize": "Standard_B2s" },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "vm-deallocated",
+      "subscription": "main",
+      "type": "Microsoft.Compute/virtualMachines",
+      "title": "Deallocated VM (looks stopped; must not flag stopped-not-deallocated)",
+      "properties": { "powerState": "deallocated", "vmSize": "Standard_B2s" },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "plan-empty",
+      "subscription": "main",
+      "type": "Microsoft.Web/serverfarms",
+      "title": "App Service plan with no sites",
+      "properties": { "numberOfSites": 0, "skuName": "S1" },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "plan-with-site",
+      "subscription": "main",
+      "type": "Microsoft.Web/serverfarms",
+      "title": "App Service plan with one site",
+      "properties": { "numberOfSites": 1, "skuName": "S1" },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "lb-idle",
+      "subscription": "main",
+      "type": "Microsoft.Network/loadBalancers",
+      "title": "Load balancer with no backend addresses",
+      "properties": { "backendAddressCount": 0 },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "lb-busy",
+      "subscription": "main",
+      "type": "Microsoft.Network/loadBalancers",
+      "title": "Load balancer with backends",
+      "properties": { "backendAddressCount": 2 },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "nat-idle",
+      "subscription": "main",
+      "type": "Microsoft.Network/natGateways",
+      "title": "NAT gateway with no subnets",
+      "properties": { "attachedSubnetCount": 0 },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "nat-attached",
+      "subscription": "main",
+      "type": "Microsoft.Network/natGateways",
+      "title": "NAT gateway attached to a subnet",
+      "properties": { "attachedSubnetCount": 1 },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "vm-prod-no-backup",
+      "subscription": "main",
+      "type": "Microsoft.Compute/virtualMachines",
+      "title": "Production VM outside Azure Backup",
+      "properties": { "protected": false, "powerState": "running" },
+      "tags": { "owner": "farside-test", "environment": "prod" }
+    },
+    {
+      "id": "vm-prod-backed-up",
+      "subscription": "main",
+      "type": "Microsoft.Compute/virtualMachines",
+      "title": "Production VM in Azure Backup",
+      "properties": { "protected": true, "powerState": "running", "vaultId": "vault-main" },
+      "tags": { "owner": "farside-test", "environment": "prod" }
+    },
+    {
+      "id": "sql-prod-no-backup",
+      "subscription": "main",
+      "type": "Microsoft.Sql/servers/databases",
+      "title": "Production SQL outside Azure Backup",
+      "properties": { "protected": false, "engine": "sql" },
+      "tags": { "owner": "farside-test", "environment": "prod" }
+    },
+    {
+      "id": "sql-prod-backed-up",
+      "subscription": "main",
+      "type": "Microsoft.Sql/servers/databases",
+      "title": "Production SQL in Azure Backup",
+      "properties": { "protected": true, "engine": "sql", "vaultId": "vault-main" },
+      "tags": { "owner": "farside-test", "environment": "prod" }
+    },
+    {
+      "id": "db-no-zone-geo",
+      "subscription": "main",
+      "type": "Microsoft.Sql/servers/databases",
+      "title": "Database without zone redundancy or geo-backup",
+      "properties": { "zoneRedundant": false, "backupRedundancy": "Local" },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "db-zone-geo",
+      "subscription": "main",
+      "type": "Microsoft.Sql/servers/databases",
+      "title": "Database with zone redundancy",
+      "properties": { "zoneRedundant": true, "backupRedundancy": "Geo" },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "cert-app-expiring",
+      "subscription": "main",
+      "type": "Microsoft.Web/certificates",
+      "title": "App Service certificate inside the expiry window",
+      "properties": { "daysRemaining": 20 },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "cert-app-fresh",
+      "subscription": "main",
+      "type": "Microsoft.Web/certificates",
+      "title": "App Service certificate well outside the expiry window",
+      "properties": { "daysRemaining": 400 },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "cert-gateway-expiring",
+      "subscription": "main",
+      "type": "Microsoft.Network/applicationGateways",
+      "title": "Gateway certificate inside the expiry window",
+      "properties": { "daysRemaining": 20 },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "cert-gateway-fresh",
+      "subscription": "main",
+      "type": "Microsoft.Network/applicationGateways",
+      "title": "Gateway certificate well outside the expiry window",
+      "properties": { "daysRemaining": 400 },
+      "tags": { "owner": "farside-test" }
+    },
+    {
+      "id": "budget-main",
+      "subscription": "main",
+      "type": "Microsoft.Consumption/budgets",
+      "title": "Cost guard on the seeded subscription",
+      "properties": { "budgetCount": 1, "budgetNames": ["farside-test-guard"] },
+      "tags": { "owner": "farside-test" }
+    }
+  ],
+  "checks": [
+    {
+      "checkId": "azure-inventory-all-resources",
+      "positives": [
+        "disk-unattached",
+        "disk-attached",
+        "pip-unassociated",
+        "vm-stopped-allocated",
+        "vm-deallocated",
+        "vm-prod-no-backup"
+      ],
+      "negatives": [],
+      "emptySubscriptionId": "empty-no-budget",
+      "exception": null
+    },
+    {
+      "checkId": "azure-inventory-no-owner-tag",
+      "positives": ["disk-unattached"],
+      "negatives": ["disk-attached", "vm-deallocated"],
+      "exception": null
+    },
+    {
+      "checkId": "azure-waste-unattached-disks",
+      "positives": ["disk-unattached"],
+      "negatives": ["disk-attached"],
+      "exception": null
+    },
+    {
+      "checkId": "azure-waste-unassociated-public-ips",
+      "positives": ["pip-unassociated"],
+      "negatives": ["pip-associated"],
+      "exception": null
+    },
+    {
+      "checkId": "azure-waste-old-snapshots",
+      "positives": ["snapshot-old"],
+      "negatives": ["snapshot-fresh"],
+      "exception": null
+    },
+    {
+      "checkId": "azure-waste-stopped-not-deallocated-vms",
+      "positives": ["vm-stopped-allocated"],
+      "negatives": ["vm-deallocated"],
+      "exception": null
+    },
+    {
+      "checkId": "azure-waste-empty-app-service-plans",
+      "positives": ["plan-empty"],
+      "negatives": ["plan-with-site"],
+      "exception": null
+    },
+    {
+      "checkId": "azure-waste-idle-load-balancers",
+      "positives": ["lb-idle"],
+      "negatives": ["lb-busy"],
+      "exception": null
+    },
+    {
+      "checkId": "azure-waste-idle-nat-gateways",
+      "positives": ["nat-idle"],
+      "negatives": ["nat-attached"],
+      "exception": null
+    },
+    {
+      "checkId": "azure-cost-spend-by-service",
+      "positives": [],
+      "negatives": [],
+      "exception": {
+        "status": "unverified",
+        "reason": "Spend-by-service needs Cost Management history on a live subscription. Fixtures cannot invent billed months."
+      }
+    },
+    {
+      "checkId": "azure-cost-month-on-month",
+      "positives": [],
+      "negatives": [],
+      "exception": {
+        "status": "unverified",
+        "reason": "Month-on-month needs two complete billed months at one scope. The test estate does not exist yet."
+      }
+    },
+    {
+      "checkId": "azure-cost-reservation-use",
+      "positives": [],
+      "negatives": [],
+      "exception": {
+        "status": "unverified",
+        "reason": "The test estate will not buy reservations. None-found vs missing-role is E4-S2 after a live sub exists."
+      }
+    },
+    {
+      "checkId": "azure-cost-savings-plan-use",
+      "positives": [],
+      "negatives": [],
+      "exception": {
+        "status": "unverified",
+        "reason": "The test estate will not buy savings plans. Same leftover as reservation use."
+      }
+    },
+    {
+      "checkId": "azure-cost-subscriptions-without-budgets",
+      "positives": [],
+      "negatives": ["budget-main"],
+      "emptySubscriptionId": "empty-no-budget",
+      "exception": null
+    },
+    {
+      "checkId": "azure-resilience-prod-vms-outside-backup",
+      "positives": ["vm-prod-no-backup"],
+      "negatives": ["vm-prod-backed-up"],
+      "exception": null
+    },
+    {
+      "checkId": "azure-resilience-prod-sql-outside-backup",
+      "positives": ["sql-prod-no-backup"],
+      "negatives": ["sql-prod-backed-up"],
+      "exception": null
+    },
+    {
+      "checkId": "azure-resilience-db-zone-or-geo",
+      "positives": ["db-no-zone-geo"],
+      "negatives": ["db-zone-geo"],
+      "exception": null
+    },
+    {
+      "checkId": "azure-lifecycle-retiring-skus",
+      "positives": [],
+      "negatives": [],
+      "exception": {
+        "status": "unverified",
+        "reason": "A retiring SKU must match a dated Azure retirement announcement. That catalogue is E3-S5-T1; this file does not invent a date or SKU."
+      }
+    },
+    {
+      "checkId": "azure-lifecycle-expiring-app-service-certs",
+      "positives": ["cert-app-expiring"],
+      "negatives": ["cert-app-fresh"],
+      "exception": null
+    },
+    {
+      "checkId": "azure-lifecycle-expiring-gateway-certs",
+      "positives": ["cert-gateway-expiring"],
+      "negatives": ["cert-gateway-fresh"],
+      "exception": null
+    }
+  ]
+}
