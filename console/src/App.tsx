@@ -1,6 +1,9 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { BlindSpots } from "./BlindSpots";
 import { Connect } from "./Connect";
+import { Estate } from "./Estate";
+import { Inventory } from "./Inventory";
+import { Settings } from "./Settings";
 import { EMPTY_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
 
 function currentHash(): string {
@@ -26,7 +29,17 @@ export function App() {
   }, [hash]);
 
   const page =
-    hash === "connect" ? "connect" : hash === "blind-spots" ? "blind-spots" : "empty";
+    hash === "connect"
+      ? "connect"
+      : hash === "blind-spots"
+        ? "blind-spots"
+        : hash === "estate"
+          ? "estate"
+          : hash === "inventory"
+            ? "inventory"
+            : hash === "settings"
+              ? "settings"
+              : "empty";
 
   return (
     <div>
@@ -50,6 +63,12 @@ export function App() {
           <Connect />
         ) : page === "blind-spots" ? (
           <BlindSpots />
+        ) : page === "estate" ? (
+          <Estate />
+        ) : page === "inventory" ? (
+          <Inventory />
+        ) : page === "settings" ? (
+          <Settings />
         ) : (
           <>
             <h1 id="page-title" tabIndex={-1}>

@@ -73,3 +73,64 @@ export function noOwnerTotal(inventory: Inventory): {
     resourceUris: missing.map((resource) => resource.resourceUri),
   };
 }
+
+export function applyOwnerTag(inventory: Inventory, ownerTagKey: string): Inventory {
+  return {
+    ...inventory,
+    resources: inventory.resources.map((resource) => {
+      const owner = resource.tags[ownerTagKey];
+      return {
+        ...resource,
+        ownerTag: owner && owner.length > 0 ? owner : null,
+      };
+    }),
+  };
+}
+
+export type InventoryFilters = {
+  owner?: string;
+  service?: string;
+  subscription?: string;
+  region?: string;
+};
+
+export function filterInventory(
+  inventory: Inventory,
+  filters: InventoryFilters,
+): InventoryRecord[] {
+  return inventory.resources.filter((resource) => {
+    if (filters.owner === "none" && resource.ownerTag) {
+      return false;
+    }
+    if (filters.owner && filters.owner !== "none" && resource.ownerTag !== filters.owner) {
+      return false;
+    }
+    if (filters.service && resource.resourceType !== filters.service) {
+      return false;
+    }
+    if (
+      filters.subscription &&
+      !resource.resourceUri.includes(`/subscriptions/${filters.subscription}/`)
+    ) {
+      return false;
+    }
+    if (filters.region && resource.region !== filters.region) {
+      return false;
+    }
+    return true;
+  });
+}
+
+export function groupInventory(resources: InventoryRecord[]): {
+  byOwner: Record<string, number>;
+  byService: Record<string, number>;
+} {
+  const byOwner: Record<string, number> = {};
+  const byService: Record<string, number> = {};
+  for (const resource of resources) {
+    const owner = resource.ownerTag ?? "none";
+    byOwner[owner] = (byOwner[owner] ?? 0) + 1;
+    byService[resource.resourceType] = (byService[resource.resourceType] ?? 0) + 1;
+  }
+  return { byOwner, byService };
+}

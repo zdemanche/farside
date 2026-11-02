@@ -15,8 +15,10 @@ import {
   type CoverageState,
 } from "./coverage.js";
 import type { CoverageCauseId } from "./causes.js";
-import { noOwnerTotal } from "./inventory.js";
+import { estateOverview } from "./estate.js";
+import { applyOwnerTag, filterInventory, groupInventory, noOwnerTotal } from "./inventory.js";
 import { SecretLeakError, assertNoSecrets } from "./secrets.js";
+import { parseSettings } from "./settings.js";
 import { assertOrgAccess, sessionFromHeaders, type Session } from "./session.js";
 import { MemoryStore } from "./store.js";
 
@@ -167,7 +169,11 @@ export function buildApp(store: MemoryStore = new MemoryStore()) {
     if (errors.length > 0) {
       return problem(reply, 400, "Invalid inventory", { errors });
     }
-    const stored = store.putInventory(request.params.orgId, request.body as Inventory);
+    const tagged = applyOwnerTag(
+      request.body as Inventory,
+      store.snapshot(request.params.orgId).settings.ownerTagKey,
+    );
+    const stored = store.putInventory(request.params.orgId, tagged);
     const subscriptions = [...new Set(stored.resources.map((row) => row.resourceUri.split("/")[2] ?? ""))].filter(
       Boolean,
     );
@@ -215,6 +221,80 @@ export function buildApp(store: MemoryStore = new MemoryStore()) {
     const spots = blindSpots(org.coverage);
     const health = coverageHealth(org.coverage, org.findings);
     return sendClean(reply, 200, { spots, health, formula: HEALTH_SCORE_FORMULA });
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/estate", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    return sendClean(reply, 200, estateOverview(store.snapshot(request.params.orgId)));
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/settings", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    return sendClean(reply, 200, store.snapshot(request.params.orgId).settings);
+  });
+
+  app.put<{ Params: OrgParams }>("/v1/orgs/:orgId/settings", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    if (rejectSecrets(request.body, reply)) {
+      return reply;
+    }
+    const parsed = parseSettings(request.body);
+    if (!parsed) {
+      return problem(reply, 400, "Invalid settings", {
+        errors: [
+          {
+            path: "body",
+            message: "ownerTagKey, productionTagKey, and productionTagValue are required",
+          },
+        ],
+      });
+    }
+    const saved = store.putSettings(request.params.orgId, {
+      ...parsed,
+      updatedAt: "1970-01-01T00:00:00.000Z",
+    });
+    return sendClean(reply, 200, saved);
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/inventory/browse", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    const inventory = store.snapshot(request.params.orgId).inventory;
+    if (!inventory) {
+      return problem(reply, 404, "Not found");
+    }
+    const query = request.query as Record<string, unknown>;
+    const filters: {
+      owner?: string;
+      service?: string;
+      subscription?: string;
+      region?: string;
+    } = {};
+    if (typeof query.owner === "string") {
+      filters.owner = query.owner;
+    }
+    if (typeof query.service === "string") {
+      filters.service = query.service;
+    }
+    if (typeof query.subscription === "string") {
+      filters.subscription = query.subscription;
+    }
+    if (typeof query.region === "string") {
+      filters.region = query.region;
+    }
+    const resources = filterInventory(inventory, filters);
+    return sendClean(reply, 200, {
+      resources,
+      total: resources.length,
+      grouped: groupInventory(resources),
+    });
   });
 
   return app;

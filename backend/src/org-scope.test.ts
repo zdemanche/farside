@@ -21,6 +21,10 @@ const ROUTES = [
   { method: "GET" as const, url: "/v1/orgs/org-a/coverage" },
   { method: "PUT" as const, url: "/v1/orgs/org-a/coverage" },
   { method: "GET" as const, url: "/v1/orgs/org-a/blind-spots" },
+  { method: "GET" as const, url: "/v1/orgs/org-a/estate" },
+  { method: "GET" as const, url: "/v1/orgs/org-a/settings" },
+  { method: "PUT" as const, url: "/v1/orgs/org-a/settings" },
+  { method: "GET" as const, url: "/v1/orgs/org-a/inventory/browse" },
   { method: "DELETE" as const, url: "/v1/orgs/org-a/connections/conn-1" },
 ];
 
