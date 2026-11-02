@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+.DS_Store
+.pulumi/
+.eslintcache
+*.log
+.env
+.env.*
+!.env.example

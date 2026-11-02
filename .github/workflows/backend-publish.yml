@@ -1,0 +1,51 @@
+# iac-hub stage BackendArtifacts. workflow_dispatch only — a push trigger
+# would fight the account provisioner (see Moonaan/iac-hub medic contract).
+name: backend-publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      customerName:
+        required: true
+        type: string
+      accountId:
+        required: true
+        type: string
+      run_identifier:
+        required: true
+        type: string
+      initialAdmins:
+        required: false
+        type: string
+      firstOwnerEmail:
+        required: false
+        type: string
+      adoptingProducts:
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @farside/backend
+      - name: Record that tenant artifact upload is not yet possible
+        env:
+          CUSTOMER_NAME: ${{ inputs.customerName }}
+          ACCOUNT_ID: ${{ inputs.accountId }}
+          RUN_IDENTIFIER: ${{ inputs.run_identifier }}
+        run: |
+          echo "Built backend for $CUSTOMER_NAME ($ACCOUNT_ID) run $RUN_IDENTIFIER."
+          echo "Upload to s3://moonaan-${CUSTOMER_NAME}-deployments/farside/backend/ is blocked until"
+          echo "the product is registered in iac-hub PRODUCTS and this repo is a Moonaan dispatch target."
+          echo "See docs/e1-s3-remaining.md."
+          exit 1
