@@ -5,12 +5,18 @@ import { afterAll, describe, expect, it } from "vitest";
 import { RAW_PROVIDER_KEYS, scoreHealth, validateFinding } from "@farside/scan-contracts";
 import { buildApp } from "./app.js";
 import {
+  EMPTY_PLANS,
+  IDLE_LOAD_BALANCERS,
+  IDLE_NAT_GATEWAYS,
   OLD_SNAPSHOTS,
   STOPPED_VMS,
   UNASSOCIATED_IPS,
   UNATTACHED_DISKS,
   UnregisteredCheckError,
   acceptFinding,
+  checkEmptyPlans,
+  checkIdleLoadBalancers,
+  checkIdleNatGateways,
   checkOldSnapshots,
   checkStoppedVms,
   checkUnassociatedIps,
@@ -22,6 +28,9 @@ import { factsFromManifest } from "./facts.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
 import {
   DISK_SAVINGS_BASIS,
+  EMPTY_PLAN_SAVINGS_BASIS,
+  IDLE_LB_SAVINGS_BASIS,
+  IDLE_NAT_SAVINGS_BASIS,
   PUBLIC_IP_SAVINGS_BASIS,
   SNAPSHOT_SAVINGS_BASIS,
   STOPPED_VM_SAVINGS_BASIS,
@@ -42,7 +51,7 @@ const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 describe("check registry and rules", () => {
   it("refuses an unregistered check", () => {
     expect(() =>
-      runChecks({ inventory, facts, checkIds: ["azure-waste-empty-app-service-plans"] }),
+      runChecks({ inventory, facts, checkIds: ["azure-cost-spend-by-service"] }),
     ).toThrow(UnregisteredCheckError);
   });
 
@@ -204,6 +213,107 @@ describe("stopped-not-deallocated VM check", () => {
   });
 });
 
+describe("empty App Service plan check", () => {
+  it("fails the seeded empty plan and passes the plan with a site", () => {
+    const findings = checkEmptyPlans(inventory, facts);
+    const fail = findings.find((finding) => finding.result === "fail");
+    const pass = findings.find((finding) => finding.result === "pass");
+    expect(fail?.checkId).toBe(EMPTY_PLANS);
+    expect(fail?.evidence.fields.planId).toBe("plan-empty");
+    expect(fail?.evidence.fields.numberOfSites).toBe(0);
+    expect(fail?.savings).toEqual({ min: "70.00", max: "105.00", currency: "USD" });
+    expect(fail?.evidence.fields.savingsBasis).toBe(EMPTY_PLAN_SAVINGS_BASIS);
+    expect(pass?.evidence.fields.planId).toBe("plan-with-site");
+    expect(validateFinding(fail!)).toEqual([]);
+  });
+
+  it("returns undetermined when numberOfSites cannot be read", () => {
+    const uri = inventory.resources.find((row) => row.displayName.includes("no sites"))!.resourceUri;
+    const findings = checkEmptyPlans(inventory, [{ resourceUri: uri, fields: { planId: "plan-empty" } }]);
+    expect(findings[0]?.result).toBe("undetermined");
+    expect(findings[0]?.closer).toMatch(/numberOfSites/);
+  });
+});
+
+describe("idle load balancer check", () => {
+  it("fails the seeded idle balancer and passes the busy lookalike", () => {
+    const findings = checkIdleLoadBalancers(inventory, facts);
+    const fail = findings.find((finding) => finding.result === "fail");
+    const pass = findings.find((finding) => finding.result === "pass");
+    expect(fail?.checkId).toBe(IDLE_LOAD_BALANCERS);
+    expect(fail?.evidence.fields.loadBalancerId).toBe("lb-idle");
+    expect(fail?.evidence.fields.backendAddressCount).toBe(0);
+    expect(fail?.evidence.fields.metricWindow).toBe("7d");
+    expect(fail?.savings).toEqual({ min: "18.00", max: "27.00", currency: "USD" });
+    expect(fail?.evidence.fields.savingsBasis).toBe(IDLE_LB_SAVINGS_BASIS);
+    expect(JSON.stringify(fail)).not.toMatch(/confirmed idle/i);
+    expect(pass?.evidence.fields.loadBalancerId).toBe("lb-busy");
+    expect(pass?.evidence.fields.backendAddressCount).toBe(2);
+    expect(validateFinding(fail!)).toEqual([]);
+  });
+
+  it("returns undetermined when backend pools cannot be read", () => {
+    const uri = inventory.resources.find((row) => row.displayName.includes("no backend addresses"))!.resourceUri;
+    const findings = checkIdleLoadBalancers(inventory, [
+      { resourceUri: uri, fields: { loadBalancerId: "lb-idle" } },
+    ]);
+    expect(findings[0]?.result).toBe("undetermined");
+    expect(findings[0]?.closer).toMatch(/backend address pools/);
+  });
+});
+
+describe("idle NAT gateway check", () => {
+  it("fails the seeded idle NAT and passes the attached lookalike", () => {
+    const findings = checkIdleNatGateways(inventory, facts);
+    const fail = findings.find((finding) => finding.result === "fail");
+    const pass = findings.find((finding) => finding.result === "pass");
+    expect(fail?.checkId).toBe(IDLE_NAT_GATEWAYS);
+    expect(fail?.evidence.fields.natGatewayId).toBe("nat-idle");
+    expect(fail?.evidence.fields.attachedSubnetCount).toBe(0);
+    expect(fail?.evidence.fields.metricWindow).toBe("7d");
+    expect(fail?.savings).toEqual({ min: "32.00", max: "48.00", currency: "USD" });
+    expect(fail?.evidence.fields.savingsBasis).toBe(IDLE_NAT_SAVINGS_BASIS);
+    expect(JSON.stringify(fail)).not.toMatch(/confirmed idle/i);
+    expect(pass?.evidence.fields.natGatewayId).toBe("nat-attached");
+    expect(validateFinding(fail!)).toEqual([]);
+  });
+
+  it("returns undetermined when subnet associations cannot be read", () => {
+    const uri = inventory.resources.find((row) => row.displayName.includes("no subnets"))!.resourceUri;
+    const findings = checkIdleNatGateways(inventory, [
+      { resourceUri: uri, fields: { natGatewayId: "nat-idle" } },
+    ]);
+    expect(findings[0]?.result).toBe("undetermined");
+    expect(findings[0]?.closer).toMatch(/subnets/);
+  });
+});
+
+describe("missing metrics undetermined path", () => {
+  it("returns undetermined when traffic metrics are removed", () => {
+    const stripped = facts.map((row) => {
+      if (row.fields.loadBalancerId !== "lb-idle" && row.fields.natGatewayId !== "nat-idle") {
+        return row;
+      }
+      const fields = { ...row.fields };
+      delete fields.metricWindow;
+      delete fields.byteCount;
+      return { ...row, fields };
+    });
+    const lb = checkIdleLoadBalancers(inventory, stripped).find(
+      (finding) => finding.evidence.fields.loadBalancerId === "lb-idle",
+    );
+    const nat = checkIdleNatGateways(inventory, stripped).find(
+      (finding) => finding.evidence.fields.natGatewayId === "nat-idle",
+    );
+    expect(lb?.result).toBe("undetermined");
+    expect(lb?.closer).toMatch(/Monitoring Reader/);
+    expect(lb?.closer).toMatch(/longer window/);
+    expect(nat?.result).toBe("undetermined");
+    expect(nat?.closer).toMatch(/Monitoring Reader/);
+    expect(JSON.stringify(lb)).not.toMatch(/confirmed idle/i);
+  });
+});
+
 describe("unattached disk harvest to API", () => {
   const store = new MemoryStore();
   const app = buildApp(store, { harvester: defaultHarvester() });
@@ -246,6 +356,23 @@ describe("unattached disk harvest to API", () => {
     expect(vm?.result).toBe("fail");
     expect(vm?.evidence.fields.powerState).toBe("stopped");
     expect(findings.some((finding) => finding.evidence.fields.vmId === "vm-deallocated" && finding.result === "fail")).toBe(
+      false,
+    );
+    const plan = findings.find((finding) => finding.evidence.fields.planId === "plan-empty");
+    const lb = findings.find((finding) => finding.evidence.fields.loadBalancerId === "lb-idle");
+    const nat = findings.find((finding) => finding.evidence.fields.natGatewayId === "nat-idle");
+    expect(plan?.result).toBe("fail");
+    expect(plan?.evidence.fields.numberOfSites).toBe(0);
+    expect(lb?.result).toBe("fail");
+    expect(lb?.evidence.fields.metricWindow).toBe("7d");
+    expect(nat?.result).toBe("fail");
+    expect(findings.some((finding) => finding.evidence.fields.planId === "plan-with-site" && finding.result === "fail")).toBe(
+      false,
+    );
+    expect(findings.some((finding) => finding.evidence.fields.loadBalancerId === "lb-busy" && finding.result === "fail")).toBe(
+      false,
+    );
+    expect(findings.some((finding) => finding.evidence.fields.natGatewayId === "nat-attached" && finding.result === "fail")).toBe(
       false,
     );
   });

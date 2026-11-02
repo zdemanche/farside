@@ -27,6 +27,15 @@ export function factsFromManifest(manifest: GroundTruthManifest): ResourceFacts[
     if (item.type === "Microsoft.Compute/virtualMachines") {
       fields.vmId = item.id;
     }
+    if (item.type === "Microsoft.Web/serverfarms") {
+      fields.planId = item.id;
+    }
+    if (item.type === "Microsoft.Network/loadBalancers") {
+      fields.loadBalancerId = item.id;
+    }
+    if (item.type === "Microsoft.Network/natGateways") {
+      fields.natGatewayId = item.id;
+    }
     return { resourceUri: resourceUriFor(item), fields };
   });
 }

@@ -16,10 +16,10 @@ describe("Issues screen", () => {
     window.location.hash = "";
   });
 
-  it("lists the unattached disk and three leftover waste findings with evidence and savings", async () => {
+  it("lists waste findings including idle plan, load balancer and NAT with evidence and savings", async () => {
     const { container } = render(<App />);
     expect(screen.getByRole("heading", { name: "Issues" })).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toBe("4 open issues");
+    expect(screen.getByRole("status").textContent).toBe("7 open issues");
     const table = screen.getByRole("table", { name: "Open waste issues" });
     for (const issue of ISSUE_ROWS) {
       const row = screen.getByRole("row", { name: new RegExp(issue.resourceId) });

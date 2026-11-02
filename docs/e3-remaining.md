@@ -1,6 +1,6 @@
 # E3 remaining work
 
-In-repo check engine, leftover waste checks, and an Issues list run against ground-truth fixtures. Live Azure proof of those findings stays leftover.
+In-repo check engine, leftover waste checks, idle plan/LB/NAT checks, and an Issues list run against ground-truth fixtures. Live Azure proof of those findings stays leftover.
 
 ## Done here
 
@@ -15,6 +15,10 @@ In-repo check engine, leftover waste checks, and an Issues list run against grou
 | E3-S2-T2 | #93 | Unassociated public IPs (`associatedTo` null or empty). |
 | E3-S2-T3 | #94 | Stopped-but-allocated VMs; deallocated and running pass. |
 | E3-S2 Issues list | #91 | Console `#issues` lists the four fail findings with evidence and a savings range. |
+| E3-S3-T1 | #97 | Empty App Service plan: fail `plan-empty`, pass `plan-with-site`. |
+| E3-S3-T2 | #98 | Idle load balancer: fail `lb-idle` with metricWindow, pass `lb-busy`. |
+| E3-S3-T3 | #99 | Idle NAT gateway: fail `nat-idle` with metricWindow, pass `nat-attached`. |
+| E3-S3-T4 | #100 | Missing traffic metrics return `undetermined` with a Monitoring Reader closer. |
 
 ## Leftovers
 
@@ -28,4 +32,4 @@ Monitoring Reader on the test subscription.
 
 ### Later E3 stories
 
-Idle plans/LBs/NAT, Recovery, Lifecycle, close-only-if-covered Issues store, Scans screens, and live accuracy (#96–#125).
+Busy-gateway negative on the live test estate (#96). Recovery, Lifecycle, close-only-if-covered Issues store, Scans screens, and live accuracy (#101–#125).
