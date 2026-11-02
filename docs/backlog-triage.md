@@ -19,8 +19,13 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 2. **E1-S2** (#16) — merged (`@farside/scan-contracts` 0.1.0).
 3. **E1-S4** (#27) — this change: reuse review of reachable Moonaan repos; no client names copied.
 4. **E1-S5** (#31) — this change: seed plan + ground-truth **fixtures**; live subscription provision stays (c).
-5. **E2 in-repo** — this change: org scoping, no-secrets, Connect, inventory mapping, no-owner. Identity, live federated connect, and live harvest leftover.
-6. **E2+ remaining** — coverage/blind spots, estate/inventory/settings screens, scan runner against mocks.
+5. **E2 in-repo (org/connect/inventory)** — merged (#226).
+6. **E2-S4** — merged (#232).
+7. **E2-S5** — merged (#233).
+8. **E2-S6** — merged (#234).
+9. **E3-S1** — merged (#235).
+10. **E3-S2** — this change: old snapshots, unassociated IPs, stopped-not-deallocated VMs, Issues list against fixtures.
+11. **E3+ remaining** — idle plan/LB/NAT, Recovery/Lifecycle, Issues store, Scans screens against fixtures.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -107,20 +112,20 @@ Phase 1 needs Identity, a live Azure connect, and a test tenant.
 | `E2-S3-T3` | #61 | Store inventory as aggregates and identifiers | (a) this change | Fixture harvest maps to the inventory contract; payload fields dropped. Live Resource Graph is (c)/(d). |
 | `E2-S3-T4` | #62 | Compute no-owner totals | (a) this change | Matches untagged `disk-unattached` in the ground-truth manifest. Live harvest diff is (c). |
 | `E2-S3-T5` | #63 | Compare live inventory to ground truth | (c) live Azure / GCP / test tenant | Diff live inventory to ground truth. |
-| `E2-S4` | #64 | Coverage model and the Blind spots screen | (a) doable in code now | Coverage model and Blind spots UI over stored scan data. Needs harvest from E2-S3. |
-| `E2-S4-T1` | #65 | Record coverage per scope and check | (a) doable in code now | Coverage states in the check/harvest path. |
-| `E2-S4-T2` | #66 | Use the contract scoring helper for coverage | (a) doable in code now | Call the E1-S2 scoring helper; no second implementation. |
-| `E2-S4-T3` | #67 | Build the Blind spots screen | (a) doable in code now | Blind spots screen. |
-| `E2-S4-T4` | #68 | Write plain-language reasons for each cause | (a) doable in code now | Plain-language reasons; copy review is human but not a numbered decision. |
-| `E2-S5` | #69 | Estate overview, Inventory and Settings screens | (a) doable in code now | Estate/Inventory/Settings screens over stored data. Empty states do not need Azure. |
-| `E2-S5-T1` | #70 | Build the Estate overview | (a) doable in code now | Estate overview. |
-| `E2-S5-T2` | #71 | Build the Inventory screen | (a) doable in code now | Inventory screen. |
-| `E2-S5-T3` | #72 | Build Settings for owner tag and production marker | (a) doable in code now | Settings for owner tag and production marker. |
-| `E2-S6` | #73 | First scan on connect, running unattended | (c) live Azure / GCP / test tenant | Unattended scan with federated credentials on the test subscription. |
-| `E2-S6-T1` | #74 | Build the scan job runner | (a) doable in code now | Job runner can be unit-tested without Azure. |
-| `E2-S6-T2` | #75 | Trigger a scan on connect | (a) doable in code now | Trigger-on-connect wiring; end-to-end on the test subscription is (c). |
-| `E2-S6-T3` | #76 | Prove the unattended path | (c) live Azure / GCP / test tenant | Prove the unattended path live. |
-| `E2-S6-T4` | #77 | Prevent overlapping scans and store failures | (a) doable in code now | Overlap lock and failure persistence. |
+| `E2-S4` | #64 | Coverage model and the Blind spots screen | (a) this change | Coverage + Blind spots over stored/fixture scan data. Live missing-role proof is (c). |
+| `E2-S4-T1` | #65 | Record coverage per scope and check | (a) this change | Assessed / unassessed / undetermined unit tests. |
+| `E2-S4-T2` | #66 | Use the contract scoring helper for coverage | (a) this change | `scoreHealth` only; unassessed scopes leave the score unchanged. |
+| `E2-S4-T3` | #67 | Build the Blind spots screen | (a) this change | Table of why/closer; axe + e2e. |
+| `E2-S4-T4` | #68 | Write plain-language reasons for each cause | (a) this change | missing_role, throttling, unsupported_type, failed_call copy. |
+| `E2-S5` | #69 | Estate overview, Inventory and Settings screens | (a) this change | Screens over stored/fixture data. Phone-width is jsdom 375 + axe; Playwright device leftover. |
+| `E2-S5-T1` | #70 | Build the Estate overview | (a) this change | Totals, no-owner, coverage; no Phase 1 health score. |
+| `E2-S5-T2` | #71 | Build the Inventory screen | (a) this change | Filters and grouping; counts compared to the browse API. |
+| `E2-S5-T3` | #72 | Build Settings for owner tag and production marker | (a) this change | Changing the owner tag key updates no-owner totals. |
+| `E2-S6` | #73 | First scan on connect, running unattended | (c) live leftover | In-repo runner + connect trigger. Live federated unattended is (c). |
+| `E2-S6-T1` | #74 | Build the scan job runner | (a) this change | Success and failure job tests. |
+| `E2-S6-T2` | #75 | Trigger a scan on connect | (a) this change | Connection PUT starts a scan; live Azure e2e is (c). |
+| `E2-S6-T3` | #76 | Prove the unattended path | (c) live Azure / GCP / test tenant | System actor exists in-repo; live federated leftover. |
+| `E2-S6-T4` | #77 | Prevent overlapping scans and store failures | (a) this change | Concurrent start and mid-failure tests. |
 | `E2-S7` | #78 | Week 8 walk-through and continue-or-stop check | (b) human decision / sign-off | Blocked on D4 (#4). Walk-through itself is (c) on the test estate or the prospect's tenant. |
 | `E2-S7-T1` | #79 | Write the demo script and rehearse it | (c) live Azure / GCP / test tenant | Rehearse the sitting on the test subscription. |
 | `E2-S7-T2` | #80 | Run the prospect session and record feedback | (b) human decision / sign-off | Prospect session; needs D4 (#4). |
@@ -134,18 +139,18 @@ Phase 2 findings must be proven live. Engine and UI can be built against fixture
 | Key | Issue | Title | Class | Why |
 |---|---|---|---|---|
 | `E3` | #83 | Real Azure issues with proof of coverage | (c) live Azure / GCP / test tenant | Phase 2 findings must be proven live. Engine and UI can be built against fixtures first. |
-| `E3-S1` | #84 | Check engine and first check end to end | (a) doable in code now | Check engine, evidence rules, savings helper, unattached-disk check against fixtures. Live seeded-disk proof is (c). |
-| `E3-S1-T1` | #85 | Build the check runner over stored inventory | (a) doable in code now | Runner over stored inventory. |
-| `E3-S1-T2` | #86 | Enforce evidence and undetermined rules | (a) doable in code now | Evidence and undetermined rejection tests. |
-| `E3-S1-T3` | #87 | Build the shared savings range helper | (a) doable in code now | Savings range helper. |
-| `E3-S1-T4` | #88 | Add a check registry tied to the spec | (a) doable in code now | Check registry tied to the spec. |
+| `E3-S1` | #84 | Check engine and first check end to end | (a) this change | Engine + unattached-disk against fixtures. Live portal proof is (c). |
+| `E3-S1-T1` | #85 | Build the check runner over stored inventory | (a) this change | Runner over stored inventory and facts. No provider calls. |
+| `E3-S1-T2` | #86 | Enforce evidence and undetermined rules | (a) this change | Missing evidence and missing closer are rejected. |
+| `E3-S1-T3` | #87 | Build the shared savings range helper | (a) this change | min/max + named basis; point values rejected. |
+| `E3-S1-T4` | #88 | Add a check registry tied to the spec | (a) this change | Unregistered spec ids cannot run. |
 | `E3-S1-T5` | #89 | Add metrics harvest via Monitoring Reader | (c) live Azure / GCP / test tenant | Metrics harvest via Monitoring Reader on the test subscription. |
-| `E3-S1-T6` | #90 | Implement the unattached disk check end to end | (c) live Azure / GCP / test tenant | Unattached disk end-to-end against seeded positives/negatives. Fixture path is (a). |
-| `E3-S2` | #91 | Leftover waste checks prove the engine end to end | (a) doable in code now | Three waste checks against fixtures; scan-to-console proof on the test estate is (c). |
-| `E3-S2-T1` | #92 | Implement the old snapshot check | (a) doable in code now | Old snapshot check. |
-| `E3-S2-T2` | #93 | Implement the unassociated public IP check | (a) doable in code now | Unassociated public IP check. |
-| `E3-S2-T3` | #94 | Implement the stopped-not-deallocated VM check | (a) doable in code now | Stopped-not-deallocated VM check. |
-| `E3-S2-T4` | #95 | Prove the path from scan to console | (c) live Azure / GCP / test tenant | Full scan on the test subscription into the console. |
+| `E3-S1-T6` | #90 | Implement the unattached disk check end to end | (a) this change | Fixture positives/negatives via API. Live ARM leftover. |
+| `E3-S2` | #91 | Leftover waste checks prove the engine end to end | (a) this change | Three waste checks + Issues list against fixtures. Live scan-to-console is (c). |
+| `E3-S2-T1` | #92 | Implement the old snapshot check | (a) this change | Old snapshot vs `snapshot-old` / `snapshot-fresh`; retention from Settings. |
+| `E3-S2-T2` | #93 | Implement the unassociated public IP check | (a) this change | Unassociated IP vs `pip-unassociated` / `pip-associated`. |
+| `E3-S2-T3` | #94 | Implement the stopped-not-deallocated VM check | (a) this change | Stopped allocated vs deallocated/running. |
+| `E3-S2-T4` | #95 | Prove the path from scan to console | (c) live leftover | Fixture Issues list is in this change. Full scan on the test subscription is leftover. |
 | `E3-S3` | #96 | Idle plans, load balancers and NAT gateways found | (a) doable in code now | Idle plan/LB/NAT checks against fixtures; busy-gateway negative on the estate is (c). |
 | `E3-S3-T1` | #97 | Implement empty App Service plan check | (a) doable in code now | Empty App Service plan check. |
 | `E3-S3-T2` | #98 | Implement idle load balancer check | (a) doable in code now | Idle load balancer check. |

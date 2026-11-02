@@ -11,6 +11,16 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 | E2-S2-T5 | #57 | `assertNoSecrets` on store writes and responses. A deliberate `client_secret` leak fails CI. |
 | E2-S3-T3 | #61 | Ground-truth items map to `@farside/scan-contracts` inventory. Provider payload fields are dropped. |
 | E2-S3-T4 | #62 | No-owner totals match the untagged `disk-unattached` row in `docs/azure/ground-truth.json`. |
+| E2-S4-T1 | #65 | Coverage states assessed / unassessed / undetermined per scope and check. Harvest marks inventory checks assessed. |
+| E2-S4-T2 | #66 | `scoreHealth` from `@farside/scan-contracts` is the only scorer. Adding unassessed scopes leaves the score unchanged. |
+| E2-S4-T3 | #67 | Blind spots screen lists why and what would close it. Vitest e2e + axe. |
+| E2-S4-T4 | #68 | Missing role, throttling, unsupported type, and failed call map to plain-language copy. |
+| E2-S5-T1 | #70 | Estate overview: totals, no-owner, coverage, no Phase 1 health score. Empty state points to Connect. |
+| E2-S5-T2 | #71 | Inventory browse with owner/service/subscription/region filters and owner/service grouping. |
+| E2-S5-T3 | #72 | Settings store owner tag and production marker per org; changing the owner key updates no-owner totals. |
+| E2-S6-T1 | #74 | Background scan job with stored success and failure status. |
+| E2-S6-T2 | #75 | Connect (connection PUT) starts the first scan. |
+| E2-S6-T4 | #77 | One running scan per subscription; mid-failure stores covered scopes and is not marked complete. |
 
 ## Leftovers
 
@@ -25,3 +35,11 @@ Connect does not call Azure. Role-gap, disconnect, and revoked-grant proof need 
 ### Live harvest (#58, #59, #60, #63)
 
 Inventory is mapped from the ground-truth fixture. Resource Graph, management-group discovery, and a live diff wait on Azure and unread dashmeta/AIF clients.
+
+### Live coverage proof
+
+Blind spots is fixture-backed. A missing-role or failed-call row from a live scan waits on E1-S7 / E2-S6.
+
+### Unattended federated scan (#76)
+
+The job runner can start as `actor: system` without a user request. Token exchange against a live subscription is still leftover.
