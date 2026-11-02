@@ -1,5 +1,10 @@
 import { useEffect, useState, type MouseEvent } from "react";
+import { BlindSpots } from "./BlindSpots";
 import { Connect } from "./Connect";
+import { Estate } from "./Estate";
+import { Inventory } from "./Inventory";
+import { Issues } from "./Issues";
+import { Settings } from "./Settings";
 import { EMPTY_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
 
 function currentHash(): string {
@@ -24,7 +29,20 @@ export function App() {
     document.getElementById("page-title")?.focus();
   }, [hash]);
 
-  const onConnect = hash === "connect";
+  const page =
+    hash === "connect"
+      ? "connect"
+      : hash === "blind-spots"
+        ? "blind-spots"
+        : hash === "estate"
+          ? "estate"
+          : hash === "inventory"
+            ? "inventory"
+            : hash === "issues"
+              ? "issues"
+              : hash === "settings"
+                ? "settings"
+                : "empty";
 
   return (
     <div>
@@ -44,8 +62,18 @@ export function App() {
         </nav>
       </header>
       <main id="main" tabIndex={-1}>
-        {onConnect ? (
+        {page === "connect" ? (
           <Connect />
+        ) : page === "blind-spots" ? (
+          <BlindSpots />
+        ) : page === "estate" ? (
+          <Estate />
+        ) : page === "inventory" ? (
+          <Inventory />
+        ) : page === "issues" ? (
+          <Issues />
+        ) : page === "settings" ? (
+          <Settings />
         ) : (
           <>
             <h1 id="page-title" tabIndex={-1}>

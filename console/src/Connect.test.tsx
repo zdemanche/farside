@@ -36,10 +36,9 @@ describe("Connect screen", () => {
       target: { value: "sub-1" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Connect subscription" }));
-    expect(
-      screen.getByRole("status").textContent,
-    ).toContain("tenant-1");
+    expect(screen.getByRole("status").textContent).toContain("tenant-1");
     expect(screen.getByRole("status").textContent).toContain("sub-1");
+    expect(screen.getByRole("status").textContent).toContain("First scan started");
   });
 
   it("has no axe violations on the Connect screen", async () => {
