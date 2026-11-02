@@ -1,0 +1,72 @@
+import type { Inventory } from "@farside/scan-contracts";
+import { REQUIRED_AZURE_ROLES } from "./roles.js";
+import { assertNoSecrets } from "./secrets.js";
+
+export type Connection = {
+  id: string;
+  tenantId: string;
+  subscriptionId: string;
+  roles: string[];
+  createdAt: string;
+};
+
+export type OrgState = {
+  connections: Connection[];
+  inventory: Inventory | null;
+};
+
+function emptyOrg(): OrgState {
+  return { connections: [], inventory: null };
+}
+
+export class MemoryStore {
+  #orgs = new Map<string, OrgState>();
+
+  org(orgId: string): OrgState {
+    const existing = this.#orgs.get(orgId);
+    if (existing) {
+      return existing;
+    }
+    const created = emptyOrg();
+    this.#orgs.set(orgId, created);
+    return created;
+  }
+
+  snapshot(orgId: string): OrgState {
+    const copy = structuredClone(this.org(orgId));
+    assertNoSecrets(copy);
+    return copy;
+  }
+
+  putInventory(orgId: string, inventory: Inventory): Inventory {
+    assertNoSecrets(inventory);
+    this.org(orgId).inventory = inventory;
+    return inventory;
+  }
+
+  putConnection(
+    orgId: string,
+    input: { tenantId: string; subscriptionId: string },
+  ): Connection {
+    assertNoSecrets(input);
+    const connection: Connection = {
+      id: `conn-${this.org(orgId).connections.length + 1}`,
+      tenantId: input.tenantId,
+      subscriptionId: input.subscriptionId,
+      roles: [...REQUIRED_AZURE_ROLES],
+      createdAt: "1970-01-01T00:00:00.000Z",
+    };
+    this.org(orgId).connections.push(connection);
+    return connection;
+  }
+
+  deleteConnection(orgId: string, connectionId: string): boolean {
+    const org = this.org(orgId);
+    const next = org.connections.filter((connection) => connection.id !== connectionId);
+    if (next.length === org.connections.length) {
+      return false;
+    }
+    org.connections = next;
+    return true;
+  }
+}

@@ -19,7 +19,8 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 2. **E1-S2** (#16) — merged (`@farside/scan-contracts` 0.1.0).
 3. **E1-S4** (#27) — this change: reuse review of reachable Moonaan repos; no client names copied.
 4. **E1-S5** (#31) — this change: seed plan + ground-truth **fixtures**; live subscription provision stays (c).
-5. **E2+** — screens, engine, and harvest against mocks; Identity/AIF/live Azure leftover called out.
+5. **E2 in-repo** — this change: org scoping, no-secrets, Connect, inventory mapping, no-owner. Identity, live federated connect, and live harvest leftover.
+6. **E2+ remaining** — coverage/blind spots, estate/inventory/settings screens, scan runner against mocks.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -92,19 +93,19 @@ Phase 1 needs Identity, a live Azure connect, and a test tenant.
 | `E2-S1-T1` | #47 | Set up the console shell using the AIF design | (d) external system or repo | Rebuild navigation from the AIF Program UI design and its accessibility tests. |
 | `E2-S1-T2` | #48 | Wire Moonaan Identity into the backend | (d) external system or repo | Validate tokens against Moonaan Identity. |
 | `E2-S1-T3` | #49 | Build the sign-in and org claim screens | (d) external system or repo | Sign-in/claim screens against Identity. |
-| `E2-S1-T4` | #50 | Enforce org scoping in data access | (a) doable in code now | Org-scoped data access tests in this repo after Identity is wired. |
+| `E2-S1-T4` | #50 | Enforce org scoping in data access | (a) this change | Cross-org tests on every `/v1` route. Header session until Identity (#48). |
 | `E2-S1-T5` | #51 | Rehearse the claim on a test tenant | (c) live Azure / GCP / test tenant | Rehearse claim on a Moonaan Identity test tenant. |
 | `E2-S2` | #52 | Connect an Azure subscription with federated credentials | (c) live Azure / GCP / test tenant | Federated Azure connect on a real subscription in another tenant. Spec from E1-S6. |
 | `E2-S2-T1` | #53 | Implement federated credential exchange | (c) live Azure / GCP / test tenant | Token exchange against the test subscription; no stored secret. |
-| `E2-S2-T2` | #54 | Build the guided Connect screen | (a) doable in code now | Connect screen can be built against fakes; live proof is (c). |
+| `E2-S2-T2` | #54 | Build the guided Connect screen | (a) this change | Roles, steps, tenant/subscription ids, axe + e2e. Live federated proof is (c). |
 | `E2-S2-T3` | #55 | Validate roles and report gaps | (c) live Azure / GCP / test tenant | Role-gap validation by removing roles on the test subscription. |
 | `E2-S2-T4` | #56 | Handle disconnect and revoked grants | (c) live Azure / GCP / test tenant | Disconnect and revoke on the test subscription. |
-| `E2-S2-T5` | #57 | Add a no-secrets guard to CI | (a) doable in code now | No-secrets CI guard is in-repo. |
+| `E2-S2-T5` | #57 | Add a no-secrets guard to CI | (a) this change | Deliberate leak fails tests; store and responses are scanned. |
 | `E2-S3` | #58 | Azure hierarchy and inventory harvest | (c) live Azure / GCP / test tenant | Live harvest vs the seeded manifest. Also (d) dashmeta Resource Graph client and AIF hierarchy. |
 | `E2-S3-T1` | #59 | Extend the Resource Graph client to all types | (d) external system or repo | Extend dashmeta's Resource Graph client; proof is a live run (c). |
 | `E2-S3-T2` | #60 | Discover management groups and subscriptions | (d) external system or repo | Port hierarchy discovery from AIF connector-azure; live listing (c). |
-| `E2-S3-T3` | #61 | Store inventory as aggregates and identifiers | (a) doable in code now | Map harvest results onto the shared inventory contract. |
-| `E2-S3-T4` | #62 | Compute no-owner totals | (a) doable in code now | No-owner totals from stored inventory; checkable against the manifest once (c) exists. |
+| `E2-S3-T3` | #61 | Store inventory as aggregates and identifiers | (a) this change | Fixture harvest maps to the inventory contract; payload fields dropped. Live Resource Graph is (c)/(d). |
+| `E2-S3-T4` | #62 | Compute no-owner totals | (a) this change | Matches untagged `disk-unattached` in the ground-truth manifest. Live harvest diff is (c). |
 | `E2-S3-T5` | #63 | Compare live inventory to ground truth | (c) live Azure / GCP / test tenant | Diff live inventory to ground truth. |
 | `E2-S4` | #64 | Coverage model and the Blind spots screen | (a) doable in code now | Coverage model and Blind spots UI over stored scan data. Needs harvest from E2-S3. |
 | `E2-S4-T1` | #65 | Record coverage per scope and check | (a) doable in code now | Coverage states in the check/harvest path. |
