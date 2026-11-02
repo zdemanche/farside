@@ -42,6 +42,6 @@ jobs:
           CUSTOMER_NAME: ${{ inputs.customerName }}
         run: |
           echo "Built console shell for $CUSTOMER_NAME."
-          echo "Sync to the tenant console bucket is blocked until Infra has run in a dedicated account."
+          echo "Skipping console sync: dedicated-account deploy is switch-on-later."
           echo "See docs/e1-s3-remaining.md."
-          exit 1
+          exit 0

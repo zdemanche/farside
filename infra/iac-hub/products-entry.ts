@@ -5,9 +5,9 @@
  * merges it into iac-hub; the hub reads `PRODUCTS` from iac-hub `main`, and
  * this working repository cannot change that list.
  *
- * `targetRepo` is the agreed Moonaan name. Hub dispatch is org-scoped to
- * Moonaan, so it stays blocked until D2/D5 clear the name and the code lives
- * at Moonaan/moonaan-farside (or iac-hub is pointed at the working repo).
+ * `targetRepo` is the adopted Moonaan name. Registration in iac-hub is a
+ * switch-on-later integration (not a CI blocker). Hub dispatch is org-scoped
+ * to Moonaan, so it waits on an org transfer to Moonaan/moonaan-farside.
  *
  * Stages follow Identity: backend artifacts, infra, then web. Workflows are
  * workflow_dispatch-only so they do not fight the provisioner.

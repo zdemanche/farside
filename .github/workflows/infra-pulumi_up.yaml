@@ -37,12 +37,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: Refuse to apply until iac-hub registration and a dedicated account exist
+      - name: Skip apply until the dedicated-account integration is switched on
         env:
           CUSTOMER_NAME: ${{ inputs.customerName }}
           ACCOUNT_ID: ${{ inputs.accountId }}
         run: |
           echo "Would pulumi up organization/farside/${CUSTOMER_NAME} in account ${ACCOUNT_ID}."
-          echo "Blocked: farside is not in iac-hub PRODUCTS, and no dedicated account OIDC role is configured."
-          echo "See docs/e1-s3-remaining.md (E1-S3-T3, E1-S3-T4)."
-          exit 1
+          echo "Skipping: dedicated-account deploy and iac-hub registration are switch-on-later."
+          echo "See docs/e1-s3-remaining.md."
+          exit 0

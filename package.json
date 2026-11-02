@@ -11,9 +11,11 @@
     "infra"
   ],
   "scripts": {
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present && npm run lint:azure-spec",
+    "lint:azure-spec": "node scripts/azure-spec/lint.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test:azure-spec && npm run test --workspaces --if-present",
+    "test:azure-spec": "vitest run --config scripts/azure-spec/vitest.config.ts",
     "build": "npm run build --workspaces --if-present"
   },
   "devDependencies": {

@@ -1,11 +1,11 @@
-/** Product key, repo and address as agreed in the proposal. Final names wait on D2 and D5. */
+/** Product key, repo and address. D2 and D5 are adopted in docs/decisions.md. */
 
 export const PRODUCT_KEY = "farside";
 export const PRODUCT_DISPLAY_NAME = "Farside";
 export const IAC_HUB_PRODUCT_KEY = "Farside";
 export const DEPLOYMENT_KEY = "farside";
 
-/** Proposed Moonaan org repo after D2/D5. This working repo is zdemanche/farside. */
+/** Adopted Moonaan org repo. This working clone is zdemanche/farside until an org transfer. */
 export const AGREED_REPO = "Moonaan/moonaan-farside";
 export const WORKING_REPO = "zdemanche/farside";
 

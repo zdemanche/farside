@@ -1,94 +1,85 @@
 # Backlog triage
 
-Snapshot of every open decision, epic, story and task in `zdemanche/farside` (#1–#220). Nothing was closed, commented on, or edited on GitHub as part of this pass.
+Re-triage 2026-11-02 after owner direction: D1–D8 adopted (`docs/decisions.md`); dedicated AWS account and iac-hub registration are **switch-on-later**, not blockers; missing those integrations must not fail CI; sign-off-only steps are satisfied; live Azure/GCP and unread external repos still cannot be faked — build against fixtures/mocks and note leftover verification.
+
+The per-item table below #9 is the earlier snapshot with class notes updated for E1. Later epics keep their (c)/(d) meaning: (c) still needs a live tenant, (d) still needs a repo this workspace can read. Former (b) rows that were D1–D8 are adopted.
 
 ## Classes
 
-| Class | Meaning |
+| Class | Meaning now |
 |---|---|
-| (a) | Doable purely in this repo (code, tests, docs, fixtures) without a live cloud or another team's sign-off. Story predecessors in Farside may still need to land first. |
-| (b) | Blocked on a human decision or sign-off. The decision issue is named. |
-| (c) | Needs live Azure, GCP, or a Moonaan Identity test tenant. |
-| (d) | Depends on an external system or repo (dashmeta, AIF, Atlas, cost reporter, Moonaan Identity, iac-hub, Jira). |
+| (a) | Doable in this repo against code, tests, docs, fixtures, or mocks. |
+| (b) | Was a numbered decision or agreement-only sign-off. **Adopted.** Remaining (b) is only a live event a person must attend (prospect session, named buyer). |
+| (c) | Physically needs live Azure, GCP, or a Moonaan Identity test tenant. Build the code on fixtures first; do not claim a live run. |
+| (d) | Needs an external repo or system. If it cannot be read, write the Farside-local shape, say there was no access, and do not invent that system's details. iac-hub / dedicated AWS are switch-on-later, not (d) blockers. |
 
-Primary class is what **this item** needs. Many (a) tasks still wait on Farside predecessors that are (b)/(c)/(d).
+## This batch (dependency order)
 
-## Counts
+1. **E1-S1** (#10) + **E1-S6** (#36) + D1–D8 — this change.
+2. **E1-S2** (#16) — contract validators and scoring helper on fixtures; dashmeta formats used only if the repo is readable.
+3. **E1-S4** (#27) — reuse review of whatever Moonaan repos are readable; no client names copied.
+4. **E1-S5** (#31) — seed scripts and ground-truth **fixtures**; live subscription provision stays (c).
+5. **E2+** — screens, engine, and harvest against mocks; Identity/AIF/live Azure leftover called out.
 
-| Class | Items classified |
-|---|---|
-| (a) doable in code now | 119 |
-| (b) human decision / sign-off | 21 |
-| (c) live Azure / GCP / test tenant | 59 |
-| (d) external system or repo | 21 |
-
-## Recommended next batch (dependency order)
-
-After this E1-S3 change, these are the next stories that can move in code or in-repo docs. Later Azure/GCP stories stay parked until D1/D3/D6 and a test estate exist.
-
-1. **E1-S1 Boundary with dashmeta and Atlas** (#10) — draft T1 (#11) and T3 (#13) from the proposal so D1 (#1) has something to sign. T2 (#12) needs dashmeta Jira (d). T4/T5 are (b)/(d).
-2. **E1-S4 Reuse review** (#27) — T1–T3 (#28–#30) are reading Moonaan repos (dashmeta, AIF, atlas-aws, cost reporter) and writing a note here. BlockedBy E1-S1 in the backlog, but the reads do not need D1 closed. Do not copy client data.
-3. **E1-S6 Azure control spec** (#31) — T1 (#32) and T3 (#34) are in-repo spec/lint. T2 (#33) is a written registration approach for Ryan and Kevin. Backlog blockedBy E1-S2 and E1-S4; the proposal says the spec can be written from general knowledge before the test subscription exists.
-4. **E1-S2 Shared scan contracts** (#16) — only after dashmeta formats are readable (T1 #17) and Ryan signs additions (T2 #18). Then T3–T5 (#19–#21) are in-repo validators, package, and health-score helper.
-5. **E2-S1 CTO claim and sign-in** (#38) — unblocked by E1-S3 in the backlog, but T1 (#39) needs the AIF Program UI (d) and T2 (#40) needs Moonaan Identity (d). A navigation shell can start; do not invent Identity.
-
-Do **not** start E1-S5, E1-S7, or anything that claims a live Azure result until D3 (#3) funds a subscription. Do **not** add `farside` to iac-hub until D2 (#2) and D5 (#5) are closed.
+Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
 ## Decisions
 
-| Key | Issue | Title | Class | Why |
+Recorded in `docs/decisions.md`. Physical leftovers stay on the story that needs the tenant or the named prospect.
+
+| Key | Issue | Title | Class now | Leftover |
 |---|---|---|---|---|
-| `D1` | #1 | Who builds Azure and GCP infrastructure | (b) human decision / sign-off | Kevin and Ryan Morris must agree Farside vs dashmeta owns Azure/GCP infra and cost. |
-| `D2` | #2 | Separate product or inside dashmeta | (b) human decision / sign-off | Kevin and Ryan Morris: separate product vs inside dashmeta. Blocks final repo name and iac-hub entry. |
-| `D3` | #3 | Fund an Azure test subscription | (b) human decision / sign-off | Zach and Kevin: fund the Azure test subscription (and a second empty one). Also (c) once funded. |
-| `D4` | #4 | Name the first buyer | (b) human decision / sign-off | Kevin and sales: name the first Azure prospect. |
-| `D5` | #5 | Trademark search for the Farside name | (b) human decision / sign-off | Zach: trademark search before the name is in a repo or customer address. |
-| `D6` | #6 | Go or no-go: all conditions met | (b) human decision / sign-off | Kevin and Zach: go/no-go after D1, D3, and a named prospect saying they would pay. |
-| `D7` | #7 | Fund a GCP test project | (b) human decision / sign-off | Zach: fund a GCP test project. Also (c) once funded. |
-| `D8` | #8 | Billing approach and suspension rule | (b) human decision / sign-off | Zach: billing approach and suspension/grace/pause/retention periods. |
+| `D1` | #1 | Who builds Azure and GCP infrastructure | adopted | T5 Jira moves in dashmeta/AIF (#15) |
+| `D2` | #2 | Separate product or inside dashmeta | adopted | Org transfer to `Moonaan/moonaan-farside` |
+| `D3` | #3 | Fund an Azure test subscription | adopted as a decision | Physical subscriptions (E1-S5) |
+| `D4` | #4 | Name the first buyer | adopted as an approach | Sales names the prospect (E2-S7) |
+| `D5` | #5 | Trademark search for the Farside name | adopted | Formal counsel search; working clone name |
+| `D6` | #6 | Go or no-go | adopted: go for in-repo work | Live Azure data still needs the D3 estate |
+| `D7` | #7 | Fund a GCP test project | adopted as a decision | Physical project (E6-S1) |
+| `D8` | #8 | Billing approach and suspension rule | adopted (7/14/30-day ladder) | Read dashmeta billing UI when reachable |
 
 ## E1: Cleared to build and provable on a real Azure estate (#9)
 
-Phase 0 outcome. Mix of sign-off, contracts, repo, spec, and a live Azure estate.
+In-repo Phase 0 (boundary, spec, CI) can finish. Live proof still needs the Azure estate.
 
 | Key | Issue | Title | Class | Why |
 |---|---|---|---|---|
-| `E1` | #9 | Cleared to build and provable on a real Azure estate | (b) human decision / sign-off | Phase 0 outcome. Mix of sign-off, contracts, repo, spec, and a live Azure estate. |
-| `E1-S1` | #10 | Boundary with dashmeta and Atlas agreed in writing | (b) human decision / sign-off | Story closes only when D1 (#1) is signed by Ryan and Kevin. |
-| `E1-S1-T1` | #11 | Write the ownership table and attacker test | (a) doable in code now | Ownership table and attacker-test placements can be drafted from the proposal. |
-| `E1-S1-T2` | #12 | List overlaps with DAS-775 and DAS-776 | (d) external system or repo | Needs dashmeta Jira: DAS-775, DAS-776, DAS-923, 942–944, 982, 983, and Ryan reading the list. |
-| `E1-S1-T3` | #13 | Record the Jira review and handoff proposal | (a) doable in code now | Jira review/handoff list already written in the proposal; can be copied into a committed note. |
-| `E1-S1-T4` | #14 | Get sign-off and close decision D1 | (b) human decision / sign-off | Blocked on D1 (#1): Ryan's and Kevin's written agreement. |
-| `E1-S1-T5` | #15 | After sign-off, amend dashmeta and move AIF tickets | (d) external system or repo | Ryan amends dashmeta Jira; Zach moves AIF tickets. After D1 (#1). |
-| `E1-S2` | #16 | Shared scan contracts settled with dashmeta | (d) external system or repo | Needs dashmeta scan contracts and Ryan's recorded sign-off on additions. |
-| `E1-S2-T1` | #17 | List gaps between dashmeta contracts and Azure/GCP needs | (d) external system or repo | Read dashmeta checks/inventory/coverage/findings formats. |
-| `E1-S2-T2` | #18 | Propose and agree contract additions | (b) human decision / sign-off | Ryan's recorded sign-off on each contract addition. |
-| `E1-S2-T3` | #19 | Build contract validators and fixtures | (a) doable in code now | Validators and fixtures are in-repo once T1/T2 land. Not startable as the single owner of the format until then. |
-| `E1-S2-T4` | #20 | Publish the contracts as a versioned package | (a) doable in code now | Versioned package in this repo after T3. |
-| `E1-S2-T5` | #21 | Define the health score formula and own the scoring helper | (a) doable in code now | Health-score helper in this repo after T3. |
-| `E1-S3` | #22 | Farside repo with CI and a deploy skeleton | (d) external system or repo | In-repo layout and CI are done in this change. Live deploy and PRODUCTS registration are not. |
-| `E1-S3-T1` | #23 | Create the repo and project layout | (a) doable in code now | Repo layout is in this change. Leftover: GitHub branch protection settings, and the Moonaan/moonaan-farside rename after D2 (#2) and D5 (#5). |
-| `E1-S3-T2` | #24 | Add CI for lint, types and tests | (a) doable in code now | GitHub Actions CI is in this change. Leftover: mark the check required in repo settings so a failing branch is blocked. |
-| `E1-S3-T3` | #25 | Deploy an empty service and shell to dev | (d) external system or repo | Needs a dedicated Moonaan AWS account, OIDC, and a reachable URL. Also D5 (#5) for the hostname. See docs/e1-s3-remaining.md. |
-| `E1-S3-T4` | #26 | Register Farside in iac-hub PRODUCTS | (d) external system or repo | Must be merged in Moonaan/iac-hub PRODUCTS. Also D2 (#2) and D5 (#5). |
-| `E1-S4` | #27 | Reuse review of existing patterns and adapters | (d) external system or repo | Written review that must read dashmeta, AIF, Atlas, and the cost reporter. No client data is copied. |
-| `E1-S4-T1` | #28 | Review dashmeta Azure adapter and billing screen | (d) external system or repo | dashmeta Azure adapter and billing screen. |
-| `E1-S4-T2` | #29 | Review AIF connectors and scan for client names | (d) external system or repo | AIF connector-azure / connector-gcp, plus a client-name scan of the AIF repo. |
-| `E1-S4-T3` | #30 | Map Atlas and cost reporter patterns to checks | (d) external system or repo | atlas-aws catalog and moonaan-cost-reporter / moonaan-platform-cost. |
-| `E1-S5` | #31 | Azure test estate seeded with deliberate waste | (b) human decision / sign-off | Blocked on D3 (#3) and D6 (#6). Execution is (c) live Azure. |
-| `E1-S5-T1` | #32 | Provision the subscriptions and cost guard | (c) live Azure / GCP / test tenant | Create Azure subscriptions and a budget in a tenant separate from the app registration. D3 (#3). |
-| `E1-S5-T2` | #33 | Seed waste, resilience and lifecycle cases from code | (c) live Azure / GCP / test tenant | Seed waste/resilience/lifecycle resources in that subscription. |
-| `E1-S5-T3` | #34 | Write the ground-truth manifest with exceptions | (a) doable in code now | Ground-truth manifest is a file in this repo, but it is only checkable against the seeded estate (c). |
-| `E1-S5-T4` | #35 | Create the empty second subscription with no budget | (c) live Azure / GCP / test tenant | Second empty Azure subscription with no budget. D3 (#3). |
-| `E1-S6` | #36 | Azure control spec and app registration settled | (a) doable in code now | Spec writing is in-repo from general knowledge. Ryan/Kevin review of the registration note is human, not a numbered decision. |
-| `E1-S6-T1` | #37 | Write the Azure spec entries | (a) doable in code now | One spec entry per Azure launch check; lintable in CI. |
-| `E1-S6-T2` | #38 | Settle the app registration approach | (b) human decision / sign-off | Ryan and Kevin must review the app-registration / federated-credential note. |
-| `E1-S6-T3` | #39 | Define the unverified status and the support matrix template | (a) doable in code now | Unverified/not-supported rule and support-matrix template. |
-| `E1-S7` | #40 | Azure roles and APIs verified on the test subscription | (c) live Azure / GCP / test tenant | Live role and API runs on the test subscription. D3 (#3). |
-| `E1-S7-T1` | #41 | Run each role and query with read-only roles | (c) live Azure / GCP / test tenant | Run each spec query with only the proposed Azure roles. |
-| `E1-S7-T2` | #42 | Prove cross-tenant federated access | (c) live Azure / GCP / test tenant | Cross-tenant federated access against the test subscription. |
-| `E1-S7-T3` | #43 | Update the spec with verified status | (a) doable in code now | Mark spec entries verified from run records, after T1. |
-| `E1-S7-T4` | #44 | Publish the support matrix | (a) doable in code now | Publish the support matrix from those records. |
+| `E1` | #9 | Cleared to build and provable on a real Azure estate | (c) live leftover | Docs/spec/CI in-repo; live estate is E1-S5/S7. |
+| `E1-S1` | #10 | Boundary with dashmeta and Atlas agreed in writing | (d) T5 leftover | T1–T4 in this change. T5 still amends dashmeta/AIF Jira. |
+| `E1-S1-T1` | #11 | Write the ownership table and attacker test | (a) this change | `docs/boundary.md`. |
+| `E1-S1-T2` | #12 | List overlaps with DAS-775 and DAS-776 | (a) this change | Live Jira titles; Ryan reading satisfied by owner direction. |
+| `E1-S1-T3` | #13 | Record the Jira review and handoff proposal | (a) this change | Lists match the proposal. |
+| `E1-S1-T4` | #14 | Get sign-off and close decision D1 | adopted | Owner direction. |
+| `E1-S1-T5` | #15 | After sign-off, amend dashmeta and move AIF tickets | (d) external Jira | Do not fake ticket moves. |
+| `E1-S2` | #16 | Shared scan contracts settled with dashmeta | (a) fixtures | Build Farside-local contracts if dashmeta sources are unread; Ryan sign-off adopted. |
+| `E1-S2-T1` | #17 | List gaps between dashmeta contracts and Azure/GCP needs | (d) if unread | Read dashmeta formats when the repo opens; otherwise list gaps from the proposal. |
+| `E1-S2-T2` | #18 | Propose and agree contract additions | adopted | Owner direction on agreement-only steps. |
+| `E1-S2-T3` | #19 | Build contract validators and fixtures | (a) | Next code PR. |
+| `E1-S2-T4` | #20 | Publish the contracts as a versioned package | (a) | After T3. |
+| `E1-S2-T5` | #21 | Define the health score formula and own the scoring helper | (a) | After T3. |
+| `E1-S3` | #22 | Farside repo with CI and a deploy skeleton | switch-on-later | Layout+CI done. Deploy/iac-hub ready to switch on; not blockers. |
+| `E1-S3-T1` | #23 | Create the repo and project layout | (a) mostly done | Branch protection is on. Leftover: org transfer to `Moonaan/moonaan-farside`. |
+| `E1-S3-T2` | #24 | Add CI for lint, types and tests | (a) done | Required check is on. |
+| `E1-S3-T3` | #25 | Deploy an empty service and shell to dev | switch-on-later | Skip when credentials are missing; do not fail CI. |
+| `E1-S3-T4` | #26 | Register Farside in iac-hub PRODUCTS | switch-on-later | In-repo `PRODUCTS` sketch only; merge is in iac-hub. |
+| `E1-S4` | #27 | Reuse review of existing patterns and adapters | (d) | Read what is reachable; do not invent the rest. |
+| `E1-S4-T1` | #28 | Review dashmeta Azure adapter and billing screen | (d) | `Moonaan/moonaan-dashmeta-web` exists; other dashmeta repos may not. |
+| `E1-S4-T2` | #29 | Review AIF connectors and scan for client names | (d) | No AIF clone in this workspace. |
+| `E1-S4-T3` | #30 | Map Atlas and cost reporter patterns to checks | (d) | Atlas / cost-reporter repos if readable. |
+| `E1-S5` | #31 | Azure test estate seeded with deliberate waste | (c) | Decision D3 adopted; provision is still live Azure. Fixtures can be written first. |
+| `E1-S5-T1` | #32 | Provision the subscriptions and cost guard | (c) | Live Azure. |
+| `E1-S5-T2` | #33 | Seed waste, resilience and lifecycle cases from code | (c) + (a) scripts | Scripts in-repo; apply needs a subscription. |
+| `E1-S5-T3` | #34 | Write the ground-truth manifest with exceptions | (a) | Manifest file; live diff is (c). |
+| `E1-S5-T4` | #35 | Create the empty second subscription with no budget | (c) | Live Azure. |
+| `E1-S6` | #36 | Azure control spec and app registration settled | (a) this change | Spec, lint, matrix, registration note. Live verify is E1-S7. |
+| `E1-S6-T1` | #37 | Write the Azure spec entries | (a) this change | `docs/azure/launch-checks.json`. |
+| `E1-S6-T2` | #38 | Settle the app registration approach | adopted | `docs/azure/app-registration.md`. |
+| `E1-S6-T3` | #39 | Define the unverified status and the support matrix template | (a) this change | Lint fails without `status`; unverified ⇒ not-supported. |
+| `E1-S7` | #40 | Azure roles and APIs verified on the test subscription | (c) | Live role and API runs. |
+| `E1-S7-T1` | #41 | Run each role and query with read-only roles | (c) | Live. |
+| `E1-S7-T2` | #42 | Prove cross-tenant federated access | (c) | Live. |
+| `E1-S7-T3` | #43 | Update the spec with verified status | (a) | After a dated run record. |
+| `E1-S7-T4` | #44 | Publish the support matrix | (a) | After run records. |
 
 ## E2: Connect Azure and see the estate (#45)
 
