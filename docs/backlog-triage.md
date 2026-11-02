@@ -19,8 +19,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 2. **E1-S2** (#16) — merged (`@farside/scan-contracts` 0.1.0).
 3. **E1-S4** (#27) — this change: reuse review of reachable Moonaan repos; no client names copied.
 4. **E1-S5** (#31) — this change: seed plan + ground-truth **fixtures**; live subscription provision stays (c).
-5. **E2 in-repo** — this change: org scoping, no-secrets, Connect, inventory mapping, no-owner. Identity, live federated connect, and live harvest leftover.
-6. **E2+ remaining** — coverage/blind spots, estate/inventory/settings screens, scan runner against mocks.
+5. **E2 in-repo (org/connect/inventory)** — merged (#226).
+6. **E2-S4** — this change: coverage states, shared scorer, Blind spots, cause copy.
+7. **E2+ remaining** — estate/inventory/settings screens, scan runner against mocks.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -107,11 +108,11 @@ Phase 1 needs Identity, a live Azure connect, and a test tenant.
 | `E2-S3-T3` | #61 | Store inventory as aggregates and identifiers | (a) this change | Fixture harvest maps to the inventory contract; payload fields dropped. Live Resource Graph is (c)/(d). |
 | `E2-S3-T4` | #62 | Compute no-owner totals | (a) this change | Matches untagged `disk-unattached` in the ground-truth manifest. Live harvest diff is (c). |
 | `E2-S3-T5` | #63 | Compare live inventory to ground truth | (c) live Azure / GCP / test tenant | Diff live inventory to ground truth. |
-| `E2-S4` | #64 | Coverage model and the Blind spots screen | (a) doable in code now | Coverage model and Blind spots UI over stored scan data. Needs harvest from E2-S3. |
-| `E2-S4-T1` | #65 | Record coverage per scope and check | (a) doable in code now | Coverage states in the check/harvest path. |
-| `E2-S4-T2` | #66 | Use the contract scoring helper for coverage | (a) doable in code now | Call the E1-S2 scoring helper; no second implementation. |
-| `E2-S4-T3` | #67 | Build the Blind spots screen | (a) doable in code now | Blind spots screen. |
-| `E2-S4-T4` | #68 | Write plain-language reasons for each cause | (a) doable in code now | Plain-language reasons; copy review is human but not a numbered decision. |
+| `E2-S4` | #64 | Coverage model and the Blind spots screen | (a) this change | Coverage + Blind spots over stored/fixture scan data. Live missing-role proof is (c). |
+| `E2-S4-T1` | #65 | Record coverage per scope and check | (a) this change | Assessed / unassessed / undetermined unit tests. |
+| `E2-S4-T2` | #66 | Use the contract scoring helper for coverage | (a) this change | `scoreHealth` only; unassessed scopes leave the score unchanged. |
+| `E2-S4-T3` | #67 | Build the Blind spots screen | (a) this change | Table of why/closer; axe + e2e. |
+| `E2-S4-T4` | #68 | Write plain-language reasons for each cause | (a) this change | missing_role, throttling, unsupported_type, failed_call copy. |
 | `E2-S5` | #69 | Estate overview, Inventory and Settings screens | (a) doable in code now | Estate/Inventory/Settings screens over stored data. Empty states do not need Azure. |
 | `E2-S5-T1` | #70 | Build the Estate overview | (a) doable in code now | Estate overview. |
 | `E2-S5-T2` | #71 | Build the Inventory screen | (a) doable in code now | Inventory screen. |

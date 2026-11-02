@@ -1,4 +1,5 @@
 import { useEffect, useState, type MouseEvent } from "react";
+import { BlindSpots } from "./BlindSpots";
 import { Connect } from "./Connect";
 import { EMPTY_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
 
@@ -24,7 +25,8 @@ export function App() {
     document.getElementById("page-title")?.focus();
   }, [hash]);
 
-  const onConnect = hash === "connect";
+  const page =
+    hash === "connect" ? "connect" : hash === "blind-spots" ? "blind-spots" : "empty";
 
   return (
     <div>
@@ -44,8 +46,10 @@ export function App() {
         </nav>
       </header>
       <main id="main" tabIndex={-1}>
-        {onConnect ? (
+        {page === "connect" ? (
           <Connect />
+        ) : page === "blind-spots" ? (
+          <BlindSpots />
         ) : (
           <>
             <h1 id="page-title" tabIndex={-1}>

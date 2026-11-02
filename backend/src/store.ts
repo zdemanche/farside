@@ -1,4 +1,5 @@
-import type { Inventory } from "@farside/scan-contracts";
+import type { Finding, Inventory } from "@farside/scan-contracts";
+import type { CoverageEntry } from "./coverage.js";
 import { REQUIRED_AZURE_ROLES } from "./roles.js";
 import { assertNoSecrets } from "./secrets.js";
 
@@ -13,10 +14,12 @@ export type Connection = {
 export type OrgState = {
   connections: Connection[];
   inventory: Inventory | null;
+  coverage: CoverageEntry[];
+  findings: Finding[];
 };
 
 function emptyOrg(): OrgState {
-  return { connections: [], inventory: null };
+  return { connections: [], inventory: null, coverage: [], findings: [] };
 }
 
 export class MemoryStore {
@@ -58,6 +61,18 @@ export class MemoryStore {
     };
     this.org(orgId).connections.push(connection);
     return connection;
+  }
+
+  putCoverage(orgId: string, coverage: CoverageEntry[]): CoverageEntry[] {
+    assertNoSecrets(coverage);
+    this.org(orgId).coverage = coverage;
+    return coverage;
+  }
+
+  putFindings(orgId: string, findings: Finding[]): Finding[] {
+    assertNoSecrets(findings);
+    this.org(orgId).findings = findings;
+    return findings;
   }
 
   deleteConnection(orgId: string, connectionId: string): boolean {
