@@ -39,8 +39,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 22. **E5-S1** — merged (#249).
 23. **E5-S2** — merged (#250). Soak week is (c) #167.
 24. **E5-S3** — merged (#251). Billing screen waits on #243.
-25. **E5-S4** — this change: operator runbook. Deploy (#175) and rehearsal (#176) stay leftover.
-26. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+25. **E5-S4** — merged (#252). Deploy (#175) and rehearsal (#176) stay leftover.
+26. **E5-S5** — this change: org deletion and scan stop. Offboarding screen waits on #243. Account retire is (c) #182.
+27. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -262,10 +263,10 @@ Sell-ready path uses iac-hub, Identity, billing (D8), and a test tenant.
 | `E5-S4-T2` | #175 | Automate the Farside deploy for a customer account | (d) external system or repo | Parameterised customer deploy through iac-hub. |
 | `E5-S4-T3` | #176 | Rehearse end to end on a test tenant | (c) live Azure / GCP / test tenant | Rehearse sale-to-first-scan on a test tenant. |
 | `E5-S4-T4` | #177 | Add rollback and retry notes | (a) this change | Known-path rollback on each step. Rehearsal-found failures leftover #176. |
-| `E5-S5` | #178 | Customer can leave cleanly | (b) human decision / sign-off | Account retirement follows D8 (#8). Data deletion tests are (a); live account close is (c). |
-| `E5-S5-T1` | #179 | Implement data deletion for an org | (a) doable in code now | Org data deletion tests. |
-| `E5-S5-T2` | #180 | Remove credentials and stop scans on offboarding | (a) doable in code now | Remove credentials and cancel schedules. |
-| `E5-S5-T3` | #181 | Build the offboarding screen and grant list | (a) doable in code now | Offboarding screen. |
+| `E5-S5` | #178 | Customer can leave cleanly | (a) this change | Deletion API and scan stop. Screen is #181 / #243. Account retire is (c) #182. |
+| `E5-S5-T1` | #179 | Implement data deletion for an org | (a) this change | Org data deleted; deletion record kept. |
+| `E5-S5-T2` | #180 | Remove credentials and stop scans on offboarding | (a) this change | Connections removed; pending schedule cancelled. |
+| `E5-S5-T3` | #181 | Build the offboarding screen and grant list | (a) leftover | Left for the design-system pass (#243). Grant list is on the deletion record. |
 | `E5-S5-T4` | #182 | Retire the dedicated account at offboarding | (c) live Azure / GCP / test tenant | Retire the dedicated account; D8 (#8). |
 | `E5-S6` | #183 | Export issues, inventory and cost | (a) doable in code now | Export endpoints and buttons over stored aggregates. |
 | `E5-S6-T1` | #184 | Build export endpoints with a fixed format | (a) doable in code now | Export API and schema tests. |
