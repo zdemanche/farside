@@ -11,6 +11,7 @@ const COLLECTIONS: Record<string, string> = {
   Snapshot: "snapshots",
   Image: "images",
   Instance: "instances",
+  Cluster: "clusters",
 };
 
 export type GcpGroundTruthItem = {
@@ -45,6 +46,9 @@ export function gcpResourceUri(item: GcpGroundTruthItem): string {
   const collection = (kind && COLLECTIONS[kind]) || "resources";
   if (item.region === "global") {
     return `//${service}/projects/${item.project}/global/${collection}/${item.id}`;
+  }
+  if (service === "container.googleapis.com") {
+    return `//${service}/projects/${item.project}/locations/${item.region}/${collection}/${item.id}`;
   }
   if (/-[a-z]$/.test(item.region)) {
     return `//${service}/projects/${item.project}/zones/${item.region}/${collection}/${item.id}`;
@@ -112,6 +116,12 @@ export function factsFromGcpManifest(manifest: GcpGroundTruthManifest): Resource
     }
     if (item.type === "compute.googleapis.com/Image") {
       fields.snapshotOrImageId = item.id;
+    }
+    if (item.type === "sqladmin.googleapis.com/Instance") {
+      fields.resourceKind = "sql";
+    }
+    if (item.type === "container.googleapis.com/Cluster") {
+      fields.resourceKind = "gke";
     }
     return { resourceUri: gcpResourceUri(item), fields };
   });

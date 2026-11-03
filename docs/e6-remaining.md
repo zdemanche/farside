@@ -11,6 +11,7 @@ The GCP control spec lists every launch check from the proposal table as unverif
 | E6-S3-T1 | #200 | `gcp-waste-unattached-disks` and `gcp-waste-unused-external-ips` fail `disk-parked` / `addr-idle` and pass the in-use lookalikes. Savings are named ranges. Recommender idle findings stay leftover (#202). |
 | E6-S3-T2 | #201 | `gcp-waste-old-snapshots-and-images` fails `snap-aged` / `image-stale` and passes `snap-fresh` / `image-current` using `Settings.snapshotRetentionDays`. |
 | E6-S3-T4 | #203 | Empty Recommender lists say none were returned and do not claim the estate is clean. Missing Recommender Viewer is unassessed. Savings are Recommender min/max ranges only. Live harvest is leftover (#202). |
+| E6-S4-T2 | #206 | `docs/gcp/support-versions.json` lists MYSQL_5_6 and GKE 1.24 with sources. The check fails `sql-stale` / `gke-stale` and passes unlisted current versions with the catalogue source and date. |
 
 ## Leftovers
 

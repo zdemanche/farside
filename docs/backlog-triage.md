@@ -46,8 +46,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 29. **E6-S2-T3** — merged (#256). GCP owner-label gaps against fixtures. Cloud Asset harvest is #197.
 30. **E6-S3-T1** — merged (#257). GCP unattached disks and unused IPs against fixtures.
 31. **E6-S3-T2** — merged (#258). GCP old snapshots and images against fixtures.
-32. **E6-S3-T4** — this change: savings ranges and honest empty Recommender wording. Live harvest is #202.
-33. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+32. **E6-S3-T4** — merged (#296). Savings ranges and honest empty Recommender wording. Live harvest is #202.
+33. **E6-S4-T2** — this change: SQL/GKE support catalogue and check against fixtures.
+34. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -304,7 +305,7 @@ Entire GCP epic needs D7 (#7) and a live project. Collectors also (d) AIF.
 | `E6-S3-T4` | #203 | Add savings ranges and the empty-result wording | (a) this change | Empty-result wording and range-only savings. Live harvest is #202. |
 | `E6-S4` | #204 | GCP resilience and lifecycle checks | (a) doable in code now | SQL HA/backup, support data, cert expiry. Seeded live proof is (c). |
 | `E6-S4-T1` | #205 | Implement Cloud SQL high availability and backup checks | (c) live Azure / GCP / test tenant | Cloud SQL HA/backup against seeded instances. |
-| `E6-S4-T2` | #206 | Build SQL and GKE support data and checks | (a) doable in code now | SQL/GKE support data and checks. |
+| `E6-S4-T2` | #206 | Build SQL and GKE support data and checks | (a) this change | Farside-test catalogue + fixture check. Live announcement source leftover. |
 | `E6-S4-T3` | #207 | Implement certificate expiry check | (c) live Azure / GCP / test tenant | Certificate Manager expiry against a seeded cert. |
 | `E6-S5` | #208 | GCP billing export onboarding with an empty first day | (c) live Azure / GCP / test tenant | Billing export onboarding needs the live dataset from E6-S1-T6. |
 | `E6-S5-T1` | #209 | Detect export state and show onboarding steps | (c) live Azure / GCP / test tenant | Detect export dataset state. |

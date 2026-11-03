@@ -14,6 +14,7 @@ import {
   GCP_UNATTACHED_DISKS,
   GCP_UNUSED_IPS,
 } from "./gcp-checks.js";
+import { checkGcpSqlGkeSupport, GCP_SQL_GKE_SUPPORT } from "./gcp-support.js";
 import { projectOf } from "./gcp-inventory.js";
 import { loadRetiringSkus } from "./retiring.js";
 import type { OrgSettings } from "./settings.js";
@@ -963,6 +964,7 @@ export const CHECK_REGISTRY: Record<string, CheckFn> = {
   [GCP_UNATTACHED_DISKS]: checkGcpUnattachedDisks,
   [GCP_UNUSED_IPS]: checkGcpUnusedIps,
   [GCP_OLD_SNAPSHOTS_AND_IMAGES]: checkGcpOldSnapshotsAndImages,
+  [GCP_SQL_GKE_SUPPORT]: checkGcpSqlGkeSupport,
 };
 
 export function registeredCheckIds(cloud: Inventory["cloud"]): string[] {

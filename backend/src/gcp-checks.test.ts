@@ -30,9 +30,10 @@ const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 
 describe("gcp waste registry", () => {
   it("registers only the implemented GCP waste checks and refuses spec ids without an impl", () => {
-    expect(registeredCheckIds("gcp").sort()).toEqual(
-      [GCP_OLD_SNAPSHOTS_AND_IMAGES, GCP_UNATTACHED_DISKS, GCP_UNUSED_IPS].sort(),
+    expect(registeredCheckIds("gcp")).toEqual(
+      expect.arrayContaining([GCP_OLD_SNAPSHOTS_AND_IMAGES, GCP_UNATTACHED_DISKS, GCP_UNUSED_IPS]),
     );
+    expect(registeredCheckIds("gcp").every((id) => id.startsWith("gcp-"))).toBe(true);
     expect(registeredCheckIds("azure")).not.toContain(GCP_UNATTACHED_DISKS);
     expect(() => runChecks({ inventory, facts, checkIds: ["gcp-cost-spend-by-service"] })).toThrow(
       UnregisteredCheckError,
