@@ -15,6 +15,12 @@ import {
   type CoverageState,
 } from "./coverage.js";
 import type { CoverageCauseId } from "./causes.js";
+import {
+  applyCostCoverage,
+  defaultCostClient,
+  harvestCost,
+  type CostQueryClient,
+} from "./cost.js";
 import { estateOverview } from "./estate.js";
 import { applyOwnerTag, filterInventory, groupInventory, noOwnerTotal } from "./inventory.js";
 import { SecretLeakError, assertNoSecrets } from "./secrets.js";
@@ -94,7 +100,7 @@ function connectionInput(body: unknown): { tenantId: string; subscriptionId: str
 
 export function buildApp(
   store: MemoryStore = new MemoryStore(),
-  options: { harvester?: Harvester } = {},
+  options: { harvester?: Harvester; costClient?: CostQueryClient } = {},
 ) {
   const runner = new ScanRunner(store, options.harvester ?? defaultHarvester());
   const app = Fastify({ logger: false });
@@ -287,6 +293,61 @@ export function buildApp(
       return reply;
     }
     return sendClean(reply, 200, { issues: store.snapshot(request.params.orgId).issues });
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/cost", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    const cost = store.snapshot(request.params.orgId).cost;
+    if (!cost) {
+      return problem(reply, 404, "Not found");
+    }
+    return sendClean(reply, 200, cost);
+  });
+
+  app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/cost", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    if (rejectSecrets(request.body, reply)) {
+      return reply;
+    }
+    const body = request.body as Record<string, unknown> | null;
+    const subscriptionId = body && typeof body.subscriptionId === "string" ? body.subscriptionId : "";
+    if (!subscriptionId) {
+      return problem(reply, 400, "Invalid cost harvest", {
+        errors: [{ path: "subscriptionId", message: "required string" }],
+      });
+    }
+    const billingScope =
+      body && typeof body.billingScope === "string" && body.billingScope.length > 0
+        ? body.billingScope
+        : `/subscriptions/${subscriptionId}`;
+    const agreementType =
+      body && typeof body.agreementType === "string" && body.agreementType.length > 0
+        ? body.agreementType
+        : "payg";
+    const harvested = await harvestCost({
+      client: options.costClient ?? defaultCostClient(),
+      subscriptionId,
+      billingScope,
+      agreementType,
+    });
+    store.putCoverage(
+      request.params.orgId,
+      applyCostCoverage(store.snapshot(request.params.orgId).coverage, harvested.coverage),
+    );
+    if (!harvested.ok) {
+      store.putCost(request.params.orgId, null);
+      return sendClean(reply, 200, {
+        harvested: false,
+        reason: harvested.reason,
+        closer: harvested.coverage[0]?.closer,
+      });
+    }
+    store.putCost(request.params.orgId, harvested.snapshot);
+    return sendClean(reply, 200, { harvested: true, cost: harvested.snapshot });
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/estate", async (request, reply) => {

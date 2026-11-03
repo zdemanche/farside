@@ -29,8 +29,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 12. **E3-S4** — merged (#238).
 13. **E3-S5** — merged (#239).
 14. **E3-S6** — merged (#240).
-15. **E3-S7** — this change: scan history API, Scans list/detail, live progress on a fake slow scan.
-16. **E3+ remaining** — live Azure accuracy (#121–#125).
+15. **E3-S7** — merged (#241).
+16. **E4-S1** — this change: Cost Management harvest (multi-page fake), billing scope/currency, month-on-month.
+17. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -194,10 +195,10 @@ Azure Cost Management and reservations need a live subscription. Floor/burst mat
 | Key | Issue | Title | Class | Why |
 |---|---|---|---|---|
 | `E4` | #126 | Azure cost, waste, alerts and the CTO headline | (c) live Azure / GCP / test tenant | Azure Cost Management and reservations need a live subscription. Floor/burst math is (a). |
-| `E4-S1` | #127 | Azure spend harvested and shown by service and month | (c) live Azure / GCP / test tenant | Cost harvest must match the portal, including paging and agreement types. |
-| `E4-S1-T1` | #128 | Build the Cost Management harvester with paging | (c) live Azure / GCP / test tenant | Cost Management harvester; multi-page fake is (a), portal match is (c). |
-| `E4-S1-T2` | #129 | Record billing scope and currency per figure | (a) doable in code now | Billing scope and currency rules. |
-| `E4-S1-T3` | #130 | Compute month-on-month change | (a) doable in code now | Month-on-month change. |
+| `E4-S1` | #127 | Azure spend harvested and shown by service and month | (a) this change | Multi-page fake harvest, scope/currency, MoM. Portal match is (c) #131. |
+| `E4-S1-T1` | #128 | Build the Cost Management harvester with paging | (a) this change | Multi-page fake. Portal match is (c). |
+| `E4-S1-T2` | #129 | Record billing scope and currency per figure | (a) this change | Billing scope and currency rules. |
+| `E4-S1-T3` | #130 | Compute month-on-month change | (a) this change | Month-on-month change. |
 | `E4-S1-T4` | #131 | Verify totals against the portal and note untested agreement types | (c) live Azure / GCP / test tenant | Verify totals against the portal; list untested agreement types. |
 | `E4-S2` | #132 | Reservation and savings plan use shown | (c) live Azure / GCP / test tenant | Reservation/savings-plan APIs. Unverified if the test sub has no commitments. |
 | `E4-S2-T1` | #133 | Harvest reservation and savings plan utilization | (c) live Azure / GCP / test tenant | Harvest utilization with Reservations Reader. |

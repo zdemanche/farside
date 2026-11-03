@@ -1,0 +1,30 @@
+{
+  "note": "Fake Azure Cost Management Query pages for E4-S1 paging tests. These are not portal-verified billed months.",
+  "firstPage": "page-1",
+  "pages": {
+    "page-1": {
+      "rows": [
+        { "date": "2026-09-01", "serviceName": "Virtual Machines", "costAmount": "20.00", "currency": "USD" },
+        { "date": "2026-09-01", "serviceName": "Storage", "costAmount": "5.00", "currency": "USD" },
+        { "date": "2026-09-02", "serviceName": "Virtual Machines", "costAmount": "20.00", "currency": "USD" }
+      ],
+      "nextPage": "page-2"
+    },
+    "page-2": {
+      "rows": [
+        { "date": "2026-09-02", "serviceName": "Storage", "costAmount": "5.00", "currency": "USD" },
+        { "date": "2026-10-01", "serviceName": "Virtual Machines", "costAmount": "25.00", "currency": "USD" },
+        { "date": "2026-10-01", "serviceName": "Storage", "costAmount": "6.00", "currency": "USD" },
+        { "date": "2026-10-02", "serviceName": "Virtual Machines", "costAmount": "25.00", "currency": "USD" },
+        { "date": "2026-10-02", "serviceName": "Storage", "costAmount": "6.00", "currency": "USD" }
+      ],
+      "nextPage": "page-3"
+    },
+    "page-3": {
+      "rows": [
+        { "date": "2026-11-01", "serviceName": "Virtual Machines", "costAmount": "2.00", "currency": "USD" },
+        { "date": "2026-11-02", "serviceName": "Virtual Machines", "costAmount": "2.00", "currency": "USD" }
+      ]
+    }
+  }
+}

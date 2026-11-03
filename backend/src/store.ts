@@ -4,6 +4,7 @@ import type { ResourceFacts } from "./facts.js";
 import type { StoredIssue } from "./issues.js";
 import { applyOwnerTag } from "./inventory.js";
 import { REQUIRED_AZURE_ROLES } from "./roles.js";
+import type { CostSnapshot } from "./cost.js";
 import type { ScanJob } from "./scans.js";
 import { assertNoSecrets } from "./secrets.js";
 import { DEFAULT_SETTINGS, type OrgSettings } from "./settings.js";
@@ -25,6 +26,7 @@ export type OrgState = {
   scans: ScanJob[];
   facts: ResourceFacts[];
   issues: StoredIssue[];
+  cost: CostSnapshot | null;
 };
 
 function emptyOrg(): OrgState {
@@ -37,6 +39,7 @@ function emptyOrg(): OrgState {
     scans: [],
     facts: [],
     issues: [],
+    cost: null,
   };
 }
 
@@ -103,6 +106,14 @@ export class MemoryStore {
     assertNoSecrets(issues);
     this.org(orgId).issues = issues;
     return issues;
+  }
+
+  putCost(orgId: string, cost: CostSnapshot | null): CostSnapshot | null {
+    if (cost) {
+      assertNoSecrets(cost);
+    }
+    this.org(orgId).cost = cost;
+    return cost;
   }
 
   putSettings(orgId: string, settings: OrgSettings): OrgSettings {
