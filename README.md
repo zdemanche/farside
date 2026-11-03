@@ -6,7 +6,7 @@ A continuous infrastructure product for Azure and GCP. It connects to a cloud es
 
 The [proposal](docs/proposal.md) is the product brief. Decisions D1–D8 are recorded in [docs/decisions.md](docs/decisions.md). Boundary: [docs/boundary.md](docs/boundary.md). Scan contracts: [docs/scan-contracts.md](docs/scan-contracts.md). Azure launch spec: [docs/azure/launch-checks.json](docs/azure/launch-checks.json), [support matrix](docs/azure/support-matrix.md), [app registration](docs/azure/app-registration.md). GCP launch spec: [docs/gcp/launch-checks.json](docs/gcp/launch-checks.json), [support matrix](docs/gcp/support-matrix.md), [ground-truth fixtures](docs/gcp/ground-truth.json).
 
-[E1-S3](https://github.com/zdemanche/farside/issues/22) added a TypeScript repo layout, CI, and an in-repo deploy skeleton. Dedicated AWS deploy and iac-hub `PRODUCTS` registration are switch-on-later integrations; they are not blockers. See [docs/e1-s3-remaining.md](docs/e1-s3-remaining.md). Sale-to-first-scan steps: [docs/operator-runbook.md](docs/operator-runbook.md). Releases: [docs/releasing.md](docs/releasing.md).
+[E1-S3](https://github.com/zdemanche/farside/issues/22) added a TypeScript repo layout, CI, and an in-repo deploy skeleton. Dedicated AWS deploy and iac-hub `PRODUCTS` registration are switch-on-later integrations; they are not blockers. See [docs/e1-s3-remaining.md](docs/e1-s3-remaining.md). Sale-to-first-scan steps: [docs/operator-runbook.md](docs/operator-runbook.md). Releases and GHCR images: [docs/releasing.md](docs/releasing.md).
 
 Working repository: `zdemanche/farside`. Adopted name: `Moonaan/moonaan-farside`, key `farside`, address `farside.<customer>.moonaan.com`.
 

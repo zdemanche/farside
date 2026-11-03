@@ -37,15 +37,29 @@ Dependabot and audit titles that are not conventional do not bump the version. P
 
 ## Workflow permissions
 
-`.github/workflows/release.yml` uses `GITHUB_TOKEN` with `contents: write` and `pull-requests: write` only. No packages, id-token, or issues scopes.
+The release-please job uses `GITHUB_TOKEN` with `contents: write` and `pull-requests: write` only. The image-publish job (same workflow, only when a release is created) uses `contents: read` and `packages: write`. No id-token or issues scopes.
 
 The repository must allow GitHub Actions to create pull requests (Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests").
 
-A `GITHUB_TOKEN`-created tag or Release does not start other workflows. A PAT on the release workflow is leftover if we later want CI to run on the release PR itself, or want a tag to trigger a separate publish workflow. Until then, a publish job can run in the same workflow as release-please, or a human can dispatch it.
+A `GITHUB_TOKEN`-created tag or Release does not start other workflows. The Release workflow therefore calls the Containers workflow when a release is created. A PAT is leftover if we later want CI to run on the release PR itself.
+
+## Container images
+
+On a published `v*` tag (or the Release workflow after a release PR merge), GitHub Actions builds and pushes:
+
+| Image | What it is |
+|---|---|
+| `ghcr.io/zdemanche/farside-api` | Fastify API, `node:22-bookworm-slim`, user `node`, `GET /health` |
+| `ghcr.io/zdemanche/farside-console` | Vite static assets behind `nginx-unprivileged` on 8080 |
+
+Tags: semver (`0.1.0`, `0.1`), `sha-<short>`, and `latest`. Provenance (`mode=max`) and SBOM are attached to the pushed image. The token is `GITHUB_TOKEN` with `packages: write` (and `contents: read` for checkout).
+
+Pull requests run `docker build` only (no push, no attestations) so the Dockerfiles stay green. That check is not required on `main`.
+
+`workflow_dispatch` can republish the current SHA.
 
 ## Follow-ups
 
 | What | When |
 |---|---|
-| Container images to GHCR (`ghcr.io/zdemanche/farside-api`, `farside-console`) | Next (PR B). Not in this change. |
 | GitHub Pages demo-mode console | After the console design pass ([#243](https://github.com/zdemanche/farside/issues/243) dependents) lands. Do not start it now. |
