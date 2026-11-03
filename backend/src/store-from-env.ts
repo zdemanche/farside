@@ -10,5 +10,13 @@ export async function storeFromEnv(
   if (kind === "memory") {
     return new MemoryStore(clock);
   }
-  throw new Error(`unsupported FARSIDE_STORE "${kind}"`);
+  if (kind !== "dynamo") {
+    throw new Error(`unsupported FARSIDE_STORE "${kind}"`);
+  }
+  const table = env.FARSIDE_TABLE_NAME;
+  if (!table) {
+    throw new Error("FARSIDE_TABLE_NAME is required when FARSIDE_STORE=dynamo");
+  }
+  const { DynamoStore, documentClient } = await import("./dynamo-store.js");
+  return new DynamoStore(documentClient(), table, clock);
 }
