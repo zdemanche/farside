@@ -39,9 +39,7 @@ function selectedId(hash: string): string {
 }
 
 function currentHash(): string {
-  return typeof window === "undefined"
-    ? "issues"
-    : window.location.hash.replace(/^#\/?/, "");
+  return typeof window === "undefined" ? "issues" : window.location.hash.replace(/^#\/?/, "");
 }
 
 function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
@@ -62,9 +60,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
     (!filters.subscription || issue.subscription === filters.subscription);
   const visible = issues.filter((issue) => passes(issue, false));
   const hiddenByStatus = filters.status
-    ? issues.filter(
-        (issue) => passes(issue, true) && issue.status !== filters.status,
-      ).length
+    ? issues.filter((issue) => passes(issue, true) && issue.status !== filters.status).length
     : 0;
   const checks = [...new Set(issues.map((issue) => issue.checkId))];
   const subscriptions = [...new Set(issues.map((issue) => issue.subscription))];
@@ -79,9 +75,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
             id={checkId}
             name="check"
             value={filters.check}
-            onChange={(event) =>
-              setFilters({ ...filters, check: event.target.value })
-            }
+            onChange={(event) => setFilters({ ...filters, check: event.target.value })}
           >
             <option value="">All checks</option>
             {checks.map((id) => (
@@ -118,9 +112,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
             id={subscriptionId}
             name="subscription"
             value={filters.subscription}
-            onChange={(event) =>
-              setFilters({ ...filters, subscription: event.target.value })
-            }
+            onChange={(event) => setFilters({ ...filters, subscription: event.target.value })}
           >
             <option value="">All subscriptions</option>
             {subscriptions.map((id) => (
@@ -136,10 +128,8 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
       </p>
       {hiddenByStatus > 0 ? (
         <p className="notice">
-          Showing {filters.status.replace("_", " ")} issues only.{" "}
-          {hiddenByStatus} more{" "}
-          {hiddenByStatus === 1 ? "issue is" : "issues are"} hidden by the
-          status filter.{" "}
+          Showing {filters.status.replace("_", " ")} issues only. {hiddenByStatus} more{" "}
+          {hiddenByStatus === 1 ? "issue is" : "issues are"} hidden by the status filter.{" "}
           <button
             className="action action-secondary"
             type="button"
@@ -161,12 +151,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
           </button>
         </p>
       ) : (
-        <div
-          className="table-wrap"
-          role="region"
-          aria-labelledby="issues-caption"
-          tabIndex={0}
-        >
+        <div className="table-wrap" role="region" aria-labelledby="issues-caption" tabIndex={0}>
           <table>
             <caption id="issues-caption">Issue queue</caption>
             <thead>
@@ -189,9 +174,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
                   <td>{issue.checkId}</td>
                   <td>
                     <Chip tone={STATUS_TONE[issue.status]}>
-                      {issue.status === "not_confirmed"
-                        ? "not confirmed"
-                        : issue.status}
+                      {issue.status === "not_confirmed" ? "not confirmed" : issue.status}
                     </Chip>
                   </td>
                   <td>
@@ -212,8 +195,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
             {shortName(selected.resourceId)}
           </h2>
           <p>
-            Resource{" "}
-            <a href={inventoryHref(selected.resourceId)}>Find in Inventory</a>
+            Resource <a href={inventoryHref(selected.resourceId)}>Find in Inventory</a>
           </p>
           <p>Check {selected.checkId}</p>
           <p>Evidence {selected.evidence}</p>
@@ -227,16 +209,12 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
           </p>
           {selected.closingScanId ? (
             <p>
-              Closing scan{" "}
-              <a href={scanHref(selected.closingScanId)}>
-                {selected.closingScanId}
-              </a>
+              Closing scan <a href={scanHref(selected.closingScanId)}>{selected.closingScanId}</a>
             </p>
           ) : null}
           {selected.notConfirmedReason ? (
             <p>
-              Not confirmed {selected.notConfirmedReason}{" "}
-              <a href="#blind-spots">See blind spots</a>
+              Not confirmed {selected.notConfirmedReason} <a href="#blind-spots">See blind spots</a>
             </p>
           ) : null}
         </article>
@@ -263,8 +241,8 @@ export function Issues({ hash = currentHash() }: { hash?: string }) {
         Issues
       </h1>
       <p className="page-description">
-        Stored issues with proof the scope was {TERMS.assessed}. An issue closes
-        only when its scope was {TERMS.assessed}.
+        Stored issues with proof the scope was {TERMS.assessed}. An issue closes only when its scope
+        was {TERMS.assessed}.
       </p>
       <LastScan />
       <ScreenState

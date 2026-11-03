@@ -133,8 +133,16 @@ const PRODUCTION = { productionMarker: "environment=prod", productionCount: 2 };
 const RECOVERY_FINDINGS: Finding[] = [
   finding(VM_BACKUP, "fail", { vmId: "vm-prod-no-backup", ...PRODUCTION, protected: false }),
   finding(VM_BACKUP, "pass", { vmId: "vm-prod-backed-up", ...PRODUCTION, protected: true }),
-  finding(SQL_BACKUP, "fail", { sqlResourceId: "sql-prod-no-backup", ...PRODUCTION, protected: false }),
-  finding(SQL_BACKUP, "pass", { sqlResourceId: "sql-prod-backed-up", ...PRODUCTION, protected: true }),
+  finding(SQL_BACKUP, "fail", {
+    sqlResourceId: "sql-prod-no-backup",
+    ...PRODUCTION,
+    protected: false,
+  }),
+  finding(SQL_BACKUP, "pass", {
+    sqlResourceId: "sql-prod-backed-up",
+    ...PRODUCTION,
+    protected: true,
+  }),
   finding("azure-resilience-db-zone-or-geo", "fail", {
     databaseId: "db-no-zone-geo",
     zoneRedundant: false,

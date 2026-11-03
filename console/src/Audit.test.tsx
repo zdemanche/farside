@@ -32,10 +32,7 @@ describe("console audit behaviours", () => {
   });
 
   it("builds Inventory filters from the data and filters to a uksouth record owned by acme", async () => {
-    renderScreen(
-      <Inventory hash="inventory" />,
-      sourceWith({ inventory: async () => [ACME] }),
-    );
+    renderScreen(<Inventory hash="inventory" />, sourceWith({ inventory: async () => [ACME] }));
     expect(await screen.findByText("1 resource")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Region"), {
       target: { value: "uksouth" },
@@ -51,17 +48,13 @@ describe("console audit behaviours", () => {
       target: { value: "none" },
     });
     expect(screen.queryByRole("row", { name: /Acme storage/ })).toBeNull();
-    expect(
-      screen.getByRole("search", { name: "Filter inventory" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("search", { name: "Filter inventory" })).toBeTruthy();
   });
 
   it("filters Inventory to one resource from a drill-through link and can clear it", async () => {
     renderScreen(<Inventory hash="inventory?resource=disk-unattached" />);
     expect(await screen.findByText("1 resource")).toBeTruthy();
-    expect(
-      screen.getByRole("row", { name: /Unattached managed disk/ }),
-    ).toBeTruthy();
+    expect(screen.getByRole("row", { name: /Unattached managed disk/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Show all resources" }));
     expect(window.location.hash).toBe("#inventory");
     expect(screen.getByText("4 resources")).toBeTruthy();
@@ -87,7 +80,9 @@ describe("console audit behaviours", () => {
     const grant = await screen.findByRole("row", { name: /azure-cost-reservation-use/ });
     expect(within(grant).getByRole("link", { name: "Open Connect" })).toBeTruthy();
     const wait = screen.getByRole("row", { name: /azure-cost-spend-by-service/ });
-    expect(within(wait).getByRole("link", { name: "Open Scans" }).getAttribute("href")).toBe("#scans");
+    expect(within(wait).getByRole("link", { name: "Open Scans" }).getAttribute("href")).toBe(
+      "#scans",
+    );
   });
 
   it("pluralises counts", () => {
@@ -115,10 +110,8 @@ describe("console audit behaviours", () => {
   ])("shows a Last scan time with a timezone on %s", async (_name, ui) => {
     renderScreen(ui);
     const line = await screen.findByText(/^Last scan/);
-    expect(line.textContent).toBe("Last scan 14 Oct 2026, 12:00 UTC");
-    expect(line.querySelector("time")?.getAttribute("datetime")).toBe(
-      "2026-10-14T12:00:00.000Z",
-    );
+    expect(line.textContent).toBe("Last scan started 14 Oct 2026, 12:00 UTC");
+    expect(line.querySelector("time")?.getAttribute("datetime")).toBe("2026-10-14T12:00:00.000Z");
   });
 
   it("says no scan has finished when none succeeded", async () => {
@@ -129,17 +122,12 @@ describe("console audit behaviours", () => {
   it("links Recovery systems to Inventory", async () => {
     renderScreen(<Recovery />);
     const link = await screen.findByRole("link", { name: "vm-prod-no-backup" });
-    expect(link.getAttribute("href")).toBe(
-      "#inventory?resource=vm-prod-no-backup",
-    );
+    expect(link.getAttribute("href")).toBe("#inventory?resource=vm-prod-no-backup");
   });
 
   it("rejects fractional and empty settings with inline errors and does not save", async () => {
     const saveSettings = vi.fn();
-    const { container } = renderScreen(
-      <Settings />,
-      sourceWith({ saveSettings }),
-    );
+    const { container } = renderScreen(<Settings />, sourceWith({ saveSettings }));
     const retention = await screen.findByLabelText("Snapshot retention days");
     expect(retention.getAttribute("step")).toBe("1");
     fireEvent.change(retention, { target: { value: "1.5" } });
@@ -151,19 +139,14 @@ describe("console audit behaviours", () => {
     expect(screen.getByText("Enter a whole number of at least 1.").id).toBe(
       retention.getAttribute("aria-describedby"),
     );
-    expect(
-      screen.getByLabelText("Owner tag key").getAttribute("aria-invalid"),
-    ).toBe("true");
+    expect(screen.getByLabelText("Owner tag key").getAttribute("aria-invalid")).toBe("true");
     expect(saveSettings).not.toHaveBeenCalled();
     expect(screen.queryByText(/Saved/)).toBeNull();
     await expectAxeClean(container);
   });
 
   it("keeps chip text on one line", () => {
-    const css = readFileSync(
-      join(import.meta.dirname, "styles", "console.css"),
-      "utf8",
-    );
+    const css = readFileSync(join(import.meta.dirname, "styles", "console.css"), "utf8");
     const chip = css.match(/\n\.chip \{[^}]*\}/)?.[0] ?? "";
     expect(chip).toContain("white-space: nowrap");
     expect(chip).not.toContain("overflow-wrap");

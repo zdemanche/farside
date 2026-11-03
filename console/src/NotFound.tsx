@@ -5,8 +5,7 @@ export function NotFound({ hash }: { hash: string }) {
         Page not found
       </h1>
       <p className="screen-state">
-        There is no page at <code>#{hash}</code>.{" "}
-        <a href="#estate">Go to Estate</a>
+        There is no page at <code>#{hash}</code>. <a href="#estate">Go to Estate</a>
       </p>
     </>
   );

@@ -138,9 +138,6 @@ export type DataSource = {
   recovery(signal?: AbortSignal): Promise<RecoveryView>;
   lifecycle(signal?: AbortSignal): Promise<LifecycleView>;
   settings(signal?: AbortSignal): Promise<OrgSettings>;
-  saveSettings(
-    settings: OrgSettings,
-    signal?: AbortSignal,
-  ): Promise<OrgSettings>;
+  saveSettings(settings: OrgSettings, signal?: AbortSignal): Promise<OrgSettings>;
   connect(input: ConnectInput, signal?: AbortSignal): Promise<ConnectResult>;
 };

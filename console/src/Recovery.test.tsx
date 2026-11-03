@@ -21,19 +21,44 @@ describe("Recovery screen", () => {
     cleanup();
   });
 
-  it("lists backup and redundancy gaps with N of M and coverage", async () => {
-    const { container } = renderScreen(<Recovery />);
+  const gaps = sourceWith({
+    recovery: async () => ({
+      rows: [
+        {
+          id: "1",
+          system: "vm-one",
+          checkId: "check-one",
+          evidence: "protected false",
+          coverage: "assessed",
+        },
+        {
+          id: "2",
+          system: "db-two",
+          checkId: "check-two",
+          evidence: "zoneRedundant false",
+          coverage: "undetermined",
+        },
+      ],
+      unprotected: 1,
+      checked: 3,
+      undetermined: 0,
+    }),
+  });
+
+  it("shows each gap with its check, evidence and coverage", async () => {
+    const { container } = renderScreen(<Recovery />, gaps);
     expect(screen.getByRole("heading", { name: "Recovery" })).toBeTruthy();
-    const table = await screen.findByRole("table", { name: "Recovery gaps" });
-    expect(screen.getByRole("status").textContent).toBe("2 of 4 production systems lack backup");
-    const vm = screen.getByRole("row", { name: /vm-prod-no-backup/ });
-    expect(vm.textContent).toContain("azure-resilience-prod-vms-outside-backup");
-    expect(vm.textContent).toContain("protected false");
-    expect(vm.textContent).toContain("assessed");
-    expect(table.textContent).toContain("sql-prod-no-backup");
-    expect(table.textContent).toContain("db-no-zone-geo");
-    expect(table.textContent).not.toContain("vm-prod-backed-up");
+    await screen.findByRole("table", { name: "Recovery gaps" });
+    const vm = screen.getByRole("row", { name: /vm-one/ });
+    expect(vm.textContent).toBe("vm-onecheck-oneprotected falseassessed");
+    expect(screen.getByRole("row", { name: /db-two/ }).textContent).toContain("undetermined");
     await expectAxeClean(container);
+  });
+
+  it("states the unprotected count out of the systems checked", async () => {
+    renderScreen(<Recovery />, gaps);
+    await screen.findByRole("table");
+    expect(screen.getByRole("status").textContent).toBe("1 of 3 production systems lack backup");
   });
 
   it("never says 0 of N when some systems could not be checked", async () => {

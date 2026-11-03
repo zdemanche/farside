@@ -124,7 +124,7 @@ describe.each(CASES)("$name states", ({ loader, screen: view, populated, empty }
 
   it("shows a loading status before the data arrives", () => {
     renderScreen(view(), sourceWith({ [loader]: () => new Promise(() => {}) }));
-    expect(screen.getByRole("status").textContent).toMatch(/^Loading /);
+    expect(screen.getByText(/^Loading /).getAttribute("role")).toBe("status");
   });
 
   it("shows an alert with a Retry that loads the data again", async () => {

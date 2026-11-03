@@ -1,17 +1,17 @@
 import { useId, useState, type FormEvent } from "react";
 import { CONNECT_STEPS, REQUIRED_AZURE_ROLES } from "./connect-data";
-import { useSource } from "./data/context";
+import { useScans, useSource } from "./data/context";
 import { failureMessage, toDataError } from "./data/error";
 import { FieldError, fieldProps } from "./form";
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const GUID_ERROR =
-  "Enter a GUID, for example 00000000-0000-0000-0000-000000000000.";
+const GUID_ERROR = "Enter a GUID, for example 00000000-0000-0000-0000-000000000000.";
 
 type Errors = { tenantId?: string; subscriptionId?: string };
 
 export function Connect() {
   const source = useSource();
+  const { refresh: refreshScans } = useScans();
   const tenantFieldId = useId();
   const subscriptionFieldId = useId();
   const [tenantId, setTenantId] = useState("");
@@ -51,10 +51,9 @@ export function Connect() {
           : (result.attention ?? `${summary} No scan was started.`),
       );
       setConnected(true);
+      refreshScans();
     } catch (error) {
-      setFailure(
-        failureMessage(toDataError(error), "connect this subscription"),
-      );
+      setFailure(failureMessage(toDataError(error), "connect this subscription"));
     } finally {
       setConnecting(false);
     }
@@ -118,11 +117,7 @@ export function Connect() {
           <FieldError id={subscriptionFieldId} error={errors.subscriptionId} />
         </div>
         <div>
-          <button
-            className="action action-primary"
-            type="submit"
-            disabled={connecting}
-          >
+          <button className="action action-primary" type="submit" disabled={connecting}>
             {connecting ? "Connecting..." : "Connect subscription"}
           </button>
         </div>

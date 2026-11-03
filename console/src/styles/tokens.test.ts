@@ -25,11 +25,9 @@ function walk(dir: string): string[] {
 }
 
 const VENDORED = new Set(VENDORED_SHA256.keys());
-const scanned = [
-  ...walk(SRC),
-  ...walk(PUBLIC),
-  join(ROOT, "index.html"),
-].filter((file) => !VENDORED.has(file) && !/\.test\.tsx?$/.test(file));
+const scanned = [...walk(SRC), ...walk(PUBLIC), join(ROOT, "index.html")].filter(
+  (file) => !VENDORED.has(file) && !/\.test\.tsx?$/.test(file),
+);
 
 const byExtension = (...extensions: string[]) =>
   scanned.filter((file) => extensions.some((extension) => file.endsWith(extension)));
@@ -64,7 +62,8 @@ function violations(files: string[], rules: Rule[]): string[] {
     code.split("\n").forEach((line, index) => {
       const text = codeOf(line);
       for (const [label, rule] of rules) {
-        if (rule.test(text)) found.push(`${relative(ROOT, file)}:${index + 1} ${label}  ${line.trim()}`);
+        if (rule.test(text))
+          found.push(`${relative(ROOT, file)}:${index + 1} ${label}  ${line.trim()}`);
       }
     });
   }
@@ -92,9 +91,9 @@ describe("design tokens only outside the vendored files", () => {
   });
 
   it("has no raw colour in CSS, TSX, TS, HTML or public scripts", () => {
-    expect(
-      violations(byExtension(".css"), [...COLOURS, ["named colour", NAMED_COLOUR]]),
-    ).toEqual([]);
+    expect(violations(byExtension(".css"), [...COLOURS, ["named colour", NAMED_COLOUR]])).toEqual(
+      [],
+    );
     expect(violations(byExtension(".tsx", ".ts", ".html", ".js"), COLOURS)).toEqual([]);
   });
 
@@ -131,7 +130,7 @@ describe("design tokens only outside the vendored files", () => {
     expect(RAW_LENGTH.test(codeOf(".a { margin: 8px; }"))).toBe(true);
     expect(RAW_DURATION.test("transition: color 200ms;")).toBe(true);
     expect(RAW_DURATION.test("transition: color var(--duration-fast);")).toBe(false);
-    expect(INLINE_STYLE.test('<div style={{ width: 3 }} />')).toBe(true);
+    expect(INLINE_STYLE.test("<div style={{ width: 3 }} />")).toBe(true);
     expect(INLINE_STYLE.test('<div style = "x" />')).toBe(true);
   });
 });

@@ -20,5 +20,4 @@ export const SHELL_NAV = [
 
 export const COMING_SOON: readonly string[] = ["Cost and waste"];
 
-export const slugOf = (item: string): string =>
-  item.toLowerCase().replaceAll(" ", "-");
+export const slugOf = (item: string): string => item.toLowerCase().replaceAll(" ", "-");

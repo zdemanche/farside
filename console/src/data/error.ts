@@ -1,10 +1,5 @@
 export type DataErrorKind =
-  | "unauthenticated"
-  | "denied"
-  | "gone"
-  | "not-found"
-  | "network"
-  | "failed";
+  "unauthenticated" | "denied" | "gone" | "not-found" | "network" | "failed";
 
 export class DataError extends Error {
   readonly kind: DataErrorKind;

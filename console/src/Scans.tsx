@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Chip, coverageTone, type Tone } from "./Chip";
-import { useSource } from "./data/context";
+import { useScans, useSource } from "./data/context";
 import type { ScanCoverageSummary, ScanRow, ScanStatus } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { Time } from "./format";
@@ -16,11 +16,12 @@ const STATUS_TONE: Record<ScanStatus, Tone> = {
   failed: "crit",
 };
 
+type Tracked = { rows: ScanRow[] | undefined; inFlight: ScanRow[] };
+
 const MAX_POLLS = 100;
 const MAX_DELAY_MS = 60_000;
 
-const isInFlight = (scan: ScanRow) =>
-  scan.status === "queued" || scan.status === "running";
+const isInFlight = (scan: ScanRow) => scan.status === "queued" || scan.status === "running";
 
 function selectedId(hash: string): string {
   const match = hash.match(/^scans\/(.+)$/)?.[1] ?? "";
@@ -68,10 +69,7 @@ function outcomeText(scan: ScanRow): string {
 
 function ScanDetail({ id }: { id: string }) {
   const source = useSource();
-  const resource = useResource(
-    (signal) => source.scan(id, signal),
-    [source, id],
-  );
+  const resource = useResource((signal) => source.scan(id, signal), [source, id]);
   useEffect(() => {
     if (resource.status === "ready" || resource.status === "error") {
       document.getElementById("scan-detail-title")?.focus();
@@ -151,33 +149,39 @@ function ScanDetail({ id }: { id: string }) {
 }
 
 export function Scans({
-  hash = typeof window === "undefined"
-    ? "scans"
-    : window.location.hash.replace(/^#\/?/, ""),
+  hash = typeof window === "undefined" ? "scans" : window.location.hash.replace(/^#\/?/, ""),
   pollMs = 3000,
 }: {
   hash?: string;
   pollMs?: number;
 }) {
-  const source = useSource();
-  const scans = useResource((signal) => source.scans(signal), [source]);
+  const scans = useScans();
   const { refresh } = scans;
   const rows = scans.status === "ready" ? scans.data : undefined;
   const inFlight = rows?.find(isInFlight);
   const detailId = selectedId(hash);
 
   const polls = useRef(0);
-  const watched = useRef<ScanRow | undefined>(undefined);
+  const openedWith = useRef(scans.status);
+  const [tracked, setTracked] = useState<Tracked>({ rows: undefined, inFlight: [] });
   const [finished, setFinished] = useState("");
 
-  useEffect(() => {
-    const before = watched.current;
-    const after = before && rows?.find((scan) => scan.id === before.id);
-    if (after && !isInFlight(after)) {
-      setFinished(outcomeText(after));
+  if (rows && rows !== tracked.rows) {
+    const outcomes = tracked.inFlight.flatMap((before) => {
+      const after = rows.find((scan) => scan.id === before.id);
+      return after && !isInFlight(after) ? [outcomeText(after)] : [];
+    });
+    setTracked({ rows, inFlight: rows.filter(isInFlight) });
+    if (outcomes.length > 0) {
+      setFinished(outcomes.join("; "));
     }
-    watched.current = inFlight;
-  }, [rows, inFlight]);
+  }
+
+  useEffect(() => {
+    if (openedWith.current === "ready") {
+      refresh();
+    }
+  }, [refresh]);
 
   useEffect(() => {
     if (!inFlight) {
@@ -187,10 +191,7 @@ export function Scans({
     if (polls.current >= MAX_POLLS) {
       return;
     }
-    const delay = Math.min(
-      pollMs * 2 ** Math.min(polls.current, 16),
-      MAX_DELAY_MS,
-    );
+    const delay = Math.min(pollMs * 2 ** Math.min(polls.current, 16), MAX_DELAY_MS);
     const timer = window.setTimeout(() => {
       polls.current += 1;
       refresh();
@@ -204,12 +205,33 @@ export function Scans({
         Scans
       </h1>
       <p className="page-description">
-        Each scan, when it ran, and which scopes were assessed. A failed scan is
-        never the current one.
+        Each scan, when it ran, and which scopes were assessed. A failed scan is never the current
+        one.
+      </p>
+      <p
+        className="page-meta"
+        role="status"
+        aria-live="polite"
+        data-busy={inFlight ? "true" : undefined}
+      >
+        {scans.status === "loading" ? (
+          `Loading scan history`
+        ) : rows && rows.length > 0 ? (
+          <>
+            <span>{finished || (inFlight ? "" : plural(rows.length, "scan"))}</span>
+            {inFlight ? (
+              <span>
+                {finished ? "; " : ""}
+                {outcomeText(inFlight)}
+              </span>
+            ) : null}
+          </>
+        ) : null}
       </p>
       <ScreenState
         label="scan history"
         resource={scans}
+        silentLoading
         empty={(data) =>
           data.length === 0
             ? "No scans have run yet. Connect a subscription to start the first scan."
@@ -218,16 +240,6 @@ export function Scans({
       >
         {(data) => (
           <>
-            <p
-              className="page-meta"
-              role="status"
-              aria-live="polite"
-              data-busy={inFlight ? "true" : undefined}
-            >
-              {inFlight
-                ? outcomeText(inFlight)
-                : finished || plural(data.length, "scan")}
-            </p>
             <div
               className="table-wrap"
               role="region"
@@ -259,9 +271,7 @@ export function Scans({
                       </td>
                       <td className="num">{formatDuration(scan.durationMs)}</td>
                       <td>
-                        <Chip tone={STATUS_TONE[scan.status]}>
-                          {scan.status}
-                        </Chip>
+                        <Chip tone={STATUS_TONE[scan.status]}>{scan.status}</Chip>
                         {scan.current ? " current" : ""}
                         {scan.error ? " " : ""}
                         <ScanError scan={scan} />

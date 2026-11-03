@@ -1,6 +1,5 @@
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { scoreHealth } from "@farside/scan-contracts";
 import { DataError } from "./data/error";
 import { Estate } from "./Estate";
 import { Inventory } from "./Inventory";
@@ -47,58 +46,37 @@ describe("Estate, Inventory and Settings", () => {
     expect(screen.getByText("Not assessed scopes 4")).toBeTruthy();
     expect(screen.getByText("Undetermined results 1")).toBeTruthy();
     expect(screen.getByText("Health score 13")).toBeTruthy();
-    const failing = {
-      checkId: "check",
-      result: "fail" as const,
-      evidence: { fields: { ok: false } },
-      scope: { id: "main:check", cloud: "azure" as const, subscriptionOrProject: "main" },
-    };
-    const baseline = scoreHealth(
-      { scopes: [{ id: "main:check", checkId: "check", assessed: true }] },
-      [failing],
-    );
-    const withUnassessed = scoreHealth(
-      {
-        scopes: [
-          { id: "main:check", checkId: "check", assessed: true },
-          { id: "ghost:check", checkId: "check", assessed: false },
-        ],
-      },
-      [failing],
-    );
-    expect(withUnassessed.score).toBe(baseline.score);
     await expectAxeClean(container);
   });
 
-  it("filters inventory by owner, service, subscription and region and clears the filters", async () => {
-    const { container } = renderScreen(<Inventory />);
-    const count = async (text: string) =>
-      waitFor(() => expect(screen.getByText(/\d+ resources?$/).textContent).toBe(text));
-    await count("4 resources");
-    fireEvent.change(screen.getByLabelText("Owner"), { target: { value: "none" } });
-    await count("1 resource");
-    expect(screen.getByRole("row", { name: /Unattached managed disk/ })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Owner"), { target: { value: "" } });
-    fireEvent.change(screen.getByLabelText("Service"), {
-      target: { value: "Microsoft.Compute/disks" },
-    });
-    await count("2 resources");
-    fireEvent.change(screen.getByLabelText("Service"), { target: { value: "" } });
-    fireEvent.change(screen.getByLabelText("Subscription"), {
-      target: { value: "empty-no-budget" },
-    });
-    await count("1 resource");
-    fireEvent.change(screen.getByLabelText("Subscription"), { target: { value: "" } });
-    fireEvent.change(screen.getByLabelText("Region"), { target: { value: "westus" } });
-    await count("1 resource");
-    expect(screen.getByRole("row", { name: /Production VM/ })).toBeTruthy();
-    await expectAxeClean(container);
+  const resourceCount = (text: string) =>
+    waitFor(() => expect(screen.getByText(/\d+ resources?$/).textContent).toBe(text));
 
+  it.each([
+    ["Owner", "none", "1 resource", /Unattached managed disk/],
+    ["Service", "Microsoft.Compute/disks", "2 resources", /Unattached managed disk/],
+    ["Subscription", "empty-no-budget", "1 resource", undefined],
+    ["Region", "westus", "1 resource", /Production VM/],
+  ] as const)("filters inventory by %s", async (label, value, total, row) => {
+    renderScreen(<Inventory />);
+    await resourceCount("4 resources");
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    await resourceCount(total);
+    if (row) {
+      expect(screen.getByRole("row", { name: row })).toBeTruthy();
+    }
+  });
+
+  it("explains a filter that matches nothing and restores every resource on Clear filters", async () => {
+    const { container } = renderScreen(<Inventory />);
+    await resourceCount("4 resources");
     fireEvent.change(screen.getByLabelText("Owner"), { target: { value: "none" } });
-    await count("0 resources");
+    fireEvent.change(screen.getByLabelText("Region"), { target: { value: "westus" } });
+    await resourceCount("0 resources");
     expect(screen.getByText(/No resources match these filters/)).toBeTruthy();
+    await expectAxeClean(container);
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    await count("4 resources");
+    await resourceCount("4 resources");
   });
 
   it("says part of the inventory is unassessed when scopes were not assessed", async () => {

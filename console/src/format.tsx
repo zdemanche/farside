@@ -25,11 +25,7 @@ export function Time({
   if (!value || Number.isNaN(ms) || ms <= 0) {
     return <>{fallback}</>;
   }
-  return (
-    <time dateTime={value}>
-      {dateOnly ? DATE.format(ms) : `${DATE_TIME.format(ms)} UTC`}
-    </time>
-  );
+  return <time dateTime={value}>{dateOnly ? DATE.format(ms) : `${DATE_TIME.format(ms)} UTC`}</time>;
 }
 
 export function formatMoney(money: Money | null): string {

@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ComponentType,
-  type MouseEvent,
-} from "react";
+import { useEffect, useRef, useState, type ComponentType, type MouseEvent } from "react";
 import { apiSource } from "./data/api";
 import { DataProvider } from "./data/context";
 import type { DataSource } from "./data/types";
@@ -33,9 +27,7 @@ function configuredSource(): DataSource | null {
   return baseUrl && orgId ? apiSource({ baseUrl, orgId }) : null;
 }
 
-async function resolveSource(
-  demo: boolean | undefined,
-): Promise<DataSource | null> {
+async function resolveSource(demo: boolean | undefined): Promise<DataSource | null> {
   if (demo ?? import.meta.env.VITE_FARSIDE_DEMO === "1") {
     const { demoSource } = await import("./data/demo");
     return demoSource();
@@ -68,13 +60,8 @@ function skipToMain(event: MouseEvent<HTMLAnchorElement>) {
   document.getElementById("main")?.focus();
 }
 
-export function App({
-  demo,
-  source,
-}: { demo?: boolean; source?: DataSource | null } = {}) {
-  const [resolved, setResolved] = useState<DataSource | null | undefined>(
-    source,
-  );
+export function App({ demo, source }: { demo?: boolean; source?: DataSource | null } = {}) {
+  const [resolved, setResolved] = useState<DataSource | null | undefined>(source);
   const [hash, setHash] = useState(currentHash);
 
   useEffect(() => {
@@ -103,10 +90,7 @@ export function App({
   const [route = "", ...detail] = path.split("/");
   const slug = route || "estate";
   const isDetail = detail.length > 0;
-  const Page =
-    PAGES[slug] && (!isDetail || DETAIL_PAGES.has(slug))
-      ? PAGES[slug]
-      : undefined;
+  const Page = PAGES[slug] && (!isDetail || DETAIL_PAGES.has(slug)) ? PAGES[slug] : undefined;
   const title = Page ? (TITLES.get(slug) ?? PRODUCT_NAME) : "Page not found";
 
   const firstHash = useRef(true);
@@ -132,9 +116,7 @@ export function App({
       </a>
       <header className="topbar">
         <p className="brand">{PRODUCT_NAME}</p>
-        {resolved?.mode === "demo" ? (
-          <p className="chip chip-warn">{DEMO_LABEL}</p>
-        ) : null}
+        {resolved?.mode === "demo" ? <p className="chip chip-warn">{DEMO_LABEL}</p> : null}
       </header>
       <div className="layout">
         <nav className="sidenav" aria-label="Farside">
@@ -145,15 +127,12 @@ export function App({
                 <li key={item}>
                   {COMING_SOON.includes(item) ? (
                     <span className="nav-soon">
-                      {item}{" "}
-                      <span className="chip chip-neutral">coming soon</span>
+                      {item} <span className="chip chip-neutral">coming soon</span>
                     </span>
                   ) : (
                     <a
                       href={`#${itemSlug}`}
-                      aria-current={
-                        Page && itemSlug === slug ? "page" : undefined
-                      }
+                      aria-current={Page && itemSlug === slug ? "page" : undefined}
                     >
                       {item}
                     </a>
