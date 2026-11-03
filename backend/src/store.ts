@@ -1,6 +1,8 @@
 import { CLOUDS, type Cloud, type Finding, type Inventory } from "@farside/scan-contracts";
 import { systemClock, type Clock } from "./clock.js";
 import type { CoverageEntry } from "./coverage.js";
+import { combineCosts, hasFigures, hasMixedCurrencies, markMixedCurrency, restoreAfterMixedCurrency } from "./cost-total.js";
+import { scopeOf } from "./scope.js";
 import type { ResourceFacts } from "./facts.js";
 import type { StoredIssue } from "./issues.js";
 import { applyOwnerTag } from "./inventory.js";
@@ -37,7 +39,9 @@ export type OrgState = {
   facts: ResourceFacts[];
   issues: StoredIssue[];
   cost: CostSnapshot | null;
+  costs: Record<string, CostSnapshot>;
   commitments: CommitmentSnapshot | null;
+  commitmentsBySubscription: Record<string, CommitmentSnapshot>;
   budgets: BudgetSnapshot | null;
   alerts: AlertAnalysis | null;
   schedule: ScheduleState;
@@ -56,11 +60,35 @@ function emptyOrg(now: string): OrgState {
     facts: [],
     issues: [],
     cost: null,
+    costs: {},
     commitments: null,
+    commitmentsBySubscription: {},
     budgets: null,
     alerts: null,
     schedule: emptySchedule(),
     contract: null,
+  };
+}
+
+export const SUBSCRIPTION_DISCONNECTED = "subscription disconnected";
+
+function combineCommitments(snapshots: readonly CommitmentSnapshot[]): CommitmentSnapshot | null {
+  const first = snapshots[0];
+  if (!first || snapshots.length === 1) {
+    return first ?? null;
+  }
+  return {
+    ...first,
+    subscriptionId: snapshots.map((item) => item.subscriptionId).join(","),
+    billingScope: snapshots.map((item) => item.billingScope).join(","),
+    periodStart: snapshots.map((item) => item.periodStart).sort()[0] ?? first.periodStart,
+    periodEnd: snapshots.map((item) => item.periodEnd).sort().at(-1) ?? first.periodEnd,
+    reservations: snapshots.flatMap((item) => item.reservations),
+    savingsPlans: snapshots.flatMap((item) => item.savingsPlans),
+    noneFound: {
+      reservations: snapshots.every((item) => item.noneFound.reservations),
+      savingsPlans: snapshots.every((item) => item.noneFound.savingsPlans),
+    },
   };
 }
 
@@ -128,8 +156,8 @@ export class MemoryStore {
       coverage: org?.coverage.length ?? 0,
       issues: org?.issues.length ?? 0,
       scans: org?.scans.length ?? 0,
-      costSnapshots: org?.cost ? 1 : 0,
-      commitments: org?.commitments ? 1 : 0,
+      costSnapshots: Object.keys(org?.costs ?? {}).length,
+      commitments: Object.keys(org?.commitmentsBySubscription ?? {}).length,
       budgets: org?.budgets ? 1 : 0,
       alerts: org?.alerts ? 1 : 0,
       settings: org ? 1 : 0,
@@ -153,7 +181,7 @@ export class MemoryStore {
       org && org.settings.scanScheduleEnabled && org.schedule.nextRunAt,
     );
     const running = this.#runningScans.get(orgId) ?? new Set<AbortController>();
-    const scansStopped = running.size;
+    const scansStopped = running.size + (org?.scans.filter((job) => job.status === "queued").length ?? 0);
     for (const controller of running) {
       controller.abort();
     }
@@ -231,8 +259,10 @@ export class MemoryStore {
 
   putCoverage(orgId: string, coverage: CoverageEntry[]): CoverageEntry[] {
     assertNoSecrets(coverage);
-    this.org(orgId).coverage = coverage;
-    return coverage;
+    const org = this.org(orgId);
+    org.coverage = coverage;
+    this.#refreshCost(org);
+    return org.coverage;
   }
 
   putFindings(orgId: string, findings: Finding[]): Finding[] {
@@ -253,19 +283,60 @@ export class MemoryStore {
     return issues;
   }
 
-  putCost(orgId: string, cost: CostSnapshot | null): CostSnapshot | null {
+  putCost(
+    orgId: string,
+    cost: CostSnapshot | null,
+    subscriptionId: string | undefined = cost?.subscriptionId,
+  ): CostSnapshot | null {
     if (cost) {
       assertNoSecrets(cost);
     }
-    this.org(orgId).cost = cost;
+    const org = this.org(orgId);
+    if (subscriptionId === undefined) {
+      org.costs = {};
+    } else {
+      delete org.costs[subscriptionId];
+      if (cost) {
+        org.costs[subscriptionId] = cost;
+      }
+    }
+    this.#refreshCost(org);
     return cost;
   }
 
-  putCommitments(orgId: string, commitments: CommitmentSnapshot | null): CommitmentSnapshot | null {
+  #refreshCost(org: OrgState): void {
+    const snapshots = Object.values(org.costs);
+    org.cost = combineCosts(snapshots);
+    org.coverage = hasMixedCurrencies(snapshots)
+      ? markMixedCurrency(
+          org.coverage,
+          Object.keys(org.costs).filter((key) => org.costs[key] && hasFigures(org.costs[key])),
+        )
+      : restoreAfterMixedCurrency(org.coverage, org.costs);
+  }
+
+  costsOf(orgId: string): CostSnapshot[] {
+    return Object.values(this.org(orgId).costs);
+  }
+
+  putCommitments(
+    orgId: string,
+    commitments: CommitmentSnapshot | null,
+    subscriptionId: string | undefined = commitments?.subscriptionId,
+  ): CommitmentSnapshot | null {
     if (commitments) {
       assertNoSecrets(commitments);
     }
-    this.org(orgId).commitments = commitments;
+    const org = this.org(orgId);
+    if (subscriptionId === undefined) {
+      org.commitmentsBySubscription = {};
+    } else {
+      delete org.commitmentsBySubscription[subscriptionId];
+      if (commitments) {
+        org.commitmentsBySubscription[subscriptionId] = commitments;
+      }
+    }
+    org.commitments = combineCommitments(Object.values(org.commitmentsBySubscription));
     return commitments;
   }
 
@@ -351,13 +422,64 @@ export class MemoryStore {
     return connection;
   }
 
+  #dropSubscription(org: OrgState, subscriptionId: string): void {
+    const target = subscriptionId.toLowerCase();
+    const inScope = (cloud: Cloud, resourceUri: string) => scopeOf(cloud, resourceUri).toLowerCase() === target;
+    for (const cloud of CLOUDS) {
+      const inventory = org.inventories[cloud];
+      if (inventory) {
+        org.inventories[cloud] = {
+          ...inventory,
+          resources: inventory.resources.filter((resource) => !inScope(cloud, resource.resourceUri)),
+        };
+      }
+    }
+    const latest = org.inventory;
+    if (latest) {
+      org.inventory = {
+        ...latest,
+        resources: latest.resources.filter((resource) => !inScope(latest.cloud, resource.resourceUri)),
+      };
+    }
+    org.facts = org.facts.filter((row) => !CLOUDS.some((cloud) => inScope(cloud, row.resourceUri)));
+    for (const key of Object.keys(org.costs)) {
+      if (key.toLowerCase() === target) {
+        delete org.costs[key];
+      }
+    }
+    for (const key of Object.keys(org.commitmentsBySubscription)) {
+      if (key.toLowerCase() === target) {
+        delete org.commitmentsBySubscription[key];
+      }
+    }
+    org.commitments = combineCommitments(Object.values(org.commitmentsBySubscription));
+    const matches = (value: string) => value.toLowerCase() === target;
+    org.findings = org.findings.filter((finding) => !matches(finding.scope.subscriptionOrProject));
+    org.coverage = org.coverage.filter((entry) => !matches(entry.subscriptionOrProject));
+    org.issues = org.issues.map((issue) => {
+      if (!matches(issue.subscriptionOrProject) || issue.status === "closed") {
+        return issue;
+      }
+      const { closingScanId: _closing, notConfirmedReason: _reason, ...rest } = issue;
+      return { ...rest, status: "closed", closedReason: SUBSCRIPTION_DISCONNECTED };
+    });
+    this.#refreshCost(org);
+  }
+
   deleteConnection(orgId: string, connectionId: string): boolean {
     const org = this.org(orgId);
     const next = org.connections.filter((connection) => connection.id !== connectionId);
     if (next.length === org.connections.length) {
       return false;
     }
+    const removed = org.connections.find((connection) => connection.id === connectionId);
     org.connections = next;
+    if (
+      removed &&
+      !next.some((connection) => connection.subscriptionId.toLowerCase() === removed.subscriptionId.toLowerCase())
+    ) {
+      this.#dropSubscription(org, removed.subscriptionId);
+    }
     return true;
   }
 }

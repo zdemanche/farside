@@ -108,6 +108,7 @@ describe("waste totals", () => {
 
 describe("cost-waste route", () => {
   const store = new MemoryStore(fixedClock);
+  store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
   const app = buildApp(store, {
     ...TEST_APP_OPTIONS,
     harvester: fixtureHarvester(inventoryFromManifest(MANIFEST), factsFromManifest(MANIFEST)),

@@ -160,6 +160,7 @@ describe("gcp old snapshots and images", () => {
 
 describe("gcp waste scan", () => {
   const store = new MemoryStore(fixedClock);
+  store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "farside-test" });
   const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: fixtureHarvester(inventory, facts) });
 
   afterAll(async () => {

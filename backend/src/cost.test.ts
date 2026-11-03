@@ -198,10 +198,21 @@ describe("cost harvest", () => {
 
 describe("cost routes", () => {
   const store = new MemoryStore(fixedClock);
+  store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
   const app = buildApp(store, { ...TEST_APP_OPTIONS, costClient: fixtureCostClient() });
 
   afterAll(async () => {
     await app.close();
+  });
+
+  it("rejects a harvest for a subscription the org has not connected", async () => {
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/cost",
+      headers: ORG,
+      payload: { subscriptionId: "not-connected" },
+    });
+    expect(rejected.statusCode).toBe(400);
   });
 
   it("harvests through the API and keeps aggregates only", async () => {
@@ -233,6 +244,7 @@ describe("cost routes", () => {
 
 describe("missing cost role on the API", () => {
   const store = new MemoryStore(fixedClock);
+  store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
   const app = buildApp(store, { ...TEST_APP_OPTIONS, costClient: missingCostRoleClient() });
 
   afterAll(async () => {
@@ -255,5 +267,52 @@ describe("missing cost role on the API", () => {
     });
     const spend = spots.json().spots.find((spot: { checkId: string }) => spot.checkId === SPEND_BY_SERVICE);
     expect(spend.closer).toMatch(/Cost Management Reader/);
+  });
+});
+
+describe("billing scope is built server-side", () => {
+  const foreign = "/providers/Microsoft.Billing/billingAccounts/x";
+
+  it("ignores a body billingScope on POST /cost and queries the connected subscription", async () => {
+    const store = new MemoryStore(fixedClock);
+    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "Main" });
+    const seen: string[] = [];
+    const costClient = {
+      query: async (input: { billingScope: string }) => {
+        seen.push(input.billingScope);
+        return { rows: [] };
+      },
+    };
+    const app = buildApp(store, { ...TEST_APP_OPTIONS, costClient });
+    await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/cost",
+      headers: ORG,
+      payload: { subscriptionId: "main", billingScope: foreign },
+    });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((scope) => scope === "/subscriptions/Main")).toBe(true);
+    await app.close();
+  });
+
+  it("ignores a body billingScope on POST /commitments", async () => {
+    const store = new MemoryStore(fixedClock);
+    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    const seen: string[] = [];
+    const commitmentClient = {
+      list: async (input: { billingScope: string }) => {
+        seen.push(input.billingScope);
+        return { periodStart: "2026-01-01", periodEnd: "2026-01-31", reservations: [], savingsPlans: [] };
+      },
+    };
+    const app = buildApp(store, { ...TEST_APP_OPTIONS, commitmentClient });
+    await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/commitments",
+      headers: ORG,
+      payload: { subscriptionId: "main", billingScope: foreign },
+    });
+    expect(seen).toEqual(["/subscriptions/main"]);
+    await app.close();
   });
 });

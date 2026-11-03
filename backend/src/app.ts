@@ -187,6 +187,16 @@ async function withProvider<T>(
   }
 }
 
+const SUBSCRIPTION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/;
+
+function connectedSubscription(store: MemoryStore, orgId: string, subscriptionId: string): string | null {
+  const wanted = subscriptionId.toLowerCase();
+  const match = store
+    .snapshot(orgId)
+    .connections.find((connection) => connection.subscriptionId.toLowerCase() === wanted);
+  return match?.subscriptionId ?? null;
+}
+
 function connectionInput(body: unknown): { tenantId: string; subscriptionId: string } | null {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return null;
@@ -195,7 +205,7 @@ function connectionInput(body: unknown): { tenantId: string; subscriptionId: str
   if (typeof record.tenantId !== "string" || record.tenantId.length === 0) {
     return null;
   }
-  if (typeof record.subscriptionId !== "string" || record.subscriptionId.length === 0) {
+  if (typeof record.subscriptionId !== "string" || !SUBSCRIPTION_ID_PATTERN.test(record.subscriptionId)) {
     return null;
   }
   return { tenantId: record.tenantId, subscriptionId: record.subscriptionId };
@@ -555,7 +565,13 @@ export function buildApp(
     if (!canScan(store.snapshot(request.params.orgId).contract, clock())) {
       return problem(reply, 409, "Scans paused", { attention: "scans paused" });
     }
-    const scan = runner.start({ orgId: request.params.orgId, subscriptionId, actor });
+    const connected = connectedSubscription(store, request.params.orgId, subscriptionId);
+    if (!connected) {
+      return problem(reply, 400, "Invalid scan", {
+        errors: [{ path: "subscriptionId", message: "not a connected subscription" }],
+      });
+    }
+    const scan = runner.start({ orgId: request.params.orgId, subscriptionId: connected, actor });
     return sendClean(reply, scan.started ? 202 : 200, {
       scan: toScanView(scan.job, false),
       scanStarted: scan.started,
@@ -704,10 +720,6 @@ export function buildApp(
         errors: [{ path: "subscriptionId", message: "required string" }],
       });
     }
-    const billingScope =
-      body && typeof body.billingScope === "string" && body.billingScope.length > 0
-        ? body.billingScope
-        : `/subscriptions/${subscriptionId}`;
     const agreementType =
       body && typeof body.agreementType === "string" && body.agreementType.length > 0
         ? body.agreementType
@@ -718,10 +730,17 @@ export function buildApp(
         cost: store.snapshot(request.params.orgId).cost,
       });
     }
+    const connected = connectedSubscription(store, request.params.orgId, subscriptionId);
+    if (!connected) {
+      return problem(reply, 400, "Invalid cost harvest", {
+        errors: [{ path: "subscriptionId", message: "not a connected subscription" }],
+      });
+    }
+    const billingScope = `/subscriptions/${connected}`;
     const harvested = await withProvider(reply, () =>
       harvestCost({
         client: guardProviderClient(request.params.orgId, options.costClient ?? unconfiguredCostClient()),
-        subscriptionId,
+        subscriptionId: connected,
         billingScope,
         agreementType,
         asOf: clock(),
@@ -736,14 +755,14 @@ export function buildApp(
       applyCostCoverage(store.snapshot(request.params.orgId).coverage, costHarvest.coverage),
     );
     if (!costHarvest.ok) {
-      store.putCost(request.params.orgId, null);
+      store.putCost(request.params.orgId, null, connected);
       return sendClean(reply, 200, {
         harvested: false,
         reason: costHarvest.reason,
         closer: costHarvest.coverage[0]?.closer,
       });
     }
-    store.putCost(request.params.orgId, costHarvest.snapshot);
+    store.putCost(request.params.orgId, costHarvest.snapshot, connected);
     return sendClean(reply, 200, { harvested: true, cost: costHarvest.snapshot });
   });
 
@@ -772,10 +791,6 @@ export function buildApp(
         errors: [{ path: "subscriptionId", message: "required string" }],
       });
     }
-    const billingScope =
-      body && typeof body.billingScope === "string" && body.billingScope.length > 0
-        ? body.billingScope
-        : `/subscriptions/${subscriptionId}`;
     if (isDemoOrg(request.params.orgId)) {
       const org = store.snapshot(request.params.orgId);
       return sendClean(reply, 200, {
@@ -784,13 +799,20 @@ export function buildApp(
         findings: org.findings,
       });
     }
+    const connected = connectedSubscription(store, request.params.orgId, subscriptionId);
+    if (!connected) {
+      return problem(reply, 400, "Invalid commitment harvest", {
+        errors: [{ path: "subscriptionId", message: "not a connected subscription" }],
+      });
+    }
+    const billingScope = `/subscriptions/${connected}`;
     const harvested = await withProvider(reply, () =>
       harvestCommitments({
         client: guardProviderClient(
           request.params.orgId,
           options.commitmentClient ?? unconfiguredCommitmentClient(),
         ),
-        subscriptionId,
+        subscriptionId: connected,
         billingScope,
       }),
     );
@@ -803,17 +825,18 @@ export function buildApp(
       applyCommitmentCoverage(store.snapshot(request.params.orgId).coverage, commitmentHarvest.coverage),
     );
     if (!commitmentHarvest.ok) {
-      store.putCommitments(request.params.orgId, null);
+      store.putCommitments(request.params.orgId, null, connected);
       return sendClean(reply, 200, {
         harvested: false,
         reason: commitmentHarvest.reason,
         closer: commitmentHarvest.coverage[0]?.closer,
       });
     }
-    store.putCommitments(request.params.orgId, commitmentHarvest.snapshot);
+    store.putCommitments(request.params.orgId, commitmentHarvest.snapshot, connected);
     const commitmentFindings = mergeCommitmentFindings(
       store.snapshot(request.params.orgId).findings,
       commitmentHarvest.findings,
+      connected,
     );
     store.putFindings(request.params.orgId, commitmentFindings);
     store.putIssues(

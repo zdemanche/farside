@@ -268,13 +268,14 @@ describe("error handling", () => {
   });
 
   it("stores a coded scan failure and keeps the raw message out of GET /scans", async () => {
-    const { app, lines } = build({
+    const { app, store, lines } = build({
       harvester: {
         async harvest() {
           throw new Error(SECRET_MESSAGE);
         },
       },
     });
+    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/scans",
@@ -304,7 +305,8 @@ describe("error handling", () => {
   });
 
   it("logs scan start and finish with duration and check counts", async () => {
-    const { app, lines } = build({ harvester: fixtureHarvester(inventoryFromManifest(MANIFEST)) });
+    const { app, store, lines } = build({ harvester: fixtureHarvester(inventoryFromManifest(MANIFEST)) });
+    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/scans",
@@ -340,13 +342,14 @@ describe("error handling", () => {
   });
 
   it("stores harvest_timeout for a timeout error", async () => {
-    const { app, lines } = build({
+    const { app, store, lines } = build({
       harvester: {
         async harvest() {
           throw Object.assign(new Error(SECRET_MESSAGE), { name: "TimeoutError" });
         },
       },
     });
+    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/scans",
@@ -365,6 +368,7 @@ describe("error handling", () => {
       fail = reject;
     });
     const { app, store, lines } = build({ harvester: { harvest: () => gate } });
+    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/scans",

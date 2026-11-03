@@ -224,6 +224,7 @@ describe("scan on connect", () => {
 describe("scan history API", () => {
   it("returns coverage, per-check outcomes and marks only the latest complete success current", async () => {
     const store = new MemoryStore(fixedClock);
+    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     const app = buildApp(store, {
       ...TEST_APP_OPTIONS,
       ...FIXTURE_CLIENTS,
@@ -261,6 +262,7 @@ describe("scan history API", () => {
 
   it("keeps a failed scan off current and shows the failure reason", async () => {
     const store = new MemoryStore(fixedClock);
+    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     const app = buildApp(store, {
       ...TEST_APP_OPTIONS,
       harvester: {
@@ -301,6 +303,7 @@ describe("scan history API", () => {
     const gate = new Promise<HarvestResult>((resolve) => {
       release = resolve;
     });
+    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: { harvest: () => gate } });
     const started = await app.inject({
       method: "POST",
@@ -334,6 +337,7 @@ describe("scan history API", () => {
 describe("scan merge with harvests", () => {
   it("keeps budget and reservation findings and spend coverage after POST then scan", async () => {
     const store = new MemoryStore(fixedClock);
+    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     const app = buildApp(store, {
       ...TEST_APP_OPTIONS,
       ...FIXTURE_CLIENTS,
@@ -409,7 +413,10 @@ describe("scan merge across subscriptions", () => {
 
   it("keeps other subscriptions' findings and coverage, and marks an empty subscription assessed", async () => {
     let harvested: Inventory = inventory;
-    const app = buildApp(new MemoryStore(fixedClock), {
+    const store = new MemoryStore(fixedClock);
+    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "dev" });
+    const app = buildApp(store, {
       ...TEST_APP_OPTIONS,
       harvester: {
         harvest: async () => ({
@@ -487,7 +494,9 @@ describe("untrusted client clock", () => {
 
 describe("server clock", () => {
   it("stamps a default-app scan with wall time and a real duration", async () => {
-    const app = buildApp(new MemoryStore(), { harvester: fixtureHarvester(inventory) });
+    const store = new MemoryStore();
+    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    const app = buildApp(store, { harvester: fixtureHarvester(inventory) });
     const before = Date.now();
     await app.inject({
       method: "POST",

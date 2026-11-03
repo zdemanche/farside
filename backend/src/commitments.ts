@@ -278,9 +278,23 @@ export function applyCommitmentCoverage(
   return harvested.reduce((coverage, entry) => applyCoverageResult(coverage, entry), existing);
 }
 
-export function mergeCommitmentFindings(existing: Finding[], next: Finding[]): Finding[] {
+export function mergeCommitmentFindings(
+  existing: Finding[],
+  next: Finding[],
+  subscriptionId?: string,
+): Finding[] {
   const replace = new Set([RESERVATION_USE, SAVINGS_PLAN_USE]);
-  return [...existing.filter((finding) => !replace.has(finding.checkId)), ...next];
+  const wanted = subscriptionId?.toLowerCase();
+  return [
+    ...existing.filter(
+      (finding) =>
+        !(
+          replace.has(finding.checkId) &&
+          (wanted === undefined || finding.scope.subscriptionOrProject.toLowerCase() === wanted)
+        ),
+    ),
+    ...next,
+  ];
 }
 
 export function defaultCommitmentClient(): CommitmentClient {

@@ -144,6 +144,7 @@ describe("commitment harvest", () => {
 
 describe("commitment routes", () => {
   const store = new MemoryStore(fixedClock);
+  store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
   const app = buildApp(store, { ...TEST_APP_OPTIONS, commitmentClient: fixtureCommitmentClient() });
 
   afterAll(async () => {
