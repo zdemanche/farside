@@ -14,7 +14,7 @@ describe("console shell", () => {
   it("renders Estate at the bare hash", async () => {
     render(<App demo />);
     expect(await screen.findByRole("heading", { name: "Estate" })).toBeTruthy();
-    expect(document.title).toBe("Estate - Farside");
+    await waitFor(() => expect(document.title).toBe("Estate - Farside"));
   });
 
   it("says it is not connected instead of showing data when no source is configured", () => {
@@ -113,7 +113,7 @@ describe("console shell", () => {
       window.location.hash = hash;
       const { container } = render(<App demo />);
       expect(await screen.findByRole("heading", { name: "Page not found" })).toBeTruthy();
-      expect(document.title).toBe("Page not found - Farside");
+      await waitFor(() => expect(document.title).toBe("Page not found - Farside"));
       expect(screen.getByRole("link", { name: "Go to Estate" }).getAttribute("href")).toBe(
         "#estate",
       );
@@ -142,7 +142,7 @@ describe("console shell", () => {
     window.location.hash = "#issues";
     render(<App demo />);
     expect(await screen.findByRole("heading", { name: "Issues" })).toBeTruthy();
-    expect(document.title).toBe("Issues - Farside");
+    await waitFor(() => expect(document.title).toBe("Issues - Farside"));
     const nav = screen.getByRole("navigation", { name: PRODUCT_NAME });
     expect(within(nav).getByRole("link", { name: "Issues" }).getAttribute("aria-current")).toBe(
       "page",
@@ -151,7 +151,7 @@ describe("console shell", () => {
     window.location.hash = "#scans";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     expect(await screen.findByRole("heading", { name: "Scans" })).toBeTruthy();
-    expect(document.title).toBe("Scans - Farside");
+    await waitFor(() => expect(document.title).toBe("Scans - Farside"));
     expect(within(nav).getByRole("link", { name: "Scans" }).getAttribute("aria-current")).toBe(
       "page",
     );
@@ -162,7 +162,7 @@ describe("console shell", () => {
     window.location.hash = "#issues/disk-unattached";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     expect(await screen.findByRole("heading", { name: "disk-unattached" })).toBeTruthy();
-    expect(document.title).toBe("Issues - Farside");
+    await waitFor(() => expect(document.title).toBe("Issues - Farside"));
     await waitFor(() => {
       expect(document.activeElement?.id).toBe("issue-detail-title");
     });
