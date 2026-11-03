@@ -18,6 +18,8 @@ In-repo Cost Management harvest against a multi-page fake, billing scope and cur
 | E4-S4-T3 | #143 | Synthetic replay in `docs/azure/alert-replay.json` pins four new alerts. A quieter series must change that count on purpose. |
 | E4-S5-T1 | #146 | GET `/v1/orgs/:orgId/cost-waste` returns spend, floor/burst, commitments, and named waste. Failed cost harvest returns no figures. |
 | E4-S5-T3 | #148 | Waste totals are a range from assessed findings only and count unassessed waste scopes. |
+| E4-S6-T1 | #150 | GET `/v1/orgs/:orgId/headline` combines monthly cost, nameable waste, backup gaps, support losses, and unseen counts with coverage states. |
+| E4-S6-T3 | #152 | Checks without a `liveRunAt` are `not_supported` and left out of every headline figure. Removing a record drops that check from the totals. |
 
 ## Leftovers
 
@@ -40,6 +42,10 @@ Budget definitions are read from the ground-truth manifest. A live Cost Manageme
 ### Cost and waste page (#147)
 
 The API is ready. The console page is left for the design-system pass (#243) so this change does not restyle the shell.
+
+### Headline on Estate (#151)
+
+The headline API is ready. Rendering it on Estate with drill-through is left for the design-system pass (#243).
 
 ### Email digest (#144)
 
