@@ -4,6 +4,7 @@ import type { ResourceFacts } from "./facts.js";
 import type { StoredIssue } from "./issues.js";
 import { applyOwnerTag } from "./inventory.js";
 import { REQUIRED_AZURE_ROLES } from "./roles.js";
+import type { AlertAnalysis } from "./alerts.js";
 import type { BudgetSnapshot } from "./budgets.js";
 import type { CommitmentSnapshot } from "./commitments.js";
 import type { CostSnapshot } from "./cost.js";
@@ -31,6 +32,7 @@ export type OrgState = {
   cost: CostSnapshot | null;
   commitments: CommitmentSnapshot | null;
   budgets: BudgetSnapshot | null;
+  alerts: AlertAnalysis | null;
 };
 
 function emptyOrg(): OrgState {
@@ -46,6 +48,7 @@ function emptyOrg(): OrgState {
     cost: null,
     commitments: null,
     budgets: null,
+    alerts: null,
   };
 }
 
@@ -136,6 +139,14 @@ export class MemoryStore {
     }
     this.org(orgId).budgets = budgets;
     return budgets;
+  }
+
+  putAlerts(orgId: string, alerts: AlertAnalysis | null): AlertAnalysis | null {
+    if (alerts) {
+      assertNoSecrets(alerts);
+    }
+    this.org(orgId).alerts = alerts;
+    return alerts;
   }
 
   putSettings(orgId: string, settings: OrgSettings): OrgSettings {

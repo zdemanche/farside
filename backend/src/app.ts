@@ -15,6 +15,7 @@ import {
   type CoverageState,
 } from "./coverage.js";
 import type { CoverageCauseId } from "./causes.js";
+import { analyzeAlerts, type SpendAlert } from "./alerts.js";
 import {
   applyBudgetCoverage,
   defaultBudgetClient,
@@ -459,6 +460,38 @@ export function buildApp(
       budgets: harvested.snapshot,
       findings: harvested.findings,
     });
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/alerts", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    const alerts = store.snapshot(request.params.orgId).alerts;
+    if (!alerts) {
+      return problem(reply, 404, "Not found");
+    }
+    return sendClean(reply, 200, alerts);
+  });
+
+  app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/alerts", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    if (rejectSecrets(request.body, reply)) {
+      return reply;
+    }
+    const body = (request.body as Record<string, unknown> | null) ?? {};
+    const recipients = Array.isArray(body.recipients)
+      ? body.recipients.filter((item): item is string => typeof item === "string")
+      : [];
+    const previous = Array.isArray(body.previous) ? (body.previous as SpendAlert[]) : [];
+    const analysis = analyzeAlerts({
+      recipients,
+      previous,
+      ...(typeof body.asOf === "string" ? { asOf: body.asOf } : {}),
+    });
+    store.putAlerts(request.params.orgId, analysis);
+    return sendClean(reply, 200, analysis);
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/estate", async (request, reply) => {

@@ -32,8 +32,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 15. **E3-S7** — merged (#241).
 16. **E4-S1** — merged (#242).
 17. **E4-S2** — merged (#244).
-18. **E4-S3** — this change: no-budget check against seeded definitions, undetermined when unreadable.
-19. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+18. **E4-S3** — merged (#245).
+19. **E4-S4** — this change: floor/burst, relative alert rules, synthetic backtest. Email send is leftover.
+20. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -210,10 +211,10 @@ Azure Cost Management and reservations need a live subscription. Floor/burst mat
 | `E4-S3-T1` | #137 | Harvest budgets per subscription | (c) live leftover | Fixture definitions from the manifest. Live list is leftover. |
 | `E4-S3-T2` | #138 | Implement the no-budget check | (a) this change | No-budget check against stored definitions. |
 | `E4-S3-T3` | #139 | Add the undetermined path | (a) this change | Undetermined when budgets cannot be read. |
-| `E4-S4` | #140 | Floor, burst and spend alerts | (a) doable in code now | Floor, burst, four relative rules, replay suite. Email digest needs a mail path (d/infra). Method from cost reporter is (d) to read, (a) to reimplement. |
-| `E4-S4-T1` | #141 | Port floor and burst analysis | (a) doable in code now | Floor and burst analysis. Read the cost reporter for method only (d). |
-| `E4-S4-T2` | #142 | Implement the four alert rules with relative thresholds | (a) doable in code now | Four relative alert rules. |
-| `E4-S4-T3` | #143 | Add a backtest regression suite | (a) doable in code now | Synthetic replay suite; test-subscription history is (c). |
+| `E4-S4` | #140 | Floor, burst and spend alerts | (a) this change | Floor, burst, four relative rules, replay suite. Email send is (d). |
+| `E4-S4-T1` | #141 | Port floor and burst analysis | (a) this change | Floor and burst analysis. |
+| `E4-S4-T2` | #142 | Implement the four alert rules with relative thresholds | (a) this change | Four relative alert rules. |
+| `E4-S4-T3` | #143 | Add a backtest regression suite | (a) this change | Synthetic replay suite; live history is (c). |
 | `E4-S4-T4` | #144 | Deliver one digest per run by email | (d) external system or repo | Customer-configured email delivery (SES or equivalent in the tenant account). |
 | `E4-S5` | #145 | Cost and waste page with named waste | (a) doable in code now | Cost and waste page over stored figures and findings. |
 | `E4-S5-T1` | #146 | Expose cost and waste in the API | (a) doable in code now | Cost/waste API. |
