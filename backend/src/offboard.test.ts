@@ -103,7 +103,7 @@ describe("offboard", () => {
       orgId: "org-a",
       deletedAt: T0,
       connectionsRemoved: 1,
-      scansStopped: true,
+      scansStopped: 0,
       scheduleCancelled: true,
       accountClosureAt: null,
     });

@@ -66,6 +66,7 @@ function emptyOrg(now: string): OrgState {
 export class MemoryStore {
   #orgs = new Map<string, OrgState>();
   #deletions = new Map<string, DeletionRecord>();
+  #runningScans = new Map<string, Set<AbortController>>();
 
   constructor(readonly clock: Clock = systemClock) {}
 
@@ -80,6 +81,14 @@ export class MemoryStore {
     const created = emptyOrg(this.clock());
     this.#orgs.set(orgId, created);
     return created;
+  }
+
+  trackScan(orgId: string): { signal: AbortSignal; release: () => void } {
+    const controller = new AbortController();
+    const controllers = this.#runningScans.get(orgId) ?? new Set<AbortController>();
+    controllers.add(controller);
+    this.#runningScans.set(orgId, controllers);
+    return { signal: controller.signal, release: () => controllers.delete(controller) };
   }
 
   hasOrg(orgId: string): boolean {
@@ -122,11 +131,17 @@ export class MemoryStore {
     const schedulePending = Boolean(
       org && org.settings.scanScheduleEnabled && org.schedule.nextRunAt,
     );
+    const running = this.#runningScans.get(orgId) ?? new Set<AbortController>();
+    const scansStopped = running.size;
+    for (const controller of running) {
+      controller.abort();
+    }
+    this.#runningScans.delete(orgId);
     const record: DeletionRecord = {
       orgId,
       deletedAt: now,
       connectionsRemoved,
-      scansStopped: true,
+      scansStopped,
       scheduleCancelled: schedulePending || Boolean(org?.settings.scanScheduleEnabled),
       accountClosureAt: null,
     };

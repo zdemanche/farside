@@ -10,7 +10,7 @@ export type DeletionRecord = {
   orgId: string;
   deletedAt: string;
   connectionsRemoved: number;
-  scansStopped: boolean;
+  scansStopped: number;
   scheduleCancelled: boolean;
   accountClosureAt: string | null;
 };

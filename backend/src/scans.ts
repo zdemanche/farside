@@ -31,7 +31,7 @@ import { applyScanToIssues } from "./issues.js";
 import type { OrgSettings } from "./settings.js";
 import type { MemoryStore } from "./store.js";
 
-export type ScanStatus = "queued" | "running" | "succeeded" | "failed";
+export type ScanStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export type ScanCheckOutcome = {
   checkId: string;
@@ -261,7 +261,9 @@ export class ScanRunner {
       coverageSummary: EMPTY_COVERAGE_SUMMARY,
       checks: [],
     });
-    return { job, started: true, done: this.execute(input.orgId, job.id) };
+    const done = this.execute(input.orgId, job.id);
+    done.catch(() => undefined);
+    return { job, started: true, done };
   }
 
   private async execute(orgId: string, jobId: string): Promise<ScanJob> {
@@ -271,6 +273,8 @@ export class ScanRunner {
     }
     const startedAt = this.clock();
     this.store.patchJob(orgId, jobId, { status: "running", startedAt });
+    const { signal, release } = this.store.trackScan(orgId);
+    const cancelled = (): ScanJob => ({ ...current, status: "cancelled", startedAt });
     try {
       const settings = this.store.snapshot(orgId).settings;
       const result = await this.harvester.harvest({
@@ -278,6 +282,9 @@ export class ScanRunner {
         subscriptionId: current.subscriptionId,
         settings,
       });
+      if (signal.aborted) {
+        return cancelled();
+      }
       this.store.putInventory(orgId, result.inventory);
       this.store.putFacts(orgId, result.facts);
       this.store.patchJob(orgId, jobId, { cloud: result.inventory.cloud });
@@ -332,6 +339,9 @@ export class ScanRunner {
         checks,
       });
     } catch (error) {
+      if (signal.aborted) {
+        return cancelled();
+      }
       const covered = error instanceof ScanFailedError ? error.coveredScopes : [];
       const checks = checksFromFailure(covered, current.subscriptionId);
       const finishedAt = this.clock();
@@ -345,6 +355,8 @@ export class ScanRunner {
         coverageSummary: coverageSummaryFrom(checks),
         checks,
       });
+    } finally {
+      release();
     }
   }
 

@@ -123,6 +123,28 @@ describe("scan job runner", () => {
     expect(store.snapshot("org-a").inventory).toBeNull();
   });
 
+  it("cancels quietly when the org is offboarded during a pending harvest", async () => {
+    const store = new MemoryStore(fixedClock);
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", record);
+    let release!: (result: HarvestResult) => void;
+    const gate = new Promise<HarvestResult>((resolve) => {
+      release = resolve;
+    });
+    const runner = new ScanRunner(store, { harvest: () => gate });
+    const { done } = runner.start({ orgId: "org-a", subscriptionId: "main", actor: "user" });
+    const stopped = store.offboard("org-a", "2026-01-01T00:00:00.000Z");
+    release({ inventory, coverage: [], coveredScopes: [], facts: [] });
+    const finished = await done;
+    await new Promise((resolve) => setImmediate(resolve));
+    process.off("unhandledRejection", record);
+    expect(stopped.scansStopped).toBe(1);
+    expect(finished.status).toBe("cancelled");
+    expect(unhandled).toEqual([]);
+    expect(store.hasOrg("org-a")).toBe(false);
+  });
+
   it("runs only one scan at a time per subscription", async () => {
     const store = new MemoryStore(fixedClock);
     let release!: (result: HarvestResult) => void;
