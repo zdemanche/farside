@@ -380,6 +380,7 @@ export class ScanRunner {
         subscriptionId,
         billingScope,
         agreementType: "payg",
+        asOf: this.clock(),
       });
       coverage = applyCostCoverage(coverage, harvested.coverage);
       this.store.putCost(orgId, harvested.ok ? harvested.snapshot : null);
@@ -401,6 +402,7 @@ export class ScanRunner {
     if (this.harvestClients.budgetClient) {
       const harvested = await harvestBudgets({
         client: this.harvestClients.budgetClient,
+        lastConfirmed: this.clock(),
       });
       coverage = applyBudgetCoverage(coverage, harvested.coverage);
       this.store.putBudgets(orgId, harvested.snapshot);
