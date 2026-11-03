@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildApp } from "./app.js";
-import { handler, resultOf } from "./lambda.js";
+import { handler, resolveOperatorToken, resultOf } from "./lambda.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 
 const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
@@ -133,5 +133,32 @@ describe("resultOf", () => {
     expect(result.cookies).toEqual(["a=1", "b=2"]);
     expect(result.headers.vary).toBe("origin, accept");
     expect(result.headers["set-cookie"]).toBeUndefined();
+  });
+});
+
+describe("resolveOperatorToken", () => {
+  it("reads the SecureString parameter named in the environment", async () => {
+    const read = vi.fn(async () => "from-ssm");
+    const token = await resolveOperatorToken(
+      { FARSIDE_OPERATOR_TOKEN_PARAM: "/farside/operator-token", FARSIDE_OPERATOR_TOKEN: "local" },
+      read,
+    );
+    expect(token).toBe("from-ssm");
+    expect(read).toHaveBeenCalledWith("/farside/operator-token");
+  });
+
+  it("fails closed when the parameter is unreadable or empty", async () => {
+    const env = { FARSIDE_OPERATOR_TOKEN_PARAM: "/farside/operator-token" };
+    await expect(resolveOperatorToken(env, async () => undefined)).rejects.toThrow("unreadable");
+    await expect(
+      resolveOperatorToken(env, async () => {
+        throw new Error("AccessDenied");
+      }),
+    ).rejects.toThrow("AccessDenied");
+  });
+
+  it("falls back to FARSIDE_OPERATOR_TOKEN for local runs", async () => {
+    expect(await resolveOperatorToken({ FARSIDE_OPERATOR_TOKEN: "local" })).toBe("local");
+    expect(await resolveOperatorToken({})).toBeUndefined();
   });
 });

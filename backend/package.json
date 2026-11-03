@@ -11,6 +11,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@aws-sdk/client-ssm": "^3.1161.0",
     "@farside/scan-contracts": "*",
     "fastify": "^5.12.8"
   },

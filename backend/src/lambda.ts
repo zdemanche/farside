@@ -1,3 +1,4 @@
+import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { buildApp } from "./app.js";
 import { loggerFromEnv } from "./observability.js";
 
@@ -27,11 +28,46 @@ const METHODS = new Set<HttpMethod>(["DELETE", "GET", "HEAD", "OPTIONS", "PATCH"
 const SESSION_HEADERS = ["x-farside-org", "x-farside-actor", "x-farside-operator"];
 const TEXT_TYPE = /^(text\/|application\/(json|problem\+json|javascript|xml)|.*\+(json|xml))/i;
 
-const app = buildApp(undefined, {
-  operatorToken: process.env.FARSIDE_OPERATOR_TOKEN || undefined,
-  logger: loggerFromEnv(),
-});
-const ready = app.ready();
+type ParameterReader = (name: string) => Promise<string | undefined>;
+
+const readSsmParameter: ParameterReader = async (name) => {
+  const result = await new SSMClient({}).send(new GetParameterCommand({ Name: name, WithDecryption: true }));
+  return result.Parameter?.Value;
+};
+
+export async function resolveOperatorToken(
+  env: NodeJS.ProcessEnv = process.env,
+  read: ParameterReader = readSsmParameter,
+): Promise<string | undefined> {
+  const param = env.FARSIDE_OPERATOR_TOKEN_PARAM;
+  if (!param) {
+    return env.FARSIDE_OPERATOR_TOKEN || undefined;
+  }
+  const value = await read(param);
+  if (!value) {
+    throw new Error("operator token parameter is empty or unreadable");
+  }
+  return value;
+}
+
+async function start() {
+  const app = buildApp(undefined, {
+    operatorToken: await resolveOperatorToken(),
+    logger: loggerFromEnv(),
+  });
+  await app.ready();
+  return app;
+}
+
+let starting: ReturnType<typeof start> | undefined;
+
+function appReady() {
+  starting ??= start().catch((error: unknown) => {
+    starting = undefined;
+    throw error;
+  });
+  return starting;
+}
 
 function methodOf(event: ProxyEvent): HttpMethod {
   const raw = event.requestContext?.http?.method ?? event.httpMethod ?? "GET";
@@ -68,7 +104,7 @@ function payloadOf(event: ProxyEvent): Buffer | string | undefined {
 }
 
 export async function handler(event: ProxyEvent): Promise<ProxyResult> {
-  await ready;
+  const app = await appReady();
   const payload = payloadOf(event);
   const response = await app.inject({
     method: methodOf(event),
