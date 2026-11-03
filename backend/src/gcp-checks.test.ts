@@ -3,14 +3,17 @@ import { RAW_PROVIDER_KEYS, validateFinding } from "@farside/scan-contracts";
 import { buildApp } from "./app.js";
 import { registeredCheckIds, runChecks, UnregisteredCheckError } from "./checks.js";
 import {
+  checkGcpOldSnapshotsAndImages,
   checkGcpUnattachedDisks,
   checkGcpUnusedIps,
+  GCP_OLD_SNAPSHOTS_AND_IMAGES,
   GCP_UNATTACHED_DISKS,
   GCP_UNUSED_IPS,
 } from "./gcp-checks.js";
 import { factsFromGcpManifest, inventoryFromGcpManifest, type GcpGroundTruthManifest } from "./gcp-inventory.js";
 import { fixtureHarvester } from "./scans.js";
-import { GCP_DISK_SAVINGS_BASIS, GCP_IP_SAVINGS_BASIS } from "./savings.js";
+import { DEFAULT_SETTINGS } from "./settings.js";
+import { GCP_DISK_SAVINGS_BASIS, GCP_IP_SAVINGS_BASIS, GCP_SNAPSHOT_IMAGE_SAVINGS_BASIS } from "./savings.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
 import { readFileSync } from "node:fs";
@@ -27,7 +30,9 @@ const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 
 describe("gcp waste registry", () => {
   it("registers only the implemented GCP waste checks and refuses spec ids without an impl", () => {
-    expect(registeredCheckIds("gcp").sort()).toEqual([GCP_UNATTACHED_DISKS, GCP_UNUSED_IPS].sort());
+    expect(registeredCheckIds("gcp").sort()).toEqual(
+      [GCP_OLD_SNAPSHOTS_AND_IMAGES, GCP_UNATTACHED_DISKS, GCP_UNUSED_IPS].sort(),
+    );
     expect(registeredCheckIds("azure")).not.toContain(GCP_UNATTACHED_DISKS);
     expect(() => runChecks({ inventory, facts, checkIds: ["gcp-cost-spend-by-service"] })).toThrow(
       UnregisteredCheckError,
@@ -93,6 +98,61 @@ describe("gcp unused external ips", () => {
     const undetermined = findings.find((finding) => finding.evidence.fields.addressId === "addr-idle");
     expect(undetermined?.result).toBe("undetermined");
     expect(undetermined?.closer).toMatch(/status and users/);
+  });
+});
+
+describe("gcp old snapshots and images", () => {
+  it("fails snap-aged and image-stale and passes the fresh lookalikes", () => {
+    const findings = checkGcpOldSnapshotsAndImages(inventory, facts, DEFAULT_SETTINGS);
+    const fails = findings.filter((finding) => finding.result === "fail");
+    const passes = findings.filter((finding) => finding.result === "pass");
+    expect(fails.map((finding) => finding.evidence.fields.snapshotOrImageId).sort()).toEqual([
+      "image-stale",
+      "snap-aged",
+    ]);
+    expect(fails[0]?.evidence.fields.retentionDays).toBe(30);
+    expect(fails.every((finding) => finding.evidence.fields.savingsBasis === GCP_SNAPSHOT_IMAGE_SAVINGS_BASIS)).toBe(
+      true,
+    );
+    expect(fails.find((finding) => finding.evidence.fields.snapshotOrImageId === "snap-aged")?.savings).toEqual({
+      min: "0.52",
+      max: "0.80",
+      currency: "USD",
+    });
+    expect(passes.map((finding) => finding.evidence.fields.snapshotOrImageId).sort()).toEqual([
+      "image-current",
+      "snap-fresh",
+    ]);
+    expect(validateFinding(fails[0]!)).toEqual([]);
+    for (const key of RAW_PROVIDER_KEYS) {
+      expect(JSON.stringify(findings)).not.toContain(key);
+    }
+  });
+
+  it("uses Settings.snapshotRetentionDays as the age threshold", () => {
+    const long = checkGcpOldSnapshotsAndImages(inventory, facts, {
+      ...DEFAULT_SETTINGS,
+      snapshotRetentionDays: 200,
+    });
+    expect(long.filter((finding) => finding.result === "fail")).toHaveLength(0);
+    const short = checkGcpOldSnapshotsAndImages(inventory, facts, {
+      ...DEFAULT_SETTINGS,
+      snapshotRetentionDays: 3,
+    });
+    expect(short.filter((finding) => finding.result === "fail")).toHaveLength(4);
+  });
+
+  it("returns undetermined when age cannot be computed", () => {
+    const aged = inventory.resources.find((row) => row.displayName.includes("older than retention"));
+    expect(aged).toBeDefined();
+    const findings = checkGcpOldSnapshotsAndImages(
+      inventory,
+      [{ resourceUri: aged!.resourceUri, fields: { snapshotOrImageId: "snap-aged" } }],
+      DEFAULT_SETTINGS,
+    );
+    const undetermined = findings.find((finding) => finding.evidence.fields.snapshotOrImageId === "snap-aged");
+    expect(undetermined?.result).toBe("undetermined");
+    expect(undetermined?.closer).toMatch(/creationTimestamp/);
   });
 });
 

@@ -6,7 +6,14 @@ import {
 } from "@farside/scan-contracts";
 import { recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import type { ResourceFacts } from "./facts.js";
-import { checkGcpUnattachedDisks, checkGcpUnusedIps, GCP_UNATTACHED_DISKS, GCP_UNUSED_IPS } from "./gcp-checks.js";
+import {
+  checkGcpOldSnapshotsAndImages,
+  checkGcpUnattachedDisks,
+  checkGcpUnusedIps,
+  GCP_OLD_SNAPSHOTS_AND_IMAGES,
+  GCP_UNATTACHED_DISKS,
+  GCP_UNUSED_IPS,
+} from "./gcp-checks.js";
 import { projectOf } from "./gcp-inventory.js";
 import { loadRetiringSkus } from "./retiring.js";
 import type { OrgSettings } from "./settings.js";
@@ -955,6 +962,7 @@ export const CHECK_REGISTRY: Record<string, CheckFn> = {
   [EXPIRING_GATEWAY_CERTS]: checkExpiringGatewayCerts,
   [GCP_UNATTACHED_DISKS]: checkGcpUnattachedDisks,
   [GCP_UNUSED_IPS]: checkGcpUnusedIps,
+  [GCP_OLD_SNAPSHOTS_AND_IMAGES]: checkGcpOldSnapshotsAndImages,
 };
 
 export function registeredCheckIds(cloud: Inventory["cloud"]): string[] {
