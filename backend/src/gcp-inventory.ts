@@ -12,6 +12,7 @@ const COLLECTIONS: Record<string, string> = {
   Image: "images",
   Instance: "instances",
   Cluster: "clusters",
+  Certificate: "certificates",
 };
 
 export type GcpGroundTruthItem = {
@@ -119,6 +120,9 @@ export function factsFromGcpManifest(manifest: GcpGroundTruthManifest): Resource
     }
     if (item.type === "container.googleapis.com/Cluster") {
       fields.resourceKind = "gke";
+    }
+    if (item.type === "certificatemanager.googleapis.com/Certificate") {
+      fields.certificateId = item.id;
     }
     return { resourceUri: gcpResourceUri(item), fields };
   });

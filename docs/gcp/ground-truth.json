@@ -147,6 +147,24 @@
       "region": "us-central1",
       "properties": { "currentMasterVersion": "1.30" },
       "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "cert-expiring",
+      "project": "farside-test",
+      "type": "certificatemanager.googleapis.com/Certificate",
+      "title": "Certificate inside the expiry warning window",
+      "region": "global",
+      "properties": { "expireTime": "2026-11-20T00:00:00Z", "daysRemaining": 36 },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "cert-current",
+      "project": "farside-test",
+      "type": "certificatemanager.googleapis.com/Certificate",
+      "title": "Certificate outside the expiry warning window",
+      "region": "global",
+      "properties": { "expireTime": "2027-10-15T00:00:00Z", "daysRemaining": 365 },
+      "labels": { "owner": "farside-test" }
     }
   ]
 }
