@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Inventory } from "@farside/scan-contracts";
-import { AZURE_LAUNCH_CHECK_IDS, coverageFromHarvest, type CoverageEntry } from "./coverage.js";
+import {
+  AZURE_LAUNCH_CHECK_IDS,
+  coverageFromHarvest,
+  type CoverageEntry,
+  type CoverageState,
+} from "./coverage.js";
 import { applyCoverageResult } from "./coverage.js";
 import { factsFromManifest, type ResourceFacts } from "./facts.js";
 import { applyOwnerTag, inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
@@ -12,6 +17,25 @@ import type { OrgSettings } from "./settings.js";
 import type { MemoryStore } from "./store.js";
 
 export type ScanStatus = "queued" | "running" | "succeeded" | "failed";
+
+export type ScanCheckOutcome = {
+  checkId: string;
+  state: CoverageState;
+  reason?: string;
+  closer?: string;
+};
+
+export type ScanCoverageSummary = {
+  assessed: number;
+  unassessed: number;
+  undetermined: number;
+};
+
+export const EMPTY_COVERAGE_SUMMARY: ScanCoverageSummary = {
+  assessed: 0,
+  unassessed: 0,
+  undetermined: 0,
+};
 
 export type ScanJob = {
   id: string;
@@ -25,7 +49,80 @@ export type ScanJob = {
   startedAt: string | null;
   finishedAt: string | null;
   error: string | null;
+  durationMs: number | null;
+  coverageSummary: ScanCoverageSummary;
+  checks: ScanCheckOutcome[];
 };
+
+export type ScanView = ScanJob & { current: boolean };
+
+const FAILED_BEFORE_CHECK = "Scan failed before this check ran.";
+
+export function durationMsFrom(startedAt: string | null, finishedAt: string | null): number | null {
+  if (!startedAt || !finishedAt) {
+    return null;
+  }
+  return Date.parse(finishedAt) - Date.parse(startedAt);
+}
+
+export function coverageSummaryFrom(checks: readonly ScanCheckOutcome[]): ScanCoverageSummary {
+  const coverageSummary: ScanCoverageSummary = { assessed: 0, unassessed: 0, undetermined: 0 };
+  for (const check of checks) {
+    coverageSummary[check.state] += 1;
+  }
+  return coverageSummary;
+}
+
+export function checksFromCoverage(
+  coverage: CoverageEntry[],
+  subscriptionId: string,
+): ScanCheckOutcome[] {
+  return coverage
+    .filter((entry) => entry.subscriptionOrProject === subscriptionId)
+    .map((entry) => {
+      const outcome: ScanCheckOutcome = { checkId: entry.checkId, state: entry.state };
+      if (entry.reason) {
+        outcome.reason = entry.reason;
+      }
+      if (entry.closer) {
+        outcome.closer = entry.closer;
+      }
+      return outcome;
+    });
+}
+
+export function checksFromFailure(
+  coveredScopes: string[],
+  subscriptionId: string,
+): ScanCheckOutcome[] {
+  const covered = new Set(coveredScopes);
+  return AZURE_LAUNCH_CHECK_IDS.map((checkId) => {
+    if (covered.has(`${subscriptionId}:${checkId}`)) {
+      return { checkId, state: "assessed" as const };
+    }
+    return { checkId, state: "unassessed" as const, reason: FAILED_BEFORE_CHECK };
+  });
+}
+
+export function toScanView(job: ScanJob, current: boolean): ScanView {
+  return {
+    ...job,
+    durationMs: durationMsFrom(job.startedAt, job.finishedAt),
+    current: current && job.status === "succeeded" && job.complete,
+  };
+}
+
+export function toScanViews(jobs: readonly ScanJob[]): ScanView[] {
+  let currentId: string | undefined;
+  for (let index = jobs.length - 1; index >= 0; index -= 1) {
+    const job = jobs[index];
+    if (job && job.status === "succeeded" && job.complete) {
+      currentId = job.id;
+      break;
+    }
+  }
+  return jobs.map((job) => toScanView(job, job.id === currentId));
+}
 
 export type HarvestResult = {
   inventory: Inventory;
@@ -101,6 +198,9 @@ export class ScanRunner {
       startedAt: null,
       finishedAt: null,
       error: null,
+      durationMs: null,
+      coverageSummary: EMPTY_COVERAGE_SUMMARY,
+      checks: [],
     });
     return { job, started: true, done: this.execute(input.orgId, job.id) };
   }
@@ -151,21 +251,31 @@ export class ScanRunner {
           observedAt: result.inventory.observedAt,
         }),
       );
+      const checks = checksFromCoverage(coverage, current.subscriptionId);
+      const finishedAt = "1970-01-01T00:00:00.001Z";
       return this.store.patchJob(orgId, jobId, {
         status: "succeeded",
         complete: true,
         coveredScopes: result.coveredScopes,
-        finishedAt: "1970-01-01T00:00:00.001Z",
+        finishedAt,
         error: null,
+        durationMs: durationMsFrom("1970-01-01T00:00:00.000Z", finishedAt),
+        coverageSummary: coverageSummaryFrom(checks),
+        checks,
       });
     } catch (error) {
       const covered = error instanceof ScanFailedError ? error.coveredScopes : [];
+      const checks = checksFromFailure(covered, current.subscriptionId);
+      const finishedAt = "1970-01-01T00:00:00.001Z";
       return this.store.patchJob(orgId, jobId, {
         status: "failed",
         complete: false,
         coveredScopes: covered,
-        finishedAt: "1970-01-01T00:00:00.001Z",
+        finishedAt,
         error: error instanceof Error ? error.message : "scan failed",
+        durationMs: durationMsFrom("1970-01-01T00:00:00.000Z", finishedAt),
+        coverageSummary: coverageSummaryFrom(checks),
+        checks,
       });
     }
   }

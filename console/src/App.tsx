@@ -6,6 +6,7 @@ import { Inventory } from "./Inventory";
 import { Issues } from "./Issues";
 import { Lifecycle } from "./Lifecycle";
 import { Recovery } from "./Recovery";
+import { Scans } from "./Scans";
 import { Settings } from "./Settings";
 import { EMPTY_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
 
@@ -48,7 +49,9 @@ export function App() {
                   ? "recovery"
                   : hash === "lifecycle"
                     ? "lifecycle"
-                    : "empty";
+                    : hash === "scans" || hash.startsWith("scans/")
+                      ? "scans"
+                      : "empty";
 
   return (
     <div>
@@ -84,6 +87,8 @@ export function App() {
           <Recovery />
         ) : page === "lifecycle" ? (
           <Lifecycle />
+        ) : page === "scans" ? (
+          <Scans />
         ) : (
           <>
             <h1 id="page-title" tabIndex={-1}>

@@ -32,6 +32,9 @@ In-repo check engine, leftover waste checks, idle plan/LB/NAT checks, Recovery g
 | E3-S6-T3 | #114 | Issues queue filters by check, status and subscription, with detail and coverage. |
 | E3-S6-T4 | #115 | Replay of fixed, unfixed and uncovered scans. |
 | E3-S6-T5 | #116 | Estate overview shows `scoreHealth` over assessed scopes only. |
+| E3-S7-T1 | #118 | Scan history API returns duration, coverage summary, per-check outcomes, and `current` on the latest complete success. |
+| E3-S7-T2 | #119 | Console `#scans` lists start, duration, status and coverage; detail shows assessed / unassessed / `undetermined` with reasons. |
+| E3-S7-T3 | #120 | A running fixture scan updates to succeeded without a page reload. Failed scans show the error and are never current. |
 
 ## Leftovers
 
@@ -45,4 +48,4 @@ Monitoring Reader on the test subscription.
 
 ### Later E3 stories
 
-Busy-gateway negative on the live test estate (#96). Live Backup Reader against vault items (#102). Live near-expiry cert proof (#106). Scans screens and live accuracy (#117–#125).
+Busy-gateway negative on the live test estate (#96). Live Backup Reader against vault items (#102). Live near-expiry cert proof (#106). Live accuracy of every Azure check (#121–#125). The fixture Scans screen is not a live run.
