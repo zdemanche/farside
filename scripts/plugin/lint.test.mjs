@@ -6,6 +6,7 @@ import {
   PLUGIN_AUTHOR,
   PLUGIN_LICENSE,
   PLUGIN_NAME,
+  lintFindingsMethodSkill,
   lintPluginManifest,
   lintPluginManifestFile,
 } from "./lint.mjs";
@@ -16,6 +17,7 @@ function validManifest(overrides = {}) {
     version: "0.1.0",
     author: { name: PLUGIN_AUTHOR },
     license: PLUGIN_LICENSE,
+    skills: ["./skills"],
     ...overrides,
   };
 }
@@ -58,5 +60,9 @@ describe("plugin manifest lint", () => {
     writeFileSync(manifestPath, JSON.stringify(validManifest({ version: "0.1.0" })));
     writeFileSync(packagePath, JSON.stringify({ version: "0.2.0" }));
     expect(lintPluginManifestFile(manifestPath, packagePath).some((error) => error.includes("0.2.0"))).toBe(true);
+  });
+
+  it("fails when the findings-method skill drops a required phrase", () => {
+    expect(lintFindingsMethodSkill("# empty").some((error) => error.includes("issue id"))).toBe(true);
   });
 });

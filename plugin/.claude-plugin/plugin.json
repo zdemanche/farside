@@ -7,5 +7,6 @@
   "author": {
     "name": "Moonaan, LLC"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "skills": ["./skills"]
 }
