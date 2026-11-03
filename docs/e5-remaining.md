@@ -1,6 +1,6 @@
 # E5 remaining work
 
-Demo mode serves a generated synthetic estate. Recurring scans tick from Settings with time-controlled tests. A live soak week, billing, iac-hub onboarding, and a live tenant stay leftover.
+Demo mode serves a generated synthetic estate. Recurring scans tick from Settings with time-controlled tests. The operator runbook lists sale-to-first-scan with a check and rollback on each step. A live soak week, billing screen, iac-hub onboarding, and a live tenant stay leftover.
 
 ## Done here
 
@@ -14,9 +14,10 @@ Demo mode serves a generated synthetic estate. Recurring scans tick from Setting
 | E5-S2-T3 | #166 | Settings stores interval and retry limit; saving moves `nextRunAt`. |
 | E5-S3-T2 | #170 | PUT `/v1/orgs/:orgId/contract` stores plan, start, state, and amount due. Card numbers are rejected. |
 | E5-S3-T4 | #172 | Active/warning/grace allow scans. Paused, retaining, and ended return 409 and block the scheduler. |
+| E5-S4-T1 | #174 | `docs/operator-runbook.md` lists contract → iac-hub → account → base → Identity → Launch → Farside → claim → connect → first scan, each with Check and Rollback. |
 
 ## Leftovers
 
 ### Live soak, iac-hub, Identity, billing
 
-Scheduled soak (#167) needs a week of unattended runs on the test subscription. Customer deploy (#175), rehearsal (#176), and account retirement (#182) need a live tenant or iac-hub. Billing screen (#171) is left for the design-system pass (#243). Invoices are not stored — dashmeta had none to reuse.
+Scheduled soak (#167) needs a week of unattended runs on the test subscription. Customer deploy (#175), rehearsal (#176), and account retirement (#182) need a live tenant or iac-hub. Rollback notes cover the known path; failures found only in the rehearsal stay on #177. Billing screen (#171) is left for the design-system pass (#243). Invoices are not stored — dashmeta had none to reuse.

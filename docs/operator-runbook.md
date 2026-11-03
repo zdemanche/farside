@@ -1,0 +1,271 @@
+# Operator runbook: sale to first scan
+
+Follow these steps in order for one customer. After every step, run its **Check**. If the check fails, use that step’s **Rollback** before retrying. Do not skip a leftover: stop and wait rather than inventing an iac-hub, Identity, or live-tenant action this workspace cannot perform.
+
+This is the written path (#174). Live deploy (#175), a cold rehearsal on a test tenant (#176), and failures found only in that rehearsal (#177 leftover) are not claimed here.
+
+## Prerequisites
+
+| Need | Where it stands |
+|---|---|
+| Product key `farside` | Adopted (D2, D5). |
+| Address | `farside.<customer>.moonaan.com` via `customerAddress()` in `infra/src/product.ts`. Customer slug: lowercase letters, digits, hyphens; 3–30 characters; starts and ends on an alphanumeric. |
+| Repo | Adopted name `Moonaan/moonaan-farside`. Working clone is `zdemanche/farside` until org transfer (Part of #23). Hub dispatch waits on that transfer. |
+| Dedicated AWS account | Operator-run. Not created from this repo. `assertDedicatedAccount` refuses any other account. |
+| iac-hub `PRODUCTS` | In-repo sketch only: `infra/iac-hub/products-entry.ts`. Merge is leftover (#26, #175). |
+| Moonaan Identity | Claim and sign-in are leftover. Until then Farside scopes with `x-farside-org` and `x-farside-actor`. |
+| Azure app | Multi-tenant registration in a Moonaan-owned home tenant, federated credentials, **no client secret**. Test subscription in a **different** tenant. See `docs/azure/app-registration.md`. Not created from this workspace. |
+| Contract state | PUT `/v1/orgs/:orgId/contract`. No-contract still allows scans. Paused / retaining / ended block new scans (D8). |
+
+## Steps
+
+### 1. Record the signed contract {#record-contract}
+
+Operator-run. No card numbers.
+
+```http
+PUT /v1/orgs/{orgId}/contract
+x-farside-org: {orgId}
+x-farside-actor: {operator}
+```
+
+```json
+{
+  "plan": "farside-standard",
+  "startDate": "2026-11-03T00:00:00.000Z",
+  "currency": "USD",
+  "amountDue": "0.00"
+}
+```
+
+`state` defaults to `active`. Invoice list is always empty — dashmeta had none to reuse.
+
+#### Check
+
+- Response is 200 with `contract.plan`, `contract.startDate`, `canScan: true`, and `invoices: []`.
+- GET `/v1/orgs/{orgId}/contract` returns the same plan and start date.
+- A body with `cardNumber` (or a 13–19 digit PAN) returns 400 `Card data rejected`. Retry without it.
+
+#### Rollback
+
+- Do not store a corrected contract on top of card data: the PUT is rejected and nothing is written.
+- Wrong plan or date: PUT again with the corrected fields (no PAN keys).
+- If the customer should not scan yet, POST `/v1/orgs/{orgId}/contract/advance` with `{ "event": "ended", "now": "<iso>" }` and wait — do not delete the org here.
+
+### 2. Register Farside in iac-hub PRODUCTS {#register-product}
+
+Copy `FARSIDE_IAC_HUB_PRODUCT` from `infra/iac-hub/products-entry.ts` into `Moonaan/iac-hub` `PRODUCTS` (the hub reads that list from iac-hub `main`, not from this repo). `targetRepo` is `moonaan-farside`. Stages: `BackendArtifacts` → `Infra` → `Web`, `workflow_dispatch` only.
+
+**Leftover:** this workspace cannot open that PR. Stop here until someone merges it.
+
+#### Check
+
+- iac-hub `main` lists product key `Farside` / deployment key `farside`.
+- Stage workflows match `backend-publish.yml`, `infra-pulumi_up.yaml` (+ `infra-pulumi_destroy.yaml`), `ui-deploy.yml`.
+
+#### Rollback
+
+- If the entry is wrong, revert the iac-hub PR. Do not dispatch customer deploys against a half-registered product.
+- If `targetRepo` still points at `zdemanche/farside`, hub dispatch will miss the org — finish the org transfer first, then retry the merge.
+
+### 3. Create the dedicated AWS account {#create-account}
+
+Operator-run account creation (proposal: the account step is operator-run). One Moonaan-owned account per customer. Record the 12-digit account id and the tenant slug.
+
+**Leftover:** no account is created from this repo.
+
+#### Check
+
+- Account id is 12 digits.
+- Slug passes `customerAddress(customerName)` (throws otherwise).
+- Address will be `farside.{customerName}.moonaan.com`.
+- The account is not shared with another product or customer.
+
+#### Rollback
+
+- Bad slug: pick a new slug before any deploy. Do not rename in place after DNS exists.
+- Shared or wrong account: do not deploy. `SharedAccountError` is a hard failure. Close or ignore that account and create a dedicated one.
+- Accidental create for a cancelled sale: do not deploy Farside; retire the empty account through the same operator path used to create it (#182 leftover).
+
+### 4. Deploy base {#deploy-base}
+
+Deploy the Moonaan tenant **base** into the dedicated account. This repo does not own that stack. Order from the story: base, then Identity, then Launch, then Farside.
+
+**Leftover:** needs iac-hub and a live account (#175).
+
+#### Check
+
+- Base stack in the dedicated account is healthy.
+- Account id on the stack matches the id from step 3.
+
+#### Rollback
+
+- Failed apply: retry the same stack once. If it fails again, destroy the partial base stack with the hub destroy for that product before a third attempt.
+- Applied to the wrong account: stop. Do not continue to Identity. Destroy and return to step 3.
+
+### 5. Deploy Identity {#deploy-identity}
+
+Deploy Moonaan Identity into the same account so the CTO can later claim the org.
+
+**Leftover:** Identity is not in this repo (#175).
+
+#### Check
+
+- Identity is reachable in the dedicated account.
+- The customer org exists (or can be created) for the tenant slug.
+
+#### Rollback
+
+- Failed apply: retry Identity only. Do not redeploy base unless Identity says the base is missing.
+- Partial Identity: destroy the Identity stage, leave base in place, retry Identity.
+- Until Identity exists, do **not** pretend a claim link works. Use the header session in the appendix for in-repo checks only.
+
+### 6. Deploy Launch {#deploy-launch}
+
+Deploy Moonaan Launch after Identity.
+
+**Leftover:** Launch is not in this repo (#175).
+
+#### Check
+
+- Launch is reachable and points at this customer’s Identity.
+
+#### Rollback
+
+- Failed apply: retry Launch only.
+- Launch against the wrong Identity: destroy Launch, fix the Identity pointer, retry. Leave Farside undeployed.
+
+### 7. Deploy Farside {#deploy-farside}
+
+Hub order, `workflow_dispatch` only (never `push` to `main`):
+
+1. `backend-publish.yml` — build backend artifacts.
+2. `infra-pulumi_up.yaml` — `organization/farside/{customerName}` in the dedicated account. Inputs: `customerName`, `accountId`, `run_identifier`. Optional: `initialAdmins`, `firstOwnerEmail`, `adoptingProducts`.
+3. `ui-deploy.yml` — console.
+
+`materializeDevStack` calls `assertDedicatedAccount`. Resources stay a typed sketch until AWS OIDC and Pulumi state are wired; current workflows **skip** apply rather than create in the wrong account.
+
+**Leftover:** a real `pulumi up` needs the dedicated account, GitHub OIDC, and Pulumi state (#175).
+
+#### Check
+
+- Backend publish built `backend/dist`.
+- Infra plan address is `farside.{customerName}.moonaan.com`. Health path is `/health`.
+- After apply is switched on: `GET https://farside.{customerName}.moonaan.com/health` (or the function URL) returns ok, and the console shell loads at that host.
+- `SharedAccountError` did not fire.
+
+#### Rollback
+
+- Skip (no AWS creds): nothing was created. Fix secrets (`AWS_ROLE_ARN`, `FARSIDE_DEV_ACCOUNT_ID` / account id, Pulumi token) and re-dispatch the same `run_identifier` is fine; a new id is also fine.
+- Shared account: treat as fatal. Do not retry against that account.
+- Infra failed after artifacts: re-dispatch Infra only. Artifacts can stay.
+- Web failed after infra: re-dispatch Web only.
+- Need to abandon the customer: `infra-pulumi_destroy.yaml` with `customerName`, `accountId`, `run_identifier`. Today that workflow no-ops because no stack exists yet. After a real stack exists, destroy Infra, then stop dispatching Backend/Web.
+
+### 8. CTO claims the org and signs in {#claim-org}
+
+The CTO opens the Moonaan Identity **claim link**, claims the org, and signs in. Console host is `farside.{customerName}.moonaan.com`.
+
+**Leftover:** claim and token exchange need Identity (#176). Header session is not a claim.
+
+#### Check
+
+- CTO can sign in and see Farside for that org only.
+- Cross-org calls return 403 (same rule as `assertOrgAccess` today).
+
+#### Rollback
+
+- Claim link expired or wrong org: issue a new Identity claim for the same slug. Do not create a second dedicated account.
+- CTO lands on the wrong host: fix DNS / Launch pointer; do not redeploy base.
+- Until Identity exists, operators verifying the API use the appendix headers. That does not close this step.
+
+### 9. Connect Azure {#connect-azure}
+
+On Connect, follow `CONNECT_STEPS` in `backend/src/roles.ts`:
+
+1. Confirm the Farside app registration is in a Moonaan-owned home tenant.
+2. Grant admin consent in the customer tenant.
+3. Assign required roles on the subscription: Reader, Cost Management Reader, Monitoring Reader, Reservations Reader. Backup Reader if vault items are needed.
+4. Enter tenant id and subscription id. **Never a client secret.**
+
+```http
+PUT /v1/orgs/{orgId}/connections
+x-farside-org: {orgId}
+x-farside-actor: {actor}
+```
+
+```json
+{ "tenantId": "<entra-tenant>", "subscriptionId": "<subscription>" }
+```
+
+Connect starts a scan unless the contract is paused / retaining / ended.
+
+#### Check
+
+- Response is 201 with `tenantId`, `subscriptionId`, and `roles` listing the required set.
+- A body with a client secret / token field is rejected.
+- If `canScan` is false, `scanStarted` is false and `attention` is `scans paused`. Advance or fix the contract before continuing.
+- Test subscription is in a different tenant from the app registration.
+
+#### Rollback
+
+- Secret in the body: rejected, nothing stored. Retry with tenant id and subscription id only.
+- Missing role: grant the role in Azure, then PUT the connection again.
+- Wrong subscription: DELETE `/v1/orgs/{orgId}/connections/{connectionId}`, then PUT the correct pair.
+- Broken connection later: set `healthy: false`; the scheduler will not start a scan (`connection needs attention`). Fix the grant, then PUT again.
+
+### 10. First scan {#first-scan}
+
+Connect already starts a scan. To start one by hand:
+
+```http
+POST /v1/orgs/{orgId}/scans
+x-farside-org: {orgId}
+x-farside-actor: {actor}
+```
+
+```json
+{ "subscriptionId": "<subscription>" }
+```
+
+#### Check
+
+- 202 with `scanStarted: true` and `scan.status` `queued` or `running`, or 200 with `scanStarted: false` if an overlap lock is held (existing job is returned).
+- GET `/v1/orgs/{orgId}/scans/{scanId}` reaches `succeeded` and `complete: true`.
+- Failed scan is not treated as current. Mid-failure must be `complete: false` and must not publish partial inventory.
+- 409 `Scans paused` means the contract is paused / retaining / ended — do not retry the scan; fix billing first.
+- Demo org `demo` is not a customer first scan: POSTs return the seed and never call a provider.
+
+#### Rollback
+
+- Overlap: wait for the running job. Do not start a second subscription scan on the same lock.
+- Failed job: scheduler retries within `scanRetryLimit` (default 3) at +1h. After the limit, fix the connection or harvest and POST once more.
+- Missed schedule: recorded as missed; the next tick starts a new run. Do not backfill by replaying old clocks in production.
+- Want a clean retry after a bad connect: wait for the failed job to finish, then POST `/scans` again. Do not mark a failed scan as current.
+
+## Leftovers
+
+| Item | Issue | Why this runbook cannot finish it |
+|---|---|---|
+| iac-hub `PRODUCTS` merge and parameterised deploy | #26, #175 | Hub and dedicated account are switch-on-later. |
+| Cold rehearsal, timing, extra manual steps | #176 | Needs a live test tenant and a dedicated account. |
+| Failures found only in that rehearsal | #177 leftover | Notes above cover the known path; new failures get added after #176. |
+| Identity claim | E2-S1 / Identity | Header session is the stand-in. |
+| Org transfer | #23 | `Moonaan/moonaan-farside` is not the working clone yet. |
+| Live Azure proof | E1-S7, E3-S8 | First scan against a real subscription is leftover. |
+| Billing screen / design-system | #171, #243 | Contract is API-only. Do not restyle the console here. |
+
+## Appendix: in-repo dry run (not a customer onboarding)
+
+Use this to walk Farside-owned steps without iac-hub or Identity. It does **not** satisfy #176.
+
+```bash
+npm run dev -w @farside/backend
+```
+
+1. PUT `/v1/orgs/org-a/contract` with the body in step 1 (`x-farside-org: org-a`).
+2. PUT `/v1/orgs/org-a/connections` with `{ "tenantId": "tenant-a", "subscriptionId": "main" }`.
+3. GET `/v1/orgs/org-a/scans` and wait for `succeeded`.
+4. Optional: POST `/v1/orgs/org-a/contract/advance` `{ "event": "failed_payment", "now": "<iso>" }`, then advance +7d and +14d more to `paused`, then POST `/scans` and expect 409.
+
+Org `demo` (`VITE_FARSIDE_DEMO=1` on the console) is a synthetic estate. Do not use it as a sale rehearsal.

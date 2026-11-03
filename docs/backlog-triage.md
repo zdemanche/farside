@@ -38,8 +38,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 21. **E4-S6** — merged (#248). Estate render waits on #243.
 22. **E5-S1** — merged (#249).
 23. **E5-S2** — merged (#250). Soak week is (c) #167.
-24. **E5-S3** — this change: contract store and scan gate. Billing screen waits on #243.
-25. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+24. **E5-S3** — merged (#251). Billing screen waits on #243.
+25. **E5-S4** — this change: operator runbook. Deploy (#175) and rehearsal (#176) stay leftover.
+26. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -256,11 +257,11 @@ Sell-ready path uses iac-hub, Identity, billing (D8), and a test tenant.
 | `E5-S3-T2` | #170 | Store plan and contract state per org | (a) this change | Plan, start, state, amount due. No card numbers. |
 | `E5-S3-T3` | #171 | Build the billing screen | (a) leftover | Left for the design-system pass (#243). |
 | `E5-S3-T4` | #172 | Apply contract state to scanning | (a) this change | Gate scans on contract state. |
-| `E5-S4` | #173 | New customer set up from sale to first scan | (d) external system or repo | iac-hub register, account create, base, Identity, Launch, then Farside. D5 (#5) for the address. Rehearsal is (c). |
-| `E5-S4-T1` | #174 | Write the operator runbook | (a) doable in code now | Operator runbook can be written from the proposal path. |
+| `E5-S4` | #173 | New customer set up from sale to first scan | (d) external system or repo | Runbook written. iac-hub register, account create, base, Identity, Launch, then Farside stay leftover. D5 (#5) for the address. Rehearsal is (c). |
+| `E5-S4-T1` | #174 | Write the operator runbook | (a) this change | `docs/operator-runbook.md` with a check after each step. |
 | `E5-S4-T2` | #175 | Automate the Farside deploy for a customer account | (d) external system or repo | Parameterised customer deploy through iac-hub. |
 | `E5-S4-T3` | #176 | Rehearse end to end on a test tenant | (c) live Azure / GCP / test tenant | Rehearse sale-to-first-scan on a test tenant. |
-| `E5-S4-T4` | #177 | Add rollback and retry notes | (a) doable in code now | Rollback/retry notes from the rehearsal. |
+| `E5-S4-T4` | #177 | Add rollback and retry notes | (a) this change | Known-path rollback on each step. Rehearsal-found failures leftover #176. |
 | `E5-S5` | #178 | Customer can leave cleanly | (b) human decision / sign-off | Account retirement follows D8 (#8). Data deletion tests are (a); live account close is (c). |
 | `E5-S5-T1` | #179 | Implement data deletion for an org | (a) doable in code now | Org data deletion tests. |
 | `E5-S5-T2` | #180 | Remove credentials and stop scans on offboarding | (a) doable in code now | Remove credentials and cancel schedules. |
