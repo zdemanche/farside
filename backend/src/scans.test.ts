@@ -1,9 +1,10 @@
 import { afterAll, describe, expect, it } from "vitest";
 import type { Inventory } from "@farside/scan-contracts";
 import { buildApp } from "./app.js";
-import { NO_BUDGETS } from "./budgets.js";
-import { RESERVATION_USE } from "./commitments.js";
-import { SPEND_BY_SERVICE } from "./cost.js";
+import { fixtureBudgetClient, NO_BUDGETS } from "./budgets.js";
+import { fixtureCommitmentClient, RESERVATION_USE } from "./commitments.js";
+import { fixtureCostClient, SPEND_BY_SERVICE } from "./cost.js";
+import { PROVIDER_NOT_CONFIGURED } from "./providers.js";
 import { AZURE_LAUNCH_CHECK_IDS, recordCoverageScope } from "./coverage.js";
 import { factsFromManifest } from "./facts.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
@@ -27,6 +28,11 @@ const MANIFEST = JSON.parse(
 
 const inventory: Inventory = inventoryFromManifest(MANIFEST);
 const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
+const FIXTURE_CLIENTS = {
+  costClient: fixtureCostClient(),
+  commitmentClient: fixtureCommitmentClient(),
+  budgetClient: fixtureBudgetClient(),
+};
 
 describe("scan job runner", () => {
   it("succeeds in the background and stores inventory and coverage", async () => {
@@ -219,6 +225,7 @@ describe("scan history API", () => {
     const store = new MemoryStore(fixedClock);
     const app = buildApp(store, {
       ...TEST_APP_OPTIONS,
+      ...FIXTURE_CLIENTS,
       clock: tickingClock(),
       harvester: fixtureHarvester(inventory),
     });
@@ -325,7 +332,11 @@ describe("scan history API", () => {
 describe("scan merge with harvests", () => {
   it("keeps budget and reservation findings and spend coverage after POST then scan", async () => {
     const store = new MemoryStore(fixedClock);
-    const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: fixtureHarvester(inventory) });
+    const app = buildApp(store, {
+      ...TEST_APP_OPTIONS,
+      ...FIXTURE_CLIENTS,
+      harvester: fixtureHarvester(inventory),
+    });
     const cost = await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/cost",
@@ -485,6 +496,37 @@ describe("server clock", () => {
     const scan = await waitForScan(app, "scan-1", "succeeded");
     expect(Math.abs(Date.parse(scan.startedAt ?? "") - before)).toBeLessThan(1000);
     expect(scan.durationMs).toBeGreaterThanOrEqual(0);
+    await app.close();
+  });
+});
+
+describe("production defaults", () => {
+  it("fails a non-demo scan on the default app and never returns ground-truth disks", async () => {
+    const store = new MemoryStore();
+    const app = buildApp(store);
+    await app.inject({
+      method: "PUT",
+      url: "/v1/orgs/org-a/connections",
+      headers: ORG,
+      payload: { tenantId: "tenant-1", subscriptionId: "main" },
+    });
+    const scan = await waitForScan(app, "scan-1", "failed");
+    expect(scan.error).toBe(PROVIDER_NOT_CONFIGURED);
+    const inventoryResponse = await app.inject({
+      method: "GET",
+      url: "/v1/orgs/org-a/inventory",
+      headers: ORG,
+    });
+    expect(inventoryResponse.statusCode).toBe(404);
+    expect(JSON.stringify(store.snapshot("org-a"))).not.toContain("disk-unattached");
+    const cost = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/cost",
+      headers: ORG,
+      payload: { subscriptionId: "main" },
+    });
+    expect(cost.statusCode).toBe(503);
+    expect(cost.json().title).toBe(PROVIDER_NOT_CONFIGURED);
     await app.close();
   });
 });

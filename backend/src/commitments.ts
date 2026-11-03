@@ -10,6 +10,7 @@ import {
   unusedReservationSavings,
   unusedSavingsPlanSavings,
 } from "./savings.js";
+import { rejectUnconfigured } from "./providers.js";
 
 export const RESERVATION_USE = "azure-cost-reservation-use";
 export const SAVINGS_PLAN_USE = "azure-cost-savings-plan-use";
@@ -284,6 +285,14 @@ export function mergeCommitmentFindings(existing: Finding[], next: Finding[]): F
 
 export function defaultCommitmentClient(): CommitmentClient {
   return fixtureCommitmentClient();
+}
+
+export function unconfiguredCommitmentClient(): CommitmentClient {
+  return {
+    async list() {
+      rejectUnconfigured();
+    },
+  };
 }
 
 export { RESERVATION_SAVINGS_BASIS, SAVINGS_PLAN_SAVINGS_BASIS };

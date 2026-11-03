@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { Finding } from "@farside/scan-contracts";
 import { acceptFinding } from "./checks.js";
 import { applyCoverageResult, recordCoverageScope, type CoverageEntry } from "./coverage.js";
+import { rejectUnconfigured } from "./providers.js";
 
 type BudgetManifest = {
   subscriptions: Array<{
@@ -81,6 +82,14 @@ export function unreadBudgetClient(subscriptionId: string): BudgetClient {
 
 export function defaultBudgetClient(): BudgetClient {
   return fixtureBudgetClient();
+}
+
+export function unconfiguredBudgetClient(): BudgetClient {
+  return {
+    async list() {
+      rejectUnconfigured();
+    },
+  };
 }
 
 export function checkNoBudgets(

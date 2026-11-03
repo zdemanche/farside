@@ -119,12 +119,16 @@ describe("gcp floor burst and alerts", () => {
 
 describe("digest and backtest", () => {
   it("groups alerts into one undelivered digest for configured recipients", () => {
-    const analysis = analyzeAlerts({ recipients: ["cto@example.test"] });
+    const analysis = analyzeAlerts({
+      rows: FIXTURE.rows,
+      asOf: FIXTURE.asOf,
+      recipients: ["cto@example.test"],
+    });
     expect(analysis.digest.alerts).toHaveLength(4);
     expect(analysis.digest.delivered).toBe(false);
     expect(analysis.digest.reason).toBe("no_mail_path");
     expect(analysis.digest.recipients).toEqual(["cto@example.test"]);
-    const none = analyzeAlerts({ recipients: [] });
+    const none = analyzeAlerts({ rows: FIXTURE.rows, asOf: FIXTURE.asOf, recipients: [] });
     expect(none.digest.reason).toBe("no_recipients");
   });
 
@@ -149,7 +153,7 @@ describe("alert routes", () => {
       method: "POST",
       url: "/v1/orgs/org-a/alerts",
       headers: ORG,
-      payload: { recipients: ["cto@example.test"] },
+      payload: { recipients: ["cto@example.test"], rows: FIXTURE.rows, asOf: FIXTURE.asOf },
     });
     expect(posted.statusCode).toBe(200);
     expect(posted.json().alerts).toHaveLength(4);

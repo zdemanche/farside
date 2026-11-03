@@ -293,14 +293,13 @@ export function buildDigest(
 }
 
 export function analyzeAlerts(input: {
-  rows?: DailyCost[];
-  asOf?: string;
+  rows: DailyCost[];
+  asOf: string;
   previous?: SpendAlert[];
   recipients?: string[];
 }): AlertAnalysis {
-  const fixture = replayFixture();
-  const rows = input.rows ?? fixture.rows;
-  const asOf = input.asOf ?? fixture.asOf;
+  const rows = input.rows;
+  const asOf = input.asOf;
   const evaluated = evaluateAlerts(rows, asOf, input.previous ?? []);
   return {
     asOf,

@@ -5,6 +5,7 @@ import {
   NO_BUDGETS,
   budgetsFromManifest,
   checkNoBudgets,
+  fixtureBudgetClient,
   harvestBudgets,
   unreadBudgetClient,
 } from "./budgets.js";
@@ -55,7 +56,7 @@ describe("no-budget check", () => {
 
 describe("budget routes", () => {
   const store = new MemoryStore(fixedClock);
-  const app = buildApp(store, TEST_APP_OPTIONS);
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, budgetClient: fixtureBudgetClient() });
 
   afterAll(async () => {
     await app.close();

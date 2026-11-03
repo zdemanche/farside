@@ -1,6 +1,10 @@
 import { afterAll, describe, expect, it } from "vitest";
 import type { Finding } from "@farside/scan-contracts";
+import { replayFixture } from "./alerts.js";
 import { buildApp } from "./app.js";
+import { fixtureBudgetClient } from "./budgets.js";
+import { fixtureCommitmentClient } from "./commitments.js";
+import { fixtureCostClient } from "./cost.js";
 import { recordCoverageScope } from "./coverage.js";
 import { fixtureHarvester } from "./scans.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
@@ -104,7 +108,13 @@ describe("waste totals", () => {
 
 describe("cost-waste route", () => {
   const store = new MemoryStore(fixedClock);
-  const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: fixtureHarvester(inventoryFromManifest(MANIFEST), factsFromManifest(MANIFEST)) });
+  const app = buildApp(store, {
+    ...TEST_APP_OPTIONS,
+    harvester: fixtureHarvester(inventoryFromManifest(MANIFEST), factsFromManifest(MANIFEST)),
+    costClient: fixtureCostClient(),
+    commitmentClient: fixtureCommitmentClient(),
+    budgetClient: fixtureBudgetClient(),
+  });
 
   afterAll(async () => {
     await app.close();
@@ -139,7 +149,7 @@ describe("cost-waste route", () => {
       method: "POST",
       url: "/v1/orgs/org-a/alerts",
       headers: ORG,
-      payload: {},
+      payload: { rows: replayFixture().rows, asOf: replayFixture().asOf },
     });
     const response = await app.inject({
       method: "GET",
