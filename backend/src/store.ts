@@ -109,24 +109,9 @@ export class MemoryStore {
   }
 
   orgRows(orgId: string): number {
-    const org = this.#orgs.get(orgId);
-    if (!org) {
-      return 0;
-    }
-    return (
-      org.connections.length +
-      Object.keys(org.inventories).length +
-      (org.inventory && !org.inventories[org.inventory.cloud] ? 1 : 0) +
-      org.coverage.length +
-      org.findings.length +
-      org.scans.length +
-      org.facts.length +
-      org.issues.length +
-      (org.cost ? 1 : 0) +
-      (org.commitments ? 1 : 0) +
-      (org.budgets ? 1 : 0) +
-      (org.alerts ? 1 : 0) +
-      (org.contract ? 1 : 0)
+    return Object.entries(this.#rowsPurged(this.#orgs.get(orgId))).reduce(
+      (sum, [kind, count]) => (kind === "settings" ? sum : sum + count),
+      0,
     );
   }
 

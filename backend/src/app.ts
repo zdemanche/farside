@@ -1,4 +1,10 @@
-import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
+import { randomUUID } from "node:crypto";
+import Fastify, {
+  LogController,
+  type FastifyError,
+  type FastifyReply,
+  type FastifyRequest,
+} from "fastify";
 import {
   HEALTH_SCORE_FORMULA,
   validateInventory,
@@ -59,6 +65,12 @@ import { costWasteView } from "./waste.js";
 import { matchesCloud, parseCloudQuery, type Cloud } from "./cloud.js";
 import { applyOwnerTag, browseInventories, groupInventory, noOwnerTotal } from "./inventory.js";
 import { scopeOf } from "./scope.js";
+import {
+  audit,
+  auditRetention,
+  pinoOptions,
+  type LoggerOptions,
+} from "./observability.js";
 import { SecretLeakError, assertNoSecrets } from "./secrets.js";
 import { ScanRunner, toScanView, toScanViews, unconfiguredHarvester, type Harvester } from "./scans.js";
 import { ScanScheduler } from "./scheduler.js";
@@ -80,6 +92,7 @@ const DEMO_CANNED_POSTS = new Set([
   "POST /budgets",
   "POST /alerts",
 ]);
+const AUDITED_STATUSES = new Set([401, 403, 409]);
 const READ_ONLY_EXEMPT = new Set(["POST /offboard", "POST /schedule/tick"]);
 
 function problem(
@@ -88,6 +101,9 @@ function problem(
   title: string,
   extra: Record<string, unknown> = {},
 ) {
+  if (AUDITED_STATUSES.has(status)) {
+    audit(reply.request.log, `http.${status}`, { title });
+  }
   return reply.code(status).type("application/problem+json").send({
     type: "about:blank",
     title,
@@ -195,12 +211,18 @@ export function buildApp(
     clock?: Clock;
     trustClientClock?: boolean;
     operatorToken?: string | undefined;
+    logger?: LoggerOptions;
   } = {},
 ) {
   const clock = options.clock ?? store.clock;
   const trustClientClock = options.trustClientClock === true;
   const clientTime = (candidate: unknown): string =>
     trustClientClock && typeof candidate === "string" ? candidate : clock();
+  const app = Fastify({
+    logger: pinoOptions(options.logger),
+    genReqId: () => randomUUID(),
+    logController: new LogController({ disableRequestLogging: true }),
+  });
   const runner = new ScanRunner(
     store,
     guardHarvester(options.harvester ?? unconfiguredHarvester()),
@@ -210,9 +232,9 @@ export function buildApp(
       ...(options.budgetClient ? { budgetClient: options.budgetClient } : {}),
     },
     clock,
+    app.log,
   );
   const scheduler = new ScanScheduler(store, runner, clock);
-  const app = Fastify({ logger: false });
 
   const operatorOnly = { config: { operator: true } };
   const operatorGuard = async (request: FastifyRequest<{ Params: OrgParams }>, reply: FastifyReply) => {
@@ -226,6 +248,47 @@ export function buildApp(
     return undefined;
   };
 
+  app.addHook("onRequest", async (request, reply) => {
+    void reply.header("x-request-id", request.id);
+    const orgId = (request.params as Partial<OrgParams> | undefined)?.orgId;
+    const operator =
+      (request.routeOptions.config as { operator?: boolean } | undefined)?.operator === true &&
+      isOperator(request, options.operatorToken);
+    const session = sessionFromHeaders(request);
+    const actorId = operator ? "operator" : session?.actorId;
+    const boundOrgId = orgId ?? session?.orgId;
+    request.log = request.log.child({
+      ...(boundOrgId ? { orgId: boundOrgId } : {}),
+      ...(actorId ? { actorId } : {}),
+    });
+  });
+
+  app.addHook("onResponse", async (request, reply) => {
+    request.log.info(
+      {
+        route: request.routeOptions.url ?? "unmatched",
+        method: request.method,
+        status: reply.statusCode,
+        latencyMs: Math.round(reply.elapsedTime),
+      },
+      "request completed",
+    );
+  });
+
+  app.setErrorHandler(async (error: FastifyError, request, reply) => {
+    if (typeof error.statusCode === "number" && error.statusCode < 500) {
+      return reply.send(error);
+    }
+    const errorId = randomUUID();
+    request.log.error({ err: error, errorId }, "unhandled error");
+    return reply.code(500).type("application/problem+json").send({
+      type: "about:blank",
+      title: "Internal Server Error",
+      status: 500,
+      errorId,
+    });
+  });
+
   app.addHook("preHandler", async (request, reply) => {
     const orgId = (request.params as Partial<OrgParams> | undefined)?.orgId;
     const config = request.routeOptions.config as { operator?: boolean };
@@ -236,7 +299,10 @@ export function buildApp(
     if (!session || assertOrgAccess(session, orgId) !== "ok" || store.deletion(orgId)) {
       return undefined;
     }
-    store.sweepRetention(clock(), orgId);
+    auditRetention(
+      request.server.log.child({ reqId: request.id }),
+      store.sweepRetention(clock(), orgId),
+    );
     if (store.deletion(orgId) || NON_MUTATING_METHODS.has(request.method)) {
       return undefined;
     }
@@ -324,6 +390,7 @@ export function buildApp(
       });
     }
     const connection = store.putConnection(request.params.orgId, input);
+    audit(request.log, "connection.connect");
     const asOf =
       request.body && typeof request.body === "object" && !Array.isArray(request.body)
         ? (request.body as Record<string, unknown>).asOf
@@ -354,6 +421,7 @@ export function buildApp(
       if (!store.deleteConnection(request.params.orgId, request.params.connectionId)) {
         return problem(reply, 404, "Not found");
       }
+      audit(request.log, "connection.disconnect");
       return reply.code(204).send();
     },
   );
@@ -910,6 +978,7 @@ export function buildApp(
       updatedAt: clock(),
     });
     const schedule = scheduler.applySettings(request.params.orgId, clientTime(body.asOf));
+    audit(request.log, "settings.change");
     return sendClean(reply, 200, { ...saved, nextRunAt: schedule.nextRunAt });
   });
 
@@ -984,6 +1053,7 @@ export function buildApp(
           });
         }
         store.putContract(request.params.orgId, parsed);
+        audit(request.log, "contract.change");
         return sendClean(reply, 200, billingView(parsed, now));
       } catch (error) {
         if (error instanceof CardDataError) {
@@ -1010,6 +1080,7 @@ export function buildApp(
           : undefined;
       const next = advanceContract(current, event ? { now, event } : { now });
       store.putContract(request.params.orgId, next);
+      audit(request.log, "contract.change", { via: "advance" });
       return sendClean(reply, 200, billingView(next, now));
     },
   );
@@ -1036,6 +1107,7 @@ export function buildApp(
     }
     const now = clientTime(body.now);
     const record = store.offboard(request.params.orgId, now, "customer", session.actorId);
+    audit(request.log, "org.offboard", { trigger: record.trigger });
     return sendClean(reply, 200, deletionView(record));
   });
 
