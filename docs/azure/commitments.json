@@ -1,0 +1,41 @@
+{
+  "note": "Fake reservation and savings-plan utilization for E4-S2. Not a live Azure purchase.",
+  "periodStart": "2026-10-01",
+  "periodEnd": "2026-10-31",
+  "reservations": [
+    {
+      "reservationId": "res-low",
+      "skuName": "Standard_D2s_v3",
+      "usedHours": 200,
+      "reservedHours": 720,
+      "utilisationPercent": 27.78,
+      "expiryDate": "2027-01-01"
+    },
+    {
+      "reservationId": "res-used",
+      "skuName": "Standard_B2s",
+      "usedHours": 700,
+      "reservedHours": 720,
+      "utilisationPercent": 97.22,
+      "expiryDate": "2027-06-01"
+    }
+  ],
+  "savingsPlans": [
+    {
+      "savingsPlanId": "sp-low",
+      "committedAmount": "100.00",
+      "usedAmount": "30.00",
+      "utilisationPercent": 30,
+      "expiryDate": "2027-01-01",
+      "currency": "USD"
+    },
+    {
+      "savingsPlanId": "sp-used",
+      "committedAmount": "80.00",
+      "usedAmount": "76.00",
+      "utilisationPercent": 95,
+      "expiryDate": "2027-06-01",
+      "currency": "USD"
+    }
+  ]
+}

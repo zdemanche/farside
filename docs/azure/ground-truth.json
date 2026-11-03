@@ -320,7 +320,7 @@
       "negatives": [],
       "exception": {
         "status": "unverified",
-        "reason": "The test estate will not buy reservations. None-found vs missing-role is E4-S2 after a live sub exists."
+        "reason": "The test estate will not buy reservations. Fixture none-found and missing-role are covered; a live purchase stays leftover."
       }
     },
     {
@@ -329,7 +329,7 @@
       "negatives": [],
       "exception": {
         "status": "unverified",
-        "reason": "The test estate will not buy savings plans. Same leftover as reservation use."
+        "reason": "The test estate will not buy savings plans. Fixture none-found is covered; a live purchase stays leftover."
       }
     },
     {
