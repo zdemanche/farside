@@ -27,7 +27,23 @@ permissions:
   contents: read
 
 jobs:
+  require-main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the main ref
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::This workflow only runs from refs/heads/main; dispatched from $REF."
+            echo "Refused: dispatched from $REF; only refs/heads/main may run this workflow." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
   destroy:
+    needs: require-main
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: customer
     permissions:
@@ -35,6 +51,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch main
+        run: git fetch --depth=1 origin main
       - name: Validate destroy confirmation and accountId
         env:
           CUSTOMER_NAME: ${{ inputs.customerName }}
@@ -58,9 +76,9 @@ jobs:
             echo "::error::accountId must be a 12-digit AWS account id."
             exit 1
           fi
-          REGISTERED=$(jq -r --arg c "$CUSTOMER_NAME" 'if .productDev.customer == $c then .productDev.accountId else (.customers[$c] // "") end' infra/accounts.json)
+          REGISTERED=$(git show origin/main:infra/accounts.json | jq -r --arg c "$CUSTOMER_NAME" 'if .productDev.customer == $c then .productDev.accountId else (.customers[$c] // "") end')
           if [ "$REGISTERED" != "$ACCOUNT_ID" ]; then
-            echo "::error::accountId is not the registered dedicated account for $CUSTOMER_NAME in infra/accounts.json."
+            echo "::error::accountId is not the registered dedicated account for $CUSTOMER_NAME in infra/accounts.json on main."
             exit 1
           fi
       - name: Report that destroy is not wired

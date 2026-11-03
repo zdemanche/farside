@@ -129,6 +129,30 @@ describe("no-secrets guard", () => {
       "key_-prefixed Entra",
       { note: "key_abc8Q~aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
     ],
+    [
+      "alphabetic-glued JWT",
+      { note: "tokeneyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
+    ],
+    [
+      "alphanumeric-glued JWT",
+      { note: "abc123eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
+    ],
+    [
+      "dot-prefixed JWT start",
+      { note: "x.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
+    ],
+    [
+      "dash-leading JWT",
+      { note: "-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
+    ],
+    [
+      "underscore-leading JWT",
+      { note: "_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
+    ],
+    [
+      "glued match false positive (accepted)",
+      { note: "surveyJavascriptBundleLoader.production" },
+    ],
     ["JWT value", { note: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" }],
   ])("rejects %s", (_name, payload) => {
     expect(() => assertNoSecrets(payload)).toThrow(SecretLeakError);
@@ -150,12 +174,13 @@ describe("no-secrets guard", () => {
     expect(secretPaths(payload)).toEqual([]);
   });
 
-  it.each([["eyJ".repeat(100_000)], ["eyJ-".repeat(50_000)]])(
-    "evaluates a long eyJ run quickly",
-    (note) => {
-      const started = performance.now();
-      secretPaths({ note });
-      expect(performance.now() - started).toBeLessThan(200);
-    },
-  );
+  it.each([
+    ["eyJ".repeat(100_000)],
+    ["eyJ-".repeat(50_000)],
+    ["aeyJ".repeat(50_000)],
+  ])("evaluates a long eyJ run quickly", (note) => {
+    const started = performance.now();
+    secretPaths({ note });
+    expect(performance.now() - started).toBeLessThan(200);
+  });
 });
