@@ -1,4 +1,4 @@
-import type { Finding, InventoryRecord } from "@farside/scan-contracts";
+import type { Finding } from "@farside/scan-contracts";
 import { DataError, errorFromStatus, toDataError } from "./error";
 import { formatEvidence, formatSavings, lifecycleFrom, recoveryFrom } from "./derive";
 import type {
@@ -7,6 +7,7 @@ import type {
   ConnectResult,
   DataSource,
   EstateOverview,
+  InventoryRow,
   IssueRow,
   IssueStatus,
   OrgSettings,
@@ -98,10 +99,11 @@ export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): Dat
 
   return {
     mode: "api",
+    orgId,
     overview: (signal) => get<EstateOverview>("/estate", signal),
     inventory: async (signal) => {
       try {
-        return (await get<{ resources: InventoryRecord[] }>("/inventory/browse", signal)).resources;
+        return (await get<{ resources: InventoryRow[] }>("/inventory/browse", signal)).resources;
       } catch (error) {
         if (error instanceof DataError && error.kind === "not-found") {
           return [];

@@ -1,6 +1,6 @@
 import { useId, useMemo, useState } from "react";
-import type { InventoryRecord } from "@farside/scan-contracts";
 import { useSource } from "./data/context";
+import type { InventoryRow } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { ScreenState } from "./ScreenState";
 
@@ -8,13 +8,7 @@ type Filters = { owner: string; service: string; subscription: string; region: s
 
 const NO_FILTERS: Filters = { owner: "", service: "", subscription: "", region: "" };
 
-function subscriptionOf(resource: InventoryRecord): string {
-  const parts = resource.resourceUri.split("/");
-  const at = parts.findIndex((part) => part === "subscriptions" || part === "projects");
-  return at === -1 ? "" : (parts[at + 1] ?? "");
-}
-
-function matches(resource: InventoryRecord, filters: Filters): boolean {
+function matches(resource: InventoryRow, filters: Filters): boolean {
   const { owner, service, subscription, region } = filters;
   if (owner === "none" && resource.ownerTag) {
     return false;
@@ -25,7 +19,7 @@ function matches(resource: InventoryRecord, filters: Filters): boolean {
   if (service && resource.resourceType !== service) {
     return false;
   }
-  if (subscription && subscriptionOf(resource) !== subscription) {
+  if (subscription && resource.subscriptionOrProject !== subscription) {
     return false;
   }
   if (region && resource.region !== region) {
@@ -37,7 +31,7 @@ function matches(resource: InventoryRecord, filters: Filters): boolean {
 const distinct = (values: (string | null | undefined)[]) =>
   [...new Set(values.filter((value): value is string => Boolean(value)))].sort();
 
-function InventoryBody({ resources }: { resources: InventoryRecord[] }) {
+function InventoryBody({ orgId, resources }: { orgId: string; resources: InventoryRow[] }) {
   const ids = { owner: useId(), service: useId(), subscription: useId(), region: useId() };
   const [filters, setFilters] = useState(NO_FILTERS);
   const filtered = useMemo(
@@ -48,7 +42,7 @@ function InventoryBody({ resources }: { resources: InventoryRecord[] }) {
     () => ({
       owner: distinct(resources.map((resource) => resource.ownerTag)),
       service: distinct(resources.map((resource) => resource.resourceType)),
-      subscription: distinct(resources.map(subscriptionOf)),
+      subscription: distinct(resources.map((resource) => resource.subscriptionOrProject)),
       region: distinct(resources.map((resource) => resource.region)),
     }),
     [resources],
@@ -63,8 +57,15 @@ function InventoryBody({ resources }: { resources: InventoryRecord[] }) {
   const change = (key: keyof Filters) => (event: { target: { value: string } }) =>
     setFilters((current) => ({ ...current, [key]: event.target.value }));
 
+  const scopes = options.subscription;
   return (
     <>
+      <p className="page-description">
+        Org {orgId}
+        {scopes.length > 0
+          ? ` · ${scopes.length === 1 ? "Subscription" : "Subscriptions"} ${scopes.join(", ")}`
+          : ""}
+      </p>
       <p className="page-meta" role="status" aria-live="polite">
         {filtered.length} resources
       </p>
@@ -181,7 +182,7 @@ function InventoryBody({ resources }: { resources: InventoryRecord[] }) {
                   <tr key={resource.resourceUri}>
                     <th scope="row">{resource.displayName}</th>
                     <td>{resource.resourceType}</td>
-                    <td>{subscriptionOf(resource)}</td>
+                    <td>{resource.subscriptionOrProject}</td>
                     <td>{resource.region}</td>
                     <td>{resource.ownerTag ?? "none"}</td>
                   </tr>
@@ -213,7 +214,7 @@ export function Inventory() {
             : null
         }
       >
-        {(data) => <InventoryBody resources={data} />}
+        {(data) => <InventoryBody orgId={source.orgId} resources={data} />}
       </ScreenState>
     </>
   );

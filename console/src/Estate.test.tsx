@@ -142,7 +142,28 @@ describe("Estate, Inventory and Settings", () => {
     expect(screen.getByRole("status").textContent).toBe("");
   });
 
-  it("reads the project from a GCP resource URI for the column and the filter", async () => {
+  it("filters a uksouth resource owned by acme and shows org and subscription", async () => {
+    const acme = {
+      resourceUri:
+        "/subscriptions/sub-acme/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-acme",
+      resourceType: "Microsoft.Compute/virtualMachines",
+      region: "uksouth",
+      displayName: "Acme VM",
+      tags: { owner: "acme" },
+      ownerTag: "acme",
+      subscriptionOrProject: "sub-acme",
+      cloud: "azure" as const,
+    };
+    renderScreen(<Inventory />, sourceWith({ inventory: async () => [acme] }));
+    expect(await screen.findByText(/Org demo/)).toBeTruthy();
+    expect(screen.getByText(/Subscription sub-acme/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Owner"), { target: { value: "acme" } });
+    fireEvent.change(screen.getByLabelText("Region"), { target: { value: "uksouth" } });
+    expect(screen.getByRole("row", { name: /Acme VM/ })).toBeTruthy();
+    expect(screen.getByText("1 resources")).toBeTruthy();
+  });
+
+  it("reads the project from a typed browse field for the column and the filter", async () => {
     const gcp = {
       resourceUri: "//compute.googleapis.com/projects/proj-9/zones/us-east1-b/disks/pd-1",
       resourceType: "compute.googleapis.com/Disk",
@@ -150,6 +171,8 @@ describe("Estate, Inventory and Settings", () => {
       displayName: "GCP disk",
       tags: {},
       ownerTag: null,
+      subscriptionOrProject: "proj-9",
+      cloud: "gcp" as const,
     };
     renderScreen(<Inventory />, sourceWith({ inventory: async () => [gcp] }));
     const row = await screen.findByRole("row", { name: /GCP disk/ });

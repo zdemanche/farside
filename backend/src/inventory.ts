@@ -98,7 +98,10 @@ export type InventoryFilters = {
   cloud?: Cloud;
 };
 
-export type BrowsableResource = InventoryRecord & { cloud: Cloud };
+export type BrowsableResource = InventoryRecord & {
+  cloud: Cloud;
+  subscriptionOrProject: string;
+};
 
 export function filterInventory(
   inventory: Inventory,
@@ -123,7 +126,13 @@ export function filterInventory(
     if (filters.region && resource.region !== filters.region) {
       return [];
     }
-    return [{ ...resource, cloud: inventory.cloud }];
+    return [
+      {
+        ...resource,
+        cloud: inventory.cloud,
+        subscriptionOrProject: scopeOf(inventory.cloud, resource.resourceUri),
+      },
+    ];
   });
 }
 
