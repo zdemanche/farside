@@ -40,7 +40,7 @@ export function App() {
           ? "estate"
           : hash === "inventory"
             ? "inventory"
-            : hash === "issues"
+            : hash === "issues" || hash.startsWith("issues/")
               ? "issues"
               : hash === "settings"
                 ? "settings"

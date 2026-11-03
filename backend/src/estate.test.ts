@@ -2,8 +2,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
+import { scoreHealth } from "@farside/scan-contracts";
 import { buildApp } from "./app.js";
-import { recordCoverageScope } from "./coverage.js";
+import { recordCoverageScope, toContractCoverage } from "./coverage.js";
 import { estateOverview } from "./estate.js";
 import { applyOwnerTag, filterInventory, groupInventory, inventoryFromManifest, noOwnerTotal, type GroundTruthManifest } from "./inventory.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
@@ -56,6 +57,39 @@ describe("estate overview", () => {
     expect(overview.noOwnerTotal).toBe(1);
     expect(overview.coverage).toEqual({ assessed: 1, unassessed: 1, undetermined: 1 });
     expect(overview.healthScore).toBeNull();
+  });
+
+  it("scores only assessed scopes when findings exist", () => {
+    const store = new MemoryStore();
+    const inventory = inventoryFromManifest(MANIFEST);
+    store.putInventory("org-a", inventory);
+    const assessed = recordCoverageScope({
+      subscriptionOrProject: "main",
+      checkId: "azure-waste-unattached-disks",
+      state: "assessed",
+    });
+    const finding = {
+      checkId: "azure-waste-unattached-disks",
+      result: "fail" as const,
+      evidence: { fields: { diskId: "disk-unattached", diskState: "Unattached" } },
+      scope: { id: assessed.id, cloud: "azure" as const, subscriptionOrProject: "main" },
+    };
+    store.putCoverage("org-a", [assessed]);
+    store.putFindings("org-a", [finding]);
+    const baseline = estateOverview(store.snapshot("org-a"));
+    expect(baseline.healthScore).toBe(
+      scoreHealth(toContractCoverage([assessed]), [finding]).score,
+    );
+    store.putCoverage("org-a", [
+      assessed,
+      recordCoverageScope({
+        subscriptionOrProject: "ghost",
+        checkId: "azure-waste-unattached-disks",
+        state: "unassessed",
+        causeId: "not_run",
+      }),
+    ]);
+    expect(estateOverview(store.snapshot("org-a")).healthScore).toBe(baseline.healthScore);
   });
 });
 

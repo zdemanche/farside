@@ -7,6 +7,7 @@ import { applyCoverageResult } from "./coverage.js";
 import { factsFromManifest, type ResourceFacts } from "./facts.js";
 import { applyOwnerTag, inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
 import { CHECK_REGISTRY, runChecks } from "./checks.js";
+import { applyScanToIssues } from "./issues.js";
 import type { OrgSettings } from "./settings.js";
 import type { MemoryStore } from "./store.js";
 
@@ -140,6 +141,16 @@ export class ScanRunner {
         });
       }
       this.store.putCoverage(orgId, coverage);
+      this.store.putIssues(
+        orgId,
+        applyScanToIssues({
+          issues: this.store.snapshot(orgId).issues,
+          findings: checked.findings,
+          coverage,
+          scanId: jobId,
+          observedAt: result.inventory.observedAt,
+        }),
+      );
       return this.store.patchJob(orgId, jobId, {
         status: "succeeded",
         complete: true,

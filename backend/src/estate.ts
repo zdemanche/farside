@@ -1,4 +1,5 @@
 import type { CoverageEntry } from "./coverage.js";
+import { coverageHealth } from "./coverage.js";
 import { noOwnerTotal } from "./inventory.js";
 import type { OrgState } from "./store.js";
 
@@ -7,7 +8,7 @@ export type EstateOverview = {
   resourceTotal: number;
   noOwnerTotal: number;
   coverage: { assessed: number; unassessed: number; undetermined: number };
-  healthScore: null;
+  healthScore: number | null;
 };
 
 export function coverageCounts(entries: CoverageEntry[]): EstateOverview["coverage"] {
@@ -33,6 +34,6 @@ export function estateOverview(org: OrgState): EstateOverview {
     resourceTotal: org.inventory.resources.length,
     noOwnerTotal: noOwnerTotal(org.inventory).total,
     coverage: coverageCounts(org.coverage),
-    healthScore: null,
+    healthScore: coverageHealth(org.coverage, org.findings).score,
   };
 }

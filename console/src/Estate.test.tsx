@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { scoreHealth } from "@farside/scan-contracts";
 import { App } from "./App";
 import { Estate } from "./Estate";
 import { Inventory } from "./Inventory";
@@ -47,7 +48,7 @@ describe("Estate, Inventory and Settings", () => {
     await expectAxeClean(container);
   });
 
-  it("shows seeded totals, no-owner count and coverage without a health score", async () => {
+  it("shows seeded totals, coverage and a health score from assessed scopes only", async () => {
     const { container } = render(<Estate overview={SEEDED_OVERVIEW} />);
     expect(screen.getByText(`Resources ${SEEDED_OVERVIEW.resourceTotal}`)).toBeTruthy();
     expect(screen.getByText(`No owner ${SEEDED_OVERVIEW.noOwnerTotal}`)).toBeTruthy();
@@ -56,8 +57,35 @@ describe("Estate, Inventory and Settings", () => {
     expect(
       screen.getByText(`Undetermined scopes ${SEEDED_OVERVIEW.coverage.undetermined}`),
     ).toBeTruthy();
-    expect(screen.getByText(/no health score/i)).toBeTruthy();
-    expect(SEEDED_OVERVIEW.healthScore).toBeNull();
+    expect(screen.getByText(`Health score ${SEEDED_OVERVIEW.healthScore}`)).toBeTruthy();
+    const baseline = scoreHealth(
+      { scopes: [{ id: "main:check", checkId: "check", assessed: true }] },
+      [
+        {
+          checkId: "check",
+          result: "fail",
+          evidence: { fields: { ok: false } },
+          scope: { id: "main:check", cloud: "azure", subscriptionOrProject: "main" },
+        },
+      ],
+    );
+    const withUnassessed = scoreHealth(
+      {
+        scopes: [
+          { id: "main:check", checkId: "check", assessed: true },
+          { id: "ghost:check", checkId: "check", assessed: false },
+        ],
+      },
+      [
+        {
+          checkId: "check",
+          result: "fail",
+          evidence: { fields: { ok: false } },
+          scope: { id: "main:check", cloud: "azure", subscriptionOrProject: "main" },
+        },
+      ],
+    );
+    expect(withUnassessed.score).toBe(baseline.score);
     await expectAxeClean(container);
   });
 
