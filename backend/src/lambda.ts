@@ -10,16 +10,22 @@ export type ProxyEvent = {
   httpMethod?: string;
   requestContext?: { http?: { method?: string } };
   headers?: Record<string, string | undefined>;
+  cookies?: string[];
   body?: string | null;
+  isBase64Encoded?: boolean;
 };
 
-type ProxyResult = {
+export type ProxyResult = {
   statusCode: number;
   headers: Record<string, string>;
+  cookies?: string[];
   body: string;
+  isBase64Encoded: boolean;
 };
 
 const METHODS = new Set<HttpMethod>(["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]);
+const SESSION_HEADERS = ["x-farside-org", "x-farside-actor", "x-farside-operator"];
+const TEXT_TYPE = /^(text\/|application\/(json|problem\+json|javascript|xml)|.*\+(json|xml))/i;
 
 const app = buildApp(undefined, {
   operatorToken: process.env.FARSIDE_OPERATOR_TOKEN || undefined,
@@ -39,23 +45,66 @@ function urlOf(event: ProxyEvent): string {
   return `${path}${query}`;
 }
 
-export async function handler(event: ProxyEvent): Promise<ProxyResult> {
-  await ready;
+function headersOf(event: ProxyEvent): Record<string, string> {
+  const trustEdge = process.env.FARSIDE_TRUST_EDGE_HEADERS === "1";
   const headers: Record<string, string> = {};
   for (const [key, value] of Object.entries(event.headers ?? {})) {
-    if (value !== undefined) {
-      headers[key] = value;
+    const name = key.toLowerCase();
+    if (value !== undefined && (trustEdge || !SESSION_HEADERS.includes(name))) {
+      headers[name] = value;
     }
   }
+  if (event.cookies?.length) {
+    headers.cookie = event.cookies.join("; ");
+  }
+  return headers;
+}
+
+function payloadOf(event: ProxyEvent): Buffer | string | undefined {
+  if (!event.body) {
+    return undefined;
+  }
+  return event.isBase64Encoded ? Buffer.from(event.body, "base64") : event.body;
+}
+
+export async function handler(event: ProxyEvent): Promise<ProxyResult> {
+  await ready;
+  const payload = payloadOf(event);
   const response = await app.inject({
     method: methodOf(event),
     url: urlOf(event),
-    headers,
-    ...(event.body ? { payload: event.body } : {}),
+    headers: headersOf(event),
+    ...(payload === undefined ? {} : { payload }),
   });
+  return resultOf(response);
+}
+
+type InjectedResponse = {
+  statusCode: number;
+  headers: Record<string, unknown>;
+  body: string;
+  rawPayload: Buffer;
+};
+
+export function resultOf(response: InjectedResponse): ProxyResult {
+  const headers: Record<string, string> = {};
+  let cookies: string[] | undefined;
+  for (const [name, value] of Object.entries(response.headers)) {
+    if (value === undefined || name === "content-length" || name === "transfer-encoding") {
+      continue;
+    }
+    if (name === "set-cookie") {
+      cookies = Array.isArray(value) ? value.map(String) : [String(value)];
+    } else {
+      headers[name] = Array.isArray(value) ? value.map(String).join(", ") : String(value);
+    }
+  }
+  const binary = !TEXT_TYPE.test(String(response.headers["content-type"] ?? "text/plain"));
   return {
     statusCode: response.statusCode,
-    headers: { "content-type": "application/json" },
-    body: response.body,
+    headers,
+    ...(cookies ? { cookies } : {}),
+    body: binary ? response.rawPayload.toString("base64") : response.body,
+    isBase64Encoded: binary,
   };
 }
