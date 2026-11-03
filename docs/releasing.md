@@ -5,7 +5,7 @@ Farside is one product in one repo. One version, one `CHANGELOG.md`, one GitHub 
 ## How a release happens
 
 1. Commits that land on `main` use [Conventional Commits](https://www.conventionalcommits.org/).
-2. On every push to `main`, [release-please](https://github.com/googleapis/release-please) opens or updates a release pull request. That PR bumps the root `package.json` version, writes `CHANGELOG.md`, and lists the commits since the last tag.
+2. On every push to `main`, [release-please](https://github.com/googleapis/release-please) opens or updates a release pull request. That PR bumps the root `package.json` version and `plugin/.claude-plugin/plugin.json` `version` (extra-files), writes `CHANGELOG.md`, and lists the commits since the last tag.
 3. A human (Zach) merges the release PR when ready. Do not merge it from automation.
 4. Merging the release PR creates the GitHub Release and the `vX.Y.Z` tag.
 
