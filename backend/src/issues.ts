@@ -32,6 +32,9 @@ const RESOURCE_KEYS = [
   "databaseId",
   "certificateId",
   "gatewayId",
+  "reservationId",
+  "savingsPlanId",
+  "subscriptionId",
   "resourceId",
 ] as const;
 
@@ -59,11 +62,16 @@ export function applyScanToIssues(input: {
   coverage: CoverageEntry[];
   scanId: string;
   observedAt: string;
+  checkIds?: readonly string[];
 }): StoredIssue[] {
+  const limit = input.checkIds ? new Set(input.checkIds) : null;
   const byId = new Map(input.issues.map((issue) => [issue.id, { ...issue }]));
   const seen = new Set<string>();
 
   for (const finding of input.findings) {
+    if (limit && !limit.has(finding.checkId)) {
+      continue;
+    }
     if (finding.result !== "fail") {
       continue;
     }
@@ -92,6 +100,9 @@ export function applyScanToIssues(input: {
 
   for (const issue of byId.values()) {
     if (seen.has(issue.id) || issue.status === "closed") {
+      continue;
+    }
+    if (limit && !limit.has(issue.checkId)) {
       continue;
     }
     const coverage = coverageFor(input.coverage, issue.scopeId);

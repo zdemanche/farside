@@ -153,5 +153,16 @@ describe("commitment routes", () => {
       headers: ORG,
     });
     expect(stored.json().reservations[0].reservationId).toBe("res-low");
+    const issues = await app.inject({
+      method: "GET",
+      url: "/v1/orgs/org-a/issues",
+      headers: ORG,
+    });
+    const reservation = (issues.json().issues as Array<{
+      checkId: string;
+      resourceId: string;
+      status: string;
+    }>).find((issue) => issue.checkId === RESERVATION_USE && issue.resourceId === "res-low");
+    expect(reservation?.status).toBe("open");
   });
 });

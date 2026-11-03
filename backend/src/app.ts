@@ -21,6 +21,7 @@ import {
   defaultBudgetClient,
   harvestBudgets,
   mergeBudgetFindings,
+  NO_BUDGETS,
   type BudgetClient,
 } from "./budgets.js";
 import {
@@ -28,8 +29,11 @@ import {
   defaultCommitmentClient,
   harvestCommitments,
   mergeCommitmentFindings,
+  RESERVATION_USE,
+  SAVINGS_PLAN_USE,
   type CommitmentClient,
 } from "./commitments.js";
+import { applyScanToIssues } from "./issues.js";
 import {
   applyCostCoverage,
   defaultCostClient,
@@ -638,9 +642,21 @@ export function buildApp(
       });
     }
     store.putCommitments(request.params.orgId, harvested.snapshot);
-    store.putFindings(
+    const commitmentFindings = mergeCommitmentFindings(
+      store.snapshot(request.params.orgId).findings,
+      harvested.findings,
+    );
+    store.putFindings(request.params.orgId, commitmentFindings);
+    store.putIssues(
       request.params.orgId,
-      mergeCommitmentFindings(store.snapshot(request.params.orgId).findings, harvested.findings),
+      applyScanToIssues({
+        issues: store.snapshot(request.params.orgId).issues,
+        findings: harvested.findings,
+        coverage: store.snapshot(request.params.orgId).coverage,
+        scanId: "harvest-commitments",
+        observedAt: harvested.snapshot.periodEnd,
+        checkIds: [RESERVATION_USE, SAVINGS_PLAN_USE],
+      }),
     );
     return sendClean(reply, 200, {
       harvested: true,
@@ -683,6 +699,17 @@ export function buildApp(
     store.putFindings(
       request.params.orgId,
       mergeBudgetFindings(store.snapshot(request.params.orgId).findings, harvested.findings),
+    );
+    store.putIssues(
+      request.params.orgId,
+      applyScanToIssues({
+        issues: store.snapshot(request.params.orgId).issues,
+        findings: harvested.findings,
+        coverage: store.snapshot(request.params.orgId).coverage,
+        scanId: "harvest-budgets",
+        observedAt: harvested.snapshot.lastConfirmed,
+        checkIds: [NO_BUDGETS],
+      }),
     );
     return sendClean(reply, 200, {
       harvested: true,
