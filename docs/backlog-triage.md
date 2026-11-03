@@ -37,8 +37,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 20. **E4-S5** — merged (#247). Console page waits on #243.
 21. **E4-S6** — merged (#248). Estate render waits on #243.
 22. **E5-S1** — merged (#249).
-23. **E5-S2** — this change: recurring scheduler, overlap/retry/missed, Settings interval. Soak week is (c) #167.
-24. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+23. **E5-S2** — merged (#250). Soak week is (c) #167.
+24. **E5-S3** — this change: contract store and scan gate. Billing screen waits on #243.
+25. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -250,11 +251,11 @@ Sell-ready path uses iac-hub, Identity, billing (D8), and a test tenant.
 | `E5-S2-T2` | #165 | Add overlap skip, retry and missed-run detection | (a) this change | Overlap skip, retry, missed-run. |
 | `E5-S2-T3` | #166 | Add schedule control to Settings | (a) this change | Schedule control in Settings. |
 | `E5-S2-T4` | #167 | Run a soak test on the test subscription | (c) live Azure / GCP / test tenant | Unattended soak on the test subscription. |
-| `E5-S3` | #168 | Contract and billing for a Farside customer | (a) after this review | D8 adopted; dashmeta billing review is in `docs/reuse-review.md`. Implement in E5-S3. |
-| `E5-S3-T1` | #169 | Settle the billing approach and suspension rule | adopted | D8 + E1-S4 billing review in `docs/reuse-review.md`. Agreement-only sign-off satisfied by owner direction. |
-| `E5-S3-T2` | #170 | Store plan and contract state per org | (a) doable in code now | Store plan/contract state after T1. |
-| `E5-S3-T3` | #171 | Build the billing screen | (a) doable in code now | Billing screen after T2. Reuse from dashmeta is (d). |
-| `E5-S3-T4` | #172 | Apply contract state to scanning | (a) doable in code now | Gate scans on contract state. |
+| `E5-S3` | #168 | Contract and billing for a Farside customer | (a) this change | Contract store and scan gate. Billing screen is #171 / #243. |
+| `E5-S3-T1` | #169 | Settle the billing approach and suspension rule | adopted | D8 + E1-S4 billing review in `docs/reuse-review.md`. |
+| `E5-S3-T2` | #170 | Store plan and contract state per org | (a) this change | Plan, start, state, amount due. No card numbers. |
+| `E5-S3-T3` | #171 | Build the billing screen | (a) leftover | Left for the design-system pass (#243). |
+| `E5-S3-T4` | #172 | Apply contract state to scanning | (a) this change | Gate scans on contract state. |
 | `E5-S4` | #173 | New customer set up from sale to first scan | (d) external system or repo | iac-hub register, account create, base, Identity, Launch, then Farside. D5 (#5) for the address. Rehearsal is (c). |
 | `E5-S4-T1` | #174 | Write the operator runbook | (a) doable in code now | Operator runbook can be written from the proposal path. |
 | `E5-S4-T2` | #175 | Automate the Farside deploy for a customer account | (d) external system or repo | Parameterised customer deploy through iac-hub. |
