@@ -2,6 +2,7 @@ import { useId, useMemo, useState } from "react";
 import { useSource } from "./data/context";
 import type { InventoryRow } from "./data/types";
 import { useResource } from "./data/use-resource";
+import { plural } from "./plural";
 import { ScreenState } from "./ScreenState";
 
 type Filters = { owner: string; service: string; subscription: string; region: string };
@@ -67,9 +68,9 @@ function InventoryBody({ orgId, resources }: { orgId: string; resources: Invento
           : ""}
       </p>
       <p className="page-meta" role="status" aria-live="polite">
-        {filtered.length} resources
+        {plural(filtered.length, "resource")}
       </p>
-      <form className="panel filters">
+      <form className="panel filters" role="search" aria-label="Filter inventory">
         <div className="field">
           <label htmlFor={ids.owner}>Owner</label>
           <select className="input" id={ids.owner} value={filters.owner} onChange={change("owner")}>

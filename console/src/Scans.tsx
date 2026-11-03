@@ -4,6 +4,7 @@ import { useSource } from "./data/context";
 import type { ScanCoverageSummary, ScanRow, ScanStatus } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { ScreenState } from "./ScreenState";
+import { plural } from "./plural";
 import { TERMS, coverageStateLabel } from "./terms";
 
 const STATUS_TONE: Record<ScanStatus, Tone> = {
@@ -40,6 +41,11 @@ function formatCoverage(summary: ScanCoverageSummary): string {
 function ScanDetail({ id }: { id: string }) {
   const source = useSource();
   const resource = useResource((signal) => source.scan(id, signal), [source, id]);
+  useEffect(() => {
+    if (resource.status === "ready") {
+      document.getElementById("scan-detail-title")?.focus();
+    }
+  }, [resource.status, id]);
   return (
     <ScreenState
       label={`scan ${id}`}
@@ -48,8 +54,10 @@ function ScanDetail({ id }: { id: string }) {
     >
       {(scan) => (
         <article className="panel detail" aria-labelledby="scan-detail-title">
-          <h2 id="scan-detail-title">{scan.id}</h2>
-          <p>Start {scan.startedAt ?? "not started"}</p>
+          <h2 id="scan-detail-title" tabIndex={-1}>
+            {scan.id}
+          </h2>
+          <p>Start {scan.startedAt ?? "Not started"}</p>
           <p>Duration {formatDuration(scan.durationMs)}</p>
           <p>
             Status {scan.status}
@@ -152,7 +160,7 @@ export function Scans({
               aria-live="polite"
               data-busy={inFlight ? "true" : undefined}
             >
-              {inFlight ? (inFlight.status === "queued" ? "Queued" : "Running") : `${data.length} scans`}
+              {inFlight ? (inFlight.status === "queued" ? "Queued" : "Running") : plural(data.length, "scan")}
             </p>
             <div
               className="table-wrap"

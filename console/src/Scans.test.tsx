@@ -84,7 +84,7 @@ describe("Scans screen", () => {
     renderScreen(<Scans hash="scans" pollMs={20} />, sourceWith({ scans }));
     await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Running"));
     expect(screen.getByRole("row", { name: /scan-3/ }).textContent).not.toContain("current");
-    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("1 scans"));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("1 scan"));
     expect(screen.getByRole("row", { name: /scan-3/ }).textContent).toContain("succeeded current");
     expect(scans).toHaveBeenCalledTimes(2);
   });

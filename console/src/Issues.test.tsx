@@ -19,7 +19,7 @@ describe("Issues screen", () => {
     await waitFor(() => expect(screen.getByText("7 issues")).toBeTruthy());
     expect(screen.getByText(/2 more issues are hidden by the status filter/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Status"), { target: { value: "closed" } });
-    expect(screen.getByText("1 issues")).toBeTruthy();
+    expect(screen.getByText("1 issue")).toBeTruthy();
     expect(screen.getByRole("row", { name: /disk-fixed/ })).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Status"), { target: { value: "not_confirmed" } });
     expect(screen.getByRole("row", { name: /sub-no-budget/ }).textContent).toMatch(/not confirmed/);

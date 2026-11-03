@@ -73,10 +73,10 @@ describe("Estate, Inventory and Settings", () => {
   it("filters inventory by owner, service, subscription and region and clears the filters", async () => {
     const { container } = renderScreen(<Inventory />);
     const count = async (text: string) =>
-      waitFor(() => expect(screen.getByText(/\d+ resources$/).textContent).toBe(text));
+      waitFor(() => expect(screen.getByText(/\d+ resources?$/).textContent).toBe(text));
     await count("4 resources");
     fireEvent.change(screen.getByLabelText("Owner"), { target: { value: "none" } });
-    await count("1 resources");
+    await count("1 resource");
     expect(screen.getByRole("row", { name: /Unattached managed disk/ })).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Owner"), { target: { value: "" } });
     fireEvent.change(screen.getByLabelText("Service"), {
@@ -87,10 +87,10 @@ describe("Estate, Inventory and Settings", () => {
     fireEvent.change(screen.getByLabelText("Subscription"), {
       target: { value: "empty-no-budget" },
     });
-    await count("1 resources");
+    await count("1 resource");
     fireEvent.change(screen.getByLabelText("Subscription"), { target: { value: "" } });
     fireEvent.change(screen.getByLabelText("Region"), { target: { value: "westus" } });
-    await count("1 resources");
+    await count("1 resource");
     expect(screen.getByRole("row", { name: /Production VM/ })).toBeTruthy();
     await expectAxeClean(container);
 
@@ -139,7 +139,7 @@ describe("Estate, Inventory and Settings", () => {
     await screen.findByLabelText("Owner tag key");
     fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/doesn't have access/);
-    expect(screen.getByRole("status").textContent).toBe("");
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("filters a uksouth resource owned by acme and shows org and subscription", async () => {
@@ -160,7 +160,7 @@ describe("Estate, Inventory and Settings", () => {
     fireEvent.change(screen.getByLabelText("Owner"), { target: { value: "acme" } });
     fireEvent.change(screen.getByLabelText("Region"), { target: { value: "uksouth" } });
     expect(screen.getByRole("row", { name: /Acme VM/ })).toBeTruthy();
-    expect(screen.getByText("1 resources")).toBeTruthy();
+    expect(screen.getByText("1 resource")).toBeTruthy();
   });
 
   it("reads the project from a typed browse field for the column and the filter", async () => {
@@ -192,7 +192,7 @@ describe("Estate, Inventory and Settings", () => {
   it("fetches the overview once for the whole provider", async () => {
     const overview = vi.fn(async () => EMPTY_OVERVIEW);
     renderScreen(<Inventory />, sourceWith({ overview }));
-    await screen.findByText(/\d+ resources$/);
+    await screen.findByText(/\d+ resources?$/);
     expect(overview).toHaveBeenCalledTimes(1);
   });
 });

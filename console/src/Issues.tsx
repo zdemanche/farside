@@ -1,9 +1,10 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Chip, coverageTone, type Tone } from "./Chip";
 import { useSource } from "./data/context";
 import type { IssueRow, IssueStatus } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { ScreenState } from "./ScreenState";
+import { plural } from "./plural";
 import { TERMS, coverageStateLabel } from "./terms";
 
 const STATUS_TONE: Record<IssueStatus, Tone> = {
@@ -32,6 +33,11 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
   const subscriptionId = useId();
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const selected = issues.find((issue) => issue.id === selectedId(hash));
+  useEffect(() => {
+    if (selected) {
+      document.getElementById("issue-detail-title")?.focus();
+    }
+  }, [selected?.id]);
   const passes = (issue: IssueRow, skipStatus: boolean) =>
     (!filters.check || issue.checkId === filters.check) &&
     (skipStatus || !filters.status || issue.status === filters.status) &&
@@ -45,7 +51,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
 
   return (
     <>
-      <form className="panel filters">
+      <form className="panel filters" role="search" aria-label="Filter issues">
         <div className="field">
           <label htmlFor={checkId}>Check</label>
           <select
@@ -99,7 +105,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
         </div>
       </form>
       <p className="page-meta" role="status" aria-live="polite">
-        {visible.length} issues
+        {plural(visible.length, "issue")}
       </p>
       {hiddenByStatus > 0 ? (
         <p className="notice">
@@ -162,7 +168,9 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
       )}
       {selected ? (
         <article className="panel detail" aria-labelledby="issue-detail-title">
-          <h2 id="issue-detail-title">{selected.resourceId}</h2>
+          <h2 id="issue-detail-title" tabIndex={-1}>
+            {selected.resourceId}
+          </h2>
           <p>Check {selected.checkId}</p>
           <p>Evidence {selected.evidence}</p>
           <p>Savings {selected.savings}</p>

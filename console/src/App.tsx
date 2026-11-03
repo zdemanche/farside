@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { apiSource } from "./data/api";
 import { DataProvider } from "./data/context";
 import type { DataSource } from "./data/types";
@@ -29,6 +29,23 @@ async function resolveSource(demo: boolean | undefined): Promise<DataSource | nu
 
 function currentHash(): string {
   return window.location.hash.replace(/^#\/?/, "");
+}
+
+const PAGE_TITLES: Record<string, string> = {
+  connect: "Connect",
+  "blind-spots": "Blind spots",
+  estate: "Estate",
+  inventory: "Inventory",
+  issues: "Issues",
+  settings: "Settings",
+  recovery: "Recovery",
+  lifecycle: "Lifecycle",
+  scans: "Scans",
+};
+
+function pageTitle(page: string): string {
+  const label = PAGE_TITLES[page];
+  return label ? `${label} - ${PRODUCT_NAME}` : PRODUCT_NAME;
 }
 
 function skipToMain(event: MouseEvent<HTMLAnchorElement>) {
@@ -62,10 +79,6 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  useEffect(() => {
-    document.getElementById("page-title")?.focus();
-  }, [hash]);
-
   const page =
     hash === "connect"
       ? "connect"
@@ -87,6 +100,22 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
                       ? "scans"
                       : "empty";
 
+  const firstHash = useRef(true);
+  useEffect(() => {
+    document.title = pageTitle(page);
+  }, [page]);
+
+  useEffect(() => {
+    if (firstHash.current) {
+      firstHash.current = false;
+      return;
+    }
+    if (hash.includes("/")) {
+      return;
+    }
+    document.getElementById("page-title")?.focus();
+  }, [hash]);
+
   return (
     <div className="app">
       <a className="skip-link" href="#main" onClick={skipToMain}>
@@ -95,9 +124,7 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
       <header className="topbar">
         <p className="brand">{PRODUCT_NAME}</p>
         {resolved?.mode === "demo" ? (
-          <p className="chip chip-warn" role="status">
-            {DEMO_LABEL}
-          </p>
+          <p className="chip chip-warn">{DEMO_LABEL}</p>
         ) : null}
       </header>
       <div className="layout">
@@ -145,7 +172,7 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
               ) : page === "inventory" ? (
                 <Inventory />
               ) : page === "issues" ? (
-                <Issues />
+                <Issues hash={hash} />
               ) : page === "settings" ? (
                 <Settings />
               ) : page === "recovery" ? (
@@ -153,7 +180,7 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
               ) : page === "lifecycle" ? (
                 <Lifecycle />
               ) : page === "scans" ? (
-                <Scans />
+                <Scans hash={hash} />
               ) : (
                 <>
                   <h1 className="page-title" id="page-title" tabIndex={-1}>

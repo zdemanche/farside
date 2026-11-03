@@ -1,6 +1,7 @@
 import { useOverview, useSource } from "./data/context";
 import { useResource } from "./data/use-resource";
 import { ScreenState, gapsMessage } from "./ScreenState";
+import { plural } from "./plural";
 import { TERMS } from "./terms";
 
 export function Lifecycle() {
@@ -29,7 +30,7 @@ export function Lifecycle() {
         {(data) => (
           <>
             <p className="page-meta" role="status" aria-live="polite">
-              {data.within90} things losing support in 90 days
+              {plural(data.within90, "thing")} losing support in 90 days
             </p>
             <div
               className="table-wrap"
