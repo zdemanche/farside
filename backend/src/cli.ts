@@ -14,6 +14,13 @@ import {
   exportIssues,
 } from "./export.js";
 import type { StoredIssue } from "./issues.js";
+import {
+  isTokenFlag,
+  missingRoles,
+  probeLocalCredentials,
+  TOKEN_FLAG_MESSAGE,
+  type CredentialProbe,
+} from "./cli-credentials.js";
 import { ScanRunner, providerFor, unconfiguredHarvester } from "./lib.js";
 import { asMutable } from "./readonly.js";
 import { assertNoSecrets } from "./secrets.js";
@@ -46,6 +53,9 @@ export type CliIo = {
   clock?: Clock;
   stdout?: { write: (chunk: string) => void };
   stderr?: { write: (chunk: string) => void };
+  env?: NodeJS.Dict<string>;
+  probe?: (cloud: Cloud) => CredentialProbe;
+  grantedRoles?: readonly string[];
 };
 
 type Flags = {
@@ -101,6 +111,9 @@ function parseArgv(argv: string[]): { flags?: Flags; error?: string; help?: bool
         flags[key] = value;
         continue;
       }
+      if (isTokenFlag(key)) {
+        return { error: TOKEN_FLAG_MESSAGE };
+      }
       return { error: `unknown option --${key}` };
     }
     if (flags.command) {
@@ -135,6 +148,17 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
     return EXIT_USAGE;
   }
   const clock = io.clock ?? systemClock;
+  if (!flags.fixture) {
+    const probe = io.probe?.(flags.cloud) ?? probeLocalCredentials(flags.cloud, io.env ?? process.env);
+    if (!probe.present) {
+      writeLine(stderr, probe.error ?? "signed-in Azure CLI / DefaultAzureCredential or GCP Application Default Credentials required");
+      return EXIT_FAILED;
+    }
+    const gaps = missingRoles(flags.cloud, io.grantedRoles ?? []);
+    if (gaps.length > 0) {
+      writeLine(stderr, { missingRoles: gaps });
+    }
+  }
   const store = new MemoryStore(clock);
   const harvester = flags.fixture ? providerFor(flags.cloud).harvester(clock) : unconfiguredHarvester();
   const runner = new ScanRunner(

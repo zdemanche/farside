@@ -11,8 +11,10 @@ import {
   EXIT_USAGE,
   runCli,
 } from "./cli.js";
+import { TOKEN_FLAG_MESSAGE } from "./cli-credentials.js";
 import { EXPORT_FORMAT, exportFilename, validateExport } from "./export.js";
 import { PROVIDER_NOT_CONFIGURED } from "./providers/unconfigured.js";
+import { secretPaths } from "./secrets.js";
 import { fixedClock } from "./test-clock.js";
 
 const ENTRY = fileURLToPath(new URL("./cli.ts", import.meta.url));
@@ -82,7 +84,8 @@ describe("farside CLI", () => {
     expect(await runCli([], io)).toBe(EXIT_USAGE);
     expect(await runCli(["scan", "--cloud", "azure"], { ...io, clock: fixedClock })).toBe(EXIT_USAGE);
     expect(await runCli(["scan", "--token", "abc"], io)).toBe(EXIT_USAGE);
-    expect(io.text(io.stderr.chunks)).toContain("unknown option --token");
+    expect(io.text(io.stderr.chunks)).toContain(TOKEN_FLAG_MESSAGE);
+    expect(await runCli(["scan", "--client-secret", "s3cret"], io)).toBe(EXIT_USAGE);
   });
 
   it("scans the Azure fixture estate into a workspace", async () => {
@@ -150,8 +153,42 @@ describe("farside CLI", () => {
       await runCli(["scan", "--cloud", "azure", "--scope", "main", "--workspace", dir], {
         ...io,
         clock: fixedClock,
+        env: { HOME: dir },
       }),
     ).toBe(EXIT_FAILED);
+    expect(io.text(io.stderr.chunks)).toMatch(/Azure CLI|DefaultAzureCredential/);
+  });
+
+  it("names missing roles and does not write secrets into the workspace", async () => {
+    const dir = workspace();
+    const io = capture();
+    const secret = "s3cretQ~abcdefghijklmnopqrstuvwxyz0123456789";
+    expect(
+      await runCli(["scan", "--cloud", "azure", "--scope", "main", "--workspace", dir, "--fixture"], {
+        ...io,
+        clock: fixedClock,
+        env: { AZURE_CLIENT_SECRET: secret },
+      }),
+    ).toBe(EXIT_OK);
+    const dumped = `${readFileSync(join(dir, "findings.json"), "utf8")}${readFileSync(join(dir, "inventory.json"), "utf8")}`;
+    expect(dumped).not.toContain(secret);
+    expect(secretPaths(JSON.parse(readFileSync(join(dir, "findings.json"), "utf8")))).toEqual([]);
+    io.stderr.chunks.length = 0;
+    expect(
+      await runCli(["scan", "--cloud", "azure", "--scope", "main", "--workspace", dir], {
+        ...io,
+        clock: fixedClock,
+        probe: () => ({ present: true, source: "azure-cli" }),
+        grantedRoles: ["Reader"],
+      }),
+    ).toBe(EXIT_FAILED);
+    const report = JSON.parse(io.text(io.stderr.chunks).trim().split("\n")[0] ?? "{}") as {
+      missingRoles: Array<{ role: string; required: boolean; blockedCheckIds: string[] }>;
+    };
+    expect(report.missingRoles.some((gap) => gap.role === "Cost Management Reader" && gap.required)).toBe(true);
+    expect(report.missingRoles.find((gap) => gap.role === "Cost Management Reader")?.blockedCheckIds).toContain(
+      "azure-cost-spend-by-service",
+    );
     expect(io.text(io.stderr.chunks)).toContain(PROVIDER_NOT_CONFIGURED);
   });
 
