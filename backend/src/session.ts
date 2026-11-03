@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 
 export type Session = {
@@ -7,6 +8,7 @@ export type Session = {
 
 export const ORG_HEADER = "x-farside-org";
 export const ACTOR_HEADER = "x-farside-actor";
+export const OPERATOR_HEADER = "x-farside-operator";
 
 // TODO: E2-S1-T2 Moonaan Identity tokens replace these headers.
 export function sessionFromHeaders(request: FastifyRequest): Session | null {
@@ -22,4 +24,16 @@ export function sessionFromHeaders(request: FastifyRequest): Session | null {
 
 export function assertOrgAccess(session: Session, orgId: string): "ok" | "forbidden" {
   return session.orgId === orgId ? "ok" : "forbidden";
+}
+
+function digest(value: string): Buffer {
+  return createHash("sha256").update(value).digest();
+}
+
+export function isOperator(request: FastifyRequest, operatorToken: string | undefined): boolean {
+  const header = request.headers[OPERATOR_HEADER];
+  if (!operatorToken || typeof header !== "string") {
+    return false;
+  }
+  return timingSafeEqual(digest(header), digest(operatorToken));
 }

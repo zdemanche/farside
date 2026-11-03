@@ -5,8 +5,9 @@ import type { ResourceFacts } from "./facts.js";
 import type { StoredIssue } from "./issues.js";
 import { applyOwnerTag } from "./inventory.js";
 import { REQUIRED_AZURE_ROLES } from "./roles.js";
+import { DEMO_ORG_ID } from "./demo.js";
 import type { AlertAnalysis } from "./alerts.js";
-import type { Contract } from "./billing.js";
+import { retentionElapsed, type Contract } from "./billing.js";
 import type { BudgetSnapshot } from "./budgets.js";
 import type { CommitmentSnapshot } from "./commitments.js";
 import type { CostSnapshot } from "./cost.js";
@@ -129,7 +130,11 @@ export class MemoryStore {
     );
   }
 
-  offboard(orgId: string, now: string = this.clock()): DeletionRecord {
+  offboard(
+    orgId: string,
+    now: string = this.clock(),
+    trigger: DeletionRecord["trigger"] = "customer",
+  ): DeletionRecord {
     const existing = this.#deletions.get(orgId);
     if (existing) {
       return existing;
@@ -152,11 +157,25 @@ export class MemoryStore {
       scansStopped,
       scheduleCancelled: schedulePending || Boolean(org?.settings.scanScheduleEnabled),
       accountClosureAt: null,
+      trigger,
     };
     assertNoSecrets(record);
     this.#orgs.delete(orgId);
     this.#deletions.set(orgId, record);
     return record;
+  }
+
+  sweepRetention(now: string = this.clock(), onlyOrgId?: string): DeletionRecord[] {
+    const due = [...this.#orgs]
+      .filter(
+        ([orgId, org]) =>
+          orgId !== DEMO_ORG_ID &&
+          (onlyOrgId === undefined || orgId === onlyOrgId) &&
+          org.contract !== null &&
+          retentionElapsed(org.contract, now),
+      )
+      .map(([orgId]) => orgId);
+    return due.map((orgId) => this.offboard(orgId, now, "retention"));
   }
 
   snapshot(orgId: string): OrgState {
@@ -331,4 +350,8 @@ export class MemoryStore {
     org.connections = next;
     return true;
   }
+}
+
+export function runRetentionSweep(store: MemoryStore, clock: Clock = store.clock): DeletionRecord[] {
+  return store.sweepRetention(clock());
 }

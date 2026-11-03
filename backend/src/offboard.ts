@@ -13,6 +13,7 @@ export type DeletionRecord = {
   scansStopped: number;
   scheduleCancelled: boolean;
   accountClosureAt: string | null;
+  trigger: "customer" | "retention";
 };
 
 export const GRANTS_TO_REMOVE: GrantToRemove[] = [
