@@ -41,8 +41,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 24. **E5-S3** — merged (#251). Billing screen waits on #243.
 25. **E5-S4** — merged (#252). Deploy (#175) and rehearsal (#176) stay leftover.
 26. **E5-S5** — merged (#253). Offboarding screen waits on #243. Account retire is (c) #182.
-27. **E5-S6** — this change: export API. Buttons wait on #243.
-28. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+27. **E5-S6** — merged (#254). Buttons wait on #243.
+28. **E6-S1-T5** — this change: GCP control spec. Live project is D7 / #189.
+29. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -281,12 +282,12 @@ Entire GCP epic needs D7 (#7) and a live project. Collectors also (d) AIF.
 | Key | Issue | Title | Class | Why |
 |---|---|---|---|---|
 | `E6` | #187 | Farside covers GCP | (c) live Azure / GCP / test tenant | Entire GCP epic needs D7 (#7) and a live project. Collectors also (d) AIF. |
-| `E6-S1` | #188 | Connect a GCP project with federated credentials | (c) live Azure / GCP / test tenant | GCP connect + test project. D7 (#7). Spec writing T5 is (a). |
+| `E6-S1` | #188 | Connect a GCP project with federated credentials | (c) live Azure / GCP / test tenant | Spec written. Connect + test project leftover. D7 (#7). |
 | `E6-S1-T1` | #189 | Obtain a GCP test project | (c) live Azure / GCP / test tenant | Funded GCP project with a cost guard. D7 (#7). |
 | `E6-S1-T2` | #190 | Implement federated credential exchange for GCP | (c) live Azure / GCP / test tenant | GCP federated credentials on the test project. |
 | `E6-S1-T3` | #191 | Build the GCP Connect screen and role validation | (a) doable in code now | GCP Connect screen against fakes; live role removal is (c). |
 | `E6-S1-T4` | #192 | Verify the role list live | (c) live Azure / GCP / test tenant | Verify the role list live. |
-| `E6-S1-T5` | #193 | Write the GCP control spec | (a) doable in code now | GCP control spec from the proposal table. |
+| `E6-S1-T5` | #193 | Write the GCP control spec | (a) this change | `docs/gcp/launch-checks.json`. All unverified. |
 | `E6-S1-T6` | #194 | Enable the billing export on the test project early | (c) live Azure / GCP / test tenant | Enable BigQuery billing export on the test project. |
 | `E6-S2` | #195 | GCP inventory by project and type | (c) live Azure / GCP / test tenant | Cloud Asset harvest vs a seeded GCP manifest. Collectors (d) AIF. |
 | `E6-S2-T1` | #196 | Seed the GCP test project and manifest | (c) live Azure / GCP / test tenant | Seed the GCP test project from code. |

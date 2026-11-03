@@ -1,0 +1,246 @@
+{
+  "version": 1,
+  "cloud": "gcp",
+  "sharedContractNote": "Fields here are Farside-local. Same shape as docs/azure/launch-checks.json. Do not invent dashmeta or AIF field names.",
+  "statusRule": "An entry is unverified until a dated live run exists. Unverified entries are labelled not-supported. Live verification needs D7 and a GCP test project (E6-S1-T1).",
+  "rolesFromProposal": [
+    "Cloud Asset Viewer",
+    "Compute Viewer",
+    "Recommender Viewer",
+    "Cloud SQL Viewer",
+    "Certificate Manager Viewer",
+    "BigQuery access to the billing export"
+  ],
+  "billingExportNote": "GCP has no cost API. Spend and committed-use checks stay unassessed until the BigQuery billing export is enabled. The export fills only from that day forward, so the first day is empty.",
+  "checks": [
+    {
+      "id": "gcp-inventory-all-assets",
+      "group": "inventory",
+      "title": "All assets by project and type",
+      "role": "Cloud Asset Viewer",
+      "dataSource": "Cloud Asset Inventory search / list (name, assetType, location, project)",
+      "evidenceFields": ["projectId", "assetName", "assetType", "location", "countByType"],
+      "savingsBasis": null,
+      "billingExportRequired": false,
+      "undetermined": [
+        {
+          "when": "Cloud Asset returns incomplete or forbidden results for a project",
+          "closer": "Grant Cloud Asset Viewer on that project and a successful asset list"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "gcp-inventory-no-owner-label",
+      "group": "inventory",
+      "title": "Resources with no owner label",
+      "role": "Cloud Asset Viewer",
+      "dataSource": "Cloud Asset labels; owner label key is a Settings value",
+      "evidenceFields": ["assetName", "assetType", "labelsPresent", "ownerLabelKey", "ownerLabelValue"],
+      "savingsBasis": null,
+      "billingExportRequired": false,
+      "undetermined": [
+        {
+          "when": "The owner label key has not been configured for the org",
+          "closer": "Set the owner label key in Settings"
+        },
+        {
+          "when": "Labels are not returned for an asset type",
+          "closer": "A Cloud Asset row for that type that includes labels"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "gcp-waste-unattached-disks",
+      "group": "waste",
+      "title": "Unattached disks",
+      "role": "Compute Viewer",
+      "dataSource": "Compute Engine disks where users is empty",
+      "evidenceFields": ["diskId", "usersCount", "sizeGb", "zone"],
+      "savingsBasis": "Monthly list price of the unused disk type and size, as a range",
+      "billingExportRequired": false,
+      "undetermined": [
+        {
+          "when": "users is missing on a disk row",
+          "closer": "A disk read that includes the users list"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "gcp-waste-unused-external-ips",
+      "group": "waste",
+      "title": "Reserved but unused external IPs",
+      "role": "Compute Viewer",
+      "dataSource": "Compute Engine regional/global addresses where status is RESERVED and users is empty",
+      "evidenceFields": ["addressId", "address", "status", "usersCount", "region"],
+      "savingsBasis": "Monthly list price of a reserved unused external IP, as a range",
+      "billingExportRequired": false,
+      "undetermined": [
+        {
+          "when": "status or users is missing on an address row",
+          "closer": "An address read that includes status and users"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "gcp-waste-old-snapshots-and-images",
+      "group": "waste",
+      "title": "Old snapshots and images",
+      "role": "Compute Viewer",
+      "dataSource": "Compute Engine snapshots and custom images older than Settings snapshotRetentionDays",
+      "evidenceFields": ["snapshotOrImageId", "creationTimestamp", "ageDays", "retentionDays"],
+      "savingsBasis": "Monthly storage list price of the old snapshot or image, as a range",
+      "billingExportRequired": false,
+      "undetermined": [
+        {
+          "when": "creationTimestamp is missing",
+          "closer": "A snapshot or image read that includes creationTimestamp"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "gcp-waste-idle-vm-and-disk-recommendations",
+      "group": "waste",
+      "title": "Idle VM and disk recommendations",
+      "role": "Recommender Viewer",
+      "dataSource": "Recommender idle VM and idle disk recommendations. Live run is leftover (#202).",
+      "evidenceFields": ["recommendationId", "recommenderId", "resourceName", "subtype"],
+      "savingsBasis": "Recommender savings range when present; otherwise undetermined, not a point value",
+      "billingExportRequired": false,
+      "undetermined": [
+        {
+          "when": "Recommender is not granted or returns no insights window",
+          "closer": "Grant Recommender Viewer and a recommendation list for that project"
+        },
+        {
+          "when": "A recommendation has no savings range",
+          "closer": "A recommendation primaryImpact with a min/max cost range"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "gcp-cost-spend-by-service",
+      "group": "cost",
+      "title": "Spend by service and project",
+      "role": "BigQuery access to the billing export",
+      "dataSource": "BigQuery billing export. There is no GCP cost API. History starts the day the export is enabled.",
+      "evidenceFields": ["billingAccountId", "projectId", "serviceDescription", "costAmount", "currency", "exportDay"],
+      "savingsBasis": null,
+      "billingExportRequired": true,
+      "undetermined": [
+        {
+          "when": "The billing export dataset is missing or not granted",
+          "closer": "Enable the BigQuery billing export and grant the Farside workload read access"
+        },
+        {
+          "when": "The export has no completed day yet",
+          "closer": "At least one completed export day after enablement"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "gcp-cost-committed-use",
+      "group": "cost",
+      "title": "Committed-use discount use",
+      "role": "BigQuery access to the billing export",
+      "dataSource": "BigQuery billing export credits / CUD rows. Not a live purchase API.",
+      "evidenceFields": ["billingAccountId", "commitmentName", "utilizationPercent", "currency"],
+      "savingsBasis": "Unused committed-use spend as a min/max range once utilization exists",
+      "billingExportRequired": true,
+      "undetermined": [
+        {
+          "when": "The billing export is missing",
+          "closer": "Enable the BigQuery billing export"
+        },
+        {
+          "when": "No CUD rows exist. None-found is not zero utilization",
+          "closer": "Export rows that name a committed-use discount, or an explicit none-found coverage cell"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "gcp-resilience-sql-ha-or-backup",
+      "group": "resilience",
+      "title": "Cloud SQL without high availability or backups",
+      "role": "Cloud SQL Viewer",
+      "dataSource": "Cloud SQL instances availabilityType and backupConfiguration",
+      "evidenceFields": ["instanceName", "availabilityType", "backupEnabled", "projectId"],
+      "savingsBasis": null,
+      "billingExportRequired": false,
+      "undetermined": [
+        {
+          "when": "availabilityType or backupConfiguration is missing",
+          "closer": "A Cloud SQL instance read that includes both fields"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "gcp-lifecycle-sql-gke-support",
+      "group": "lifecycle",
+      "title": "Out-of-support SQL and GKE versions",
+      "role": "Cloud SQL Viewer",
+      "dataSource": "Cloud SQL databaseVersion and GKE currentMasterVersion from Cloud Asset or the SQL/GKE APIs. Support calendars are Farside-test data until a live announcement source exists.",
+      "evidenceFields": ["resourceName", "resourceKind", "version", "supportEnd"],
+      "savingsBasis": null,
+      "billingExportRequired": false,
+      "undetermined": [
+        {
+          "when": "version is missing",
+          "closer": "An instance or cluster read that includes the engine version"
+        },
+        {
+          "when": "No support-end date is recorded for that version",
+          "closer": "A dated support calendar row for that version"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    },
+    {
+      "id": "gcp-lifecycle-expiring-certs",
+      "group": "lifecycle",
+      "title": "Expiring certificates",
+      "role": "Certificate Manager Viewer",
+      "dataSource": "Certificate Manager certificates expireTime vs Settings certExpiryFlagDays",
+      "evidenceFields": ["certificateId", "expireTime", "daysRemaining", "flagDays"],
+      "savingsBasis": null,
+      "billingExportRequired": false,
+      "undetermined": [
+        {
+          "when": "expireTime is missing",
+          "closer": "A Certificate Manager read that includes expireTime"
+        }
+      ],
+      "status": "unverified",
+      "support": "not-supported",
+      "liveRunAt": null
+    }
+  ]
+}

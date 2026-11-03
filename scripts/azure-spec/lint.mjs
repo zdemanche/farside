@@ -53,7 +53,7 @@ const DEFAULT_SPEC_PATH = join(
   "../../docs/azure/launch-checks.json",
 );
 
-export function lintSpec(spec) {
+export function lintSpec(spec, requiredIds = REQUIRED_LAUNCH_CHECK_IDS) {
   const errors = [];
   if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
     return ["spec must be an object"];
@@ -125,7 +125,7 @@ export function lintSpec(spec) {
     }
   }
 
-  for (const id of REQUIRED_LAUNCH_CHECK_IDS) {
+  for (const id of requiredIds) {
     if (!seen.has(id)) {
       errors.push(`missing launch check '${id}'`);
     }
