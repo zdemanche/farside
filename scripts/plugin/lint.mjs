@@ -66,11 +66,16 @@ export function lintPluginCommands(commandsDir = DEFAULT_COMMANDS) {
       errors.push(`command '${name}' is missing: ${error instanceof Error ? error.message : error}`);
       continue;
     }
-    if (!markdown.startsWith("---")) {
+    const frontmatter = markdown.match(/^---\n([\s\S]*?)\n---/);
+    if (!frontmatter) {
       errors.push(`command '${name}' must have YAML frontmatter`);
+      continue;
     }
-    if (!/^description:\s.+/m.test(markdown)) {
+    if (!/^description:\s.+/m.test(frontmatter[1])) {
       errors.push(`command '${name}' must set description frontmatter`);
+    }
+    if (!/^allowed-tools:\s.+/m.test(frontmatter[1])) {
+      errors.push(`command '${name}' must set allowed-tools frontmatter`);
     }
     if (!markdown.includes(DEFAULT_WORKSPACE_PHRASE)) {
       errors.push(`command '${name}' must default the workspace to ${DEFAULT_WORKSPACE_PHRASE}`);
