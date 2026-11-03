@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "publishedAt": "2026-11-03",
+  "source": "docs/gcp/support-versions.json",
+  "note": "In-repo Farside-test support calendar. Not a live Google announcement. Refresh by editing this file.",
+  "entries": [
+    {
+      "kind": "sql",
+      "version": "MYSQL_5_6",
+      "supportEnd": "2021-02-01",
+      "source": "docs/gcp/support-versions.json#MYSQL_5_6"
+    },
+    {
+      "kind": "gke",
+      "version": "1.24",
+      "supportEnd": "2024-01-31",
+      "source": "docs/gcp/support-versions.json#gke-1.24"
+    }
+  ]
+}

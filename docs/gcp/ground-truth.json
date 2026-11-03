@@ -93,6 +93,42 @@
       "region": "us-central1-a",
       "properties": { "status": "RUNNING" },
       "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "sql-stale",
+      "project": "farside-test",
+      "type": "sqladmin.googleapis.com/Instance",
+      "title": "Cloud SQL on an out-of-support version",
+      "region": "us-central1",
+      "properties": { "databaseVersion": "MYSQL_5_6" },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "sql-current",
+      "project": "farside-test",
+      "type": "sqladmin.googleapis.com/Instance",
+      "title": "Cloud SQL on a version not listed as ended",
+      "region": "us-central1",
+      "properties": { "databaseVersion": "MYSQL_8_0" },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "gke-stale",
+      "project": "farside-test",
+      "type": "container.googleapis.com/Cluster",
+      "title": "GKE cluster on an out-of-support version",
+      "region": "us-central1",
+      "properties": { "currentMasterVersion": "1.24" },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "gke-current",
+      "project": "farside-test",
+      "type": "container.googleapis.com/Cluster",
+      "title": "GKE cluster on a version not listed as ended",
+      "region": "us-central1",
+      "properties": { "currentMasterVersion": "1.30" },
+      "labels": { "owner": "farside-test" }
     }
   ]
 }
