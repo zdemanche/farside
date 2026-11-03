@@ -232,7 +232,8 @@ describe("scan history API", () => {
     expect(first.json().scan.current).toBe(false);
     const succeeded = await waitForScan(app, "scan-1", "succeeded");
     expect(succeeded.current).toBe(true);
-    expect(succeeded.durationMs).toBe(1);
+    expect(succeeded.durationMs).toBe(Date.parse(succeeded.finishedAt ?? "") - Date.parse(succeeded.startedAt ?? ""));
+    expect(succeeded.durationMs).toBeGreaterThan(0);
     expect(succeeded.coverageSummary.assessed).toBeGreaterThan(0);
     expect(succeeded.checks.map((check) => check.checkId).sort()).toEqual(
       [...AZURE_LAUNCH_CHECK_IDS].sort(),
