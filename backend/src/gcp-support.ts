@@ -1,8 +1,4 @@
-import { assertValid, validateFinding, type Finding, type Inventory } from "@farside/scan-contracts";
-import type { ResourceFacts } from "./facts.js";
-import { projectOf } from "./gcp-inventory.js";
-import type { OrgSettings } from "./settings.js";
-import { DEFAULT_SETTINGS } from "./settings.js";
+import { defineGcpCheck, fail, nonEmptyStr, pass, undetermined } from "./checks/define.js";
 import catalogueFile from "../../docs/gcp/support-versions.json" with { type: "json" };
 
 export const GCP_SQL_GKE_SUPPORT = "gcp-lifecycle-sql-gke-support";
@@ -61,105 +57,42 @@ export function supportSourceErrors(catalogue: SupportCatalogue): string[] {
   return errors;
 }
 
-function acceptFinding(finding: Finding): Finding {
-  assertValid(validateFinding(finding));
-  return finding;
-}
+const VERSION_FIELD: Record<SupportKind, string> = { sql: "databaseVersion", gke: "currentMasterVersion" };
 
-function kindOf(resourceType: string): SupportKind | null {
-  if (resourceType === SQL_TYPE) {
-    return "sql";
-  }
-  if (resourceType === GKE_TYPE) {
-    return "gke";
-  }
-  return null;
-}
-
-function versionOf(fields: ResourceFacts["fields"] | undefined, kind: SupportKind): string | null {
-  const key = kind === "sql" ? "databaseVersion" : "currentMasterVersion";
-  const value = fields?.[key];
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-export function checkGcpSqlGkeSupport(
-  inventory: Inventory,
-  facts: ResourceFacts[],
-  _settings: OrgSettings = DEFAULT_SETTINGS,
-  catalogue = loadSupportVersions(),
-): Finding[] {
-  const byUri = new Map(facts.map((row) => [row.resourceUri, row]));
-  const byKey = new Map(catalogue.entries.map((entry) => [`${entry.kind}:${entry.version}`, entry]));
-  return inventory.resources.flatMap((resource) => {
-    const kind = kindOf(resource.resourceType);
-    if (!kind) {
-      return [];
-    }
-    const row = byUri.get(resource.resourceUri);
-    const project = projectOf(resource.resourceUri);
-    const scope = {
-      id: `${project}:${GCP_SQL_GKE_SUPPORT}`,
-      cloud: "gcp" as const,
-      subscriptionOrProject: project,
+export const checkGcpSqlGkeSupport = defineGcpCheck({
+  checkId: GCP_SQL_GKE_SUPPORT,
+  resourceType: [SQL_TYPE, GKE_TYPE],
+  prepare: () => {
+    const catalogue = loadSupportVersions();
+    return { catalogue, byKey: new Map(catalogue.entries.map((entry) => [`${entry.kind}:${entry.version}`, entry])) };
+  },
+  readFacts: (resource, fields) => {
+    const kind: SupportKind = resource.resourceType === SQL_TYPE ? "sql" : "gke";
+    return { kind, version: nonEmptyStr(fields, VERSION_FIELD[kind]) };
+  },
+  decide: ({ kind, version }, { resource, shared: { catalogue, byKey } }) => {
+    const identity = {
+      resourceUri: resource.resourceUri,
+      resourceName: resource.resourceUri.split("/").pop() ?? resource.displayName,
+      resourceKind: kind,
     };
-    const resourceName = resource.resourceUri.split("/").pop() ?? resource.displayName;
-    const version = versionOf(row?.fields, kind);
-    if (version == null) {
-      return [
-        acceptFinding({
-          checkId: GCP_SQL_GKE_SUPPORT,
-          result: "undetermined",
-          closer: "An instance or cluster read that includes the engine version",
-          evidence: {
-            fields: {
-              resourceUri: resource.resourceUri,
-              resourceName,
-              resourceKind: kind,
-              version: null,
-              supportEnd: null,
-            },
-          },
-          scope,
-        }),
-      ];
+    if (version === null) {
+      return undetermined("An instance or cluster read that includes the engine version", {
+        ...identity,
+        version: null,
+        supportEnd: null,
+      });
     }
     const listed = byKey.get(`${kind}:${version}`);
     if (listed && listed.supportEnd <= catalogue.publishedAt) {
-      return [
-        acceptFinding({
-          checkId: GCP_SQL_GKE_SUPPORT,
-          result: "fail",
-          evidence: {
-            fields: {
-              resourceUri: resource.resourceUri,
-              resourceName,
-              resourceKind: kind,
-              version,
-              supportEnd: listed.supportEnd,
-              source: listed.source,
-            },
-          },
-          scope,
-        }),
-      ];
+      return fail({ ...identity, version, supportEnd: listed.supportEnd, source: listed.source });
     }
-    return [
-      acceptFinding({
-        checkId: GCP_SQL_GKE_SUPPORT,
-        result: "pass",
-        evidence: {
-          fields: {
-            resourceUri: resource.resourceUri,
-            resourceName,
-            resourceKind: kind,
-            version,
-            supportEnd: listed?.supportEnd ?? null,
-            source: catalogue.source,
-            cataloguePublishedAt: catalogue.publishedAt,
-          },
-        },
-        scope,
-      }),
-    ];
-  });
-}
+    return pass({
+      ...identity,
+      version,
+      supportEnd: listed?.supportEnd ?? null,
+      source: catalogue.source,
+      cataloguePublishedAt: catalogue.publishedAt,
+    });
+  },
+});
