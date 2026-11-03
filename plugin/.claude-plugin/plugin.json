@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "farside",
+  "displayName": "Farside",
+  "version": "0.1.0",
+  "description": "Azure and GCP infrastructure scanning, issues, and cost. Same checks as the Farside product, run locally.",
+  "author": {
+    "name": "Moonaan, LLC"
+  },
+  "license": "UNLICENSED"
+}
