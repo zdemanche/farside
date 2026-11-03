@@ -40,8 +40,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 23. **E5-S2** — merged (#250). Soak week is (c) #167.
 24. **E5-S3** — merged (#251). Billing screen waits on #243.
 25. **E5-S4** — merged (#252). Deploy (#175) and rehearsal (#176) stay leftover.
-26. **E5-S5** — this change: org deletion and scan stop. Offboarding screen waits on #243. Account retire is (c) #182.
-27. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+26. **E5-S5** — merged (#253). Offboarding screen waits on #243. Account retire is (c) #182.
+27. **E5-S6** — this change: export API. Buttons wait on #243.
+28. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -268,10 +269,10 @@ Sell-ready path uses iac-hub, Identity, billing (D8), and a test tenant.
 | `E5-S5-T2` | #180 | Remove credentials and stop scans on offboarding | (a) this change | Connections removed; pending schedule cancelled. |
 | `E5-S5-T3` | #181 | Build the offboarding screen and grant list | (a) leftover | Left for the design-system pass (#243). Grant list is on the deletion record. |
 | `E5-S5-T4` | #182 | Retire the dedicated account at offboarding | (c) live Azure / GCP / test tenant | Retire the dedicated account; D8 (#8). |
-| `E5-S6` | #183 | Export issues, inventory and cost | (a) doable in code now | Export endpoints and buttons over stored aggregates. |
-| `E5-S6-T1` | #184 | Build export endpoints with a fixed format | (a) doable in code now | Export API and schema tests. |
-| `E5-S6-T2` | #185 | Add export buttons to the screens | (a) doable in code now | Export buttons. |
-| `E5-S6-T3` | #186 | Test export scoping and content | (a) doable in code now | Cross-org refusal and no payload fields. |
+| `E5-S6` | #183 | Export issues, inventory and cost | (a) this change | Export API. Buttons wait on #243. |
+| `E5-S6-T1` | #184 | Build export endpoints with a fixed format | (a) this change | `farside-export/1` issues, inventory, and cost. |
+| `E5-S6-T2` | #185 | Add export buttons to the screens | (a) leftover | Left for the design-system pass (#243). |
+| `E5-S6-T3` | #186 | Test export scoping and content | (a) this change | Cross-org refusal and no payload fields. |
 
 ## E6: Farside covers GCP (#187)
 
