@@ -6,8 +6,6 @@ import { HEALTH_SCORE_FORMULA, scoreHealth, type Finding } from "@farside/scan-c
 import { buildApp } from "./app.js";
 import { COVERAGE_CAUSES } from "./causes.js";
 import {
-  AZURE_LAUNCH_CHECK_IDS,
-  GCP_LAUNCH_CHECK_IDS,
   applyCoverageResult,
   blindSpots,
   coverageFromHarvest,
@@ -16,6 +14,7 @@ import {
   toContractCoverage,
 } from "./coverage.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
+import { AZURE_LAUNCH_CHECK_IDS, GCP_LAUNCH_CHECK_IDS } from "./providers/launch-ids.js";
 import { secretPaths } from "./secrets.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";

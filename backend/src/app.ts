@@ -14,7 +14,6 @@ import {
   applyCoverageResult,
   blindSpots,
   coverageFromHarvest,
-  launchCheckIds,
   coverageHealth,
   recordCoverageScope,
   toContractCoverage,
@@ -46,7 +45,8 @@ import {
   unconfiguredCostClient,
   type CostQueryClient,
 } from "./cost.js";
-import { ProviderNotConfiguredError } from "./providers.js";
+import { providerFor } from "./providers/index.js";
+import { ProviderNotConfiguredError } from "./providers/unconfigured.js";
 import type { Clock } from "./clock.js";
 import {
   CardDataError,
@@ -458,7 +458,11 @@ export function buildApp(
     const scopes = [
       ...new Set(stored.resources.map((row) => scopeOf(stored.cloud, row.resourceUri))),
     ].filter(Boolean);
-    store.putCoverage(request.params.orgId, coverageFromHarvest(scopes, launchCheckIds(stored.cloud)));
+    const provider = providerFor(stored.cloud);
+    store.putCoverage(
+      request.params.orgId,
+      coverageFromHarvest(scopes, provider.launchCheckIds, provider.harvestAssessedCheckIds),
+    );
     return sendClean(reply, 200, stored);
   });
 
