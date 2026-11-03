@@ -3,12 +3,13 @@ import { buildApp } from "./app.js";
 import { SecretLeakError, assertNoSecrets, secretPaths } from "./secrets.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 
 describe("no-secrets guard", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store);
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, TEST_APP_OPTIONS);
 
   afterAll(async () => {
     await app.close();

@@ -18,6 +18,7 @@ import { MemoryStore } from "./store.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { fixedClock, TEST_APP_OPTIONS, tickingClock } from "./test-clock.js";
 
 const MANIFEST = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/ground-truth.json"), "utf8"),
@@ -28,7 +29,7 @@ const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 
 describe("scan job runner", () => {
   it("succeeds in the background and stores inventory and coverage", async () => {
-    const store = new MemoryStore();
+    const store = new MemoryStore(fixedClock);
     const runner = new ScanRunner(store, fixtureHarvester(inventory));
     const { job, started, done } = runner.start({
       orgId: "org-a",
@@ -46,7 +47,7 @@ describe("scan job runner", () => {
   });
 
   it("keeps harvest-driven findings and coverage when harvest clients are not wired", async () => {
-    const store = new MemoryStore();
+    const store = new MemoryStore(fixedClock);
     store.putFindings("org-a", [
       {
         checkId: NO_BUDGETS,
@@ -105,7 +106,7 @@ describe("scan job runner", () => {
   });
 
   it("stores a mid-failure without marking the scan complete", async () => {
-    const store = new MemoryStore();
+    const store = new MemoryStore(fixedClock);
     const runner = new ScanRunner(store, {
       async harvest() {
         throw new ScanFailedError("Resource Graph call failed", [
@@ -123,7 +124,7 @@ describe("scan job runner", () => {
   });
 
   it("runs only one scan at a time per subscription", async () => {
-    const store = new MemoryStore();
+    const store = new MemoryStore(fixedClock);
     let release!: (result: HarvestResult) => void;
     const gate = new Promise<HarvestResult>((resolve) => {
       release = resolve;
@@ -147,8 +148,8 @@ describe("scan job runner", () => {
 });
 
 describe("scan on connect", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store, { harvester: fixtureHarvester(inventory) });
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: fixtureHarvester(inventory) });
 
   afterAll(async () => {
     await app.close();
@@ -192,8 +193,8 @@ describe("scan on connect", () => {
 
 describe("scan history API", () => {
   it("returns coverage, per-check outcomes and marks only the latest complete success current", async () => {
-    const store = new MemoryStore();
-    const app = buildApp(store, { harvester: fixtureHarvester(inventory) });
+    const store = new MemoryStore(fixedClock);
+    const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: fixtureHarvester(inventory) });
     const first = await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/scans",
@@ -223,8 +224,8 @@ describe("scan history API", () => {
   });
 
   it("keeps a failed scan off current and shows the failure reason", async () => {
-    const store = new MemoryStore();
-    const app = buildApp(store, {
+    const store = new MemoryStore(fixedClock);
+    const app = buildApp(store, { ...TEST_APP_OPTIONS,
       harvester: {
         async harvest() {
           throw new ScanFailedError("Resource Graph call failed", [
@@ -257,12 +258,12 @@ describe("scan history API", () => {
   });
 
   it("updates a running scan without treating it as current", async () => {
-    const store = new MemoryStore();
+    const store = new MemoryStore(fixedClock);
     let release!: (result: HarvestResult) => void;
     const gate = new Promise<HarvestResult>((resolve) => {
       release = resolve;
     });
-    const app = buildApp(store, { harvester: { harvest: () => gate } });
+    const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: { harvest: () => gate } });
     const started = await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/scans",
@@ -294,8 +295,8 @@ describe("scan history API", () => {
 
 describe("scan merge with harvests", () => {
   it("keeps budget and reservation findings and spend coverage after POST then scan", async () => {
-    const store = new MemoryStore();
-    const app = buildApp(store, { harvester: fixtureHarvester(inventory) });
+    const store = new MemoryStore(fixedClock);
+    const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: fixtureHarvester(inventory) });
     const cost = await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/cost",

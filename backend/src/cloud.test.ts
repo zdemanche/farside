@@ -11,6 +11,7 @@ import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js"
 import { applyScanToIssues } from "./issues.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const AZURE = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/ground-truth.json"), "utf8"),
@@ -51,8 +52,8 @@ describe("cloud helpers", () => {
 });
 
 describe("cloud dimension on APIs", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store);
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, TEST_APP_OPTIONS);
 
   afterAll(async () => {
     await app.close();

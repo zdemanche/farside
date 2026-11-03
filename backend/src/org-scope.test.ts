@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { secretPaths } from "./secrets.js";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const MANIFEST = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/ground-truth.json"), "utf8"),
@@ -59,8 +60,8 @@ function headers(orgId: string) {
 }
 
 describe("org scoping", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store);
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, TEST_APP_OPTIONS);
   const inventory = inventoryFromManifest(MANIFEST);
 
   store.putInventory("org-a", inventory);

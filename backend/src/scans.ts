@@ -16,6 +16,7 @@ import {
   type CommitmentClient,
 } from "./commitments.js";
 import { applyCostCoverage, harvestCost, type CostQueryClient } from "./cost.js";
+import { systemClock, type Clock } from "./clock.js";
 import {
   AZURE_LAUNCH_CHECK_IDS,
   applyCoverageResult,
@@ -197,12 +198,19 @@ export class ScanFailedError extends Error {
   }
 }
 
-export function fixtureHarvester(inventory: Inventory, facts: ResourceFacts[] = []): Harvester {
+export function fixtureHarvester(
+  inventory: Inventory,
+  facts: ResourceFacts[] = [],
+  clock?: Clock,
+): Harvester {
   return {
     async harvest(input) {
       const coverage = coverageFromHarvest([input.subscriptionId], AZURE_LAUNCH_CHECK_IDS);
       return {
-        inventory: applyOwnerTag(inventory, input.settings.ownerTagKey),
+        inventory: applyOwnerTag(
+          clock ? { ...inventory, observedAt: clock() } : inventory,
+          input.settings.ownerTagKey,
+        ),
         coverage,
         coveredScopes: coverage
           .filter((entry) => entry.state === "assessed")
@@ -213,11 +221,11 @@ export function fixtureHarvester(inventory: Inventory, facts: ResourceFacts[] = 
   };
 }
 
-export function defaultHarvester(): Harvester {
+export function defaultHarvester(clock?: Clock): Harvester {
   const manifest = JSON.parse(
     readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/ground-truth.json"), "utf8"),
   ) as GroundTruthManifest;
-  return fixtureHarvester(inventoryFromManifest(manifest), factsFromManifest(manifest));
+  return fixtureHarvester(inventoryFromManifest(manifest), factsFromManifest(manifest), clock);
 }
 
 export class ScanRunner {
@@ -225,6 +233,7 @@ export class ScanRunner {
     private readonly store: MemoryStore,
     private readonly harvester: Harvester,
     private readonly harvestClients: ScanHarvestClients = {},
+    private readonly clock: Clock = systemClock,
   ) {}
 
   start(input: { orgId: string; subscriptionId: string; actor: "user" | "system" }): {
@@ -244,7 +253,7 @@ export class ScanRunner {
       status: "queued",
       complete: false,
       coveredScopes: [],
-      createdAt: "1970-01-01T00:00:00.000Z",
+      createdAt: this.clock(),
       startedAt: null,
       finishedAt: null,
       error: null,
@@ -260,10 +269,8 @@ export class ScanRunner {
     if (!current) {
       throw new Error(`scan ${jobId} missing`);
     }
-    this.store.patchJob(orgId, jobId, {
-      status: "running",
-      startedAt: "1970-01-01T00:00:00.000Z",
-    });
+    const startedAt = this.clock();
+    this.store.patchJob(orgId, jobId, { status: "running", startedAt });
     try {
       const settings = this.store.snapshot(orgId).settings;
       const result = await this.harvester.harvest({
@@ -313,28 +320,28 @@ export class ScanRunner {
         }),
       );
       const checks = checksFromCoverage(coverage, current.subscriptionId);
-      const finishedAt = "1970-01-01T00:00:00.001Z";
+      const finishedAt = this.clock();
       return this.store.patchJob(orgId, jobId, {
         status: "succeeded",
         complete: true,
         coveredScopes: result.coveredScopes,
         finishedAt,
         error: null,
-        durationMs: durationMsFrom("1970-01-01T00:00:00.000Z", finishedAt),
+        durationMs: durationMsFrom(startedAt, finishedAt),
         coverageSummary: coverageSummaryFrom(checks),
         checks,
       });
     } catch (error) {
       const covered = error instanceof ScanFailedError ? error.coveredScopes : [];
       const checks = checksFromFailure(covered, current.subscriptionId);
-      const finishedAt = "1970-01-01T00:00:00.001Z";
+      const finishedAt = this.clock();
       return this.store.patchJob(orgId, jobId, {
         status: "failed",
         complete: false,
         coveredScopes: covered,
         finishedAt,
         error: error instanceof Error ? error.message : "scan failed",
-        durationMs: durationMsFrom("1970-01-01T00:00:00.000Z", finishedAt),
+        durationMs: durationMsFrom(startedAt, finishedAt),
         coverageSummary: coverageSummaryFrom(checks),
         checks,
       });

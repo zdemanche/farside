@@ -6,6 +6,7 @@ import { applyScanToIssues, issueIdentity, resourceIdFromFinding } from "./issue
 import { defaultHarvester } from "./scans.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const SCOPE = {
   id: "main:azure-waste-unattached-disks",
@@ -141,8 +142,8 @@ describe("replay scans", () => {
 });
 
 describe("scan into issue store", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store, { harvester: defaultHarvester() });
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: defaultHarvester() });
   const headers = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 
   afterAll(async () => {

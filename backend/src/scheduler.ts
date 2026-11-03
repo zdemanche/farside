@@ -1,3 +1,4 @@
+import { systemClock, type Clock } from "./clock.js";
 import type { Connection, MemoryStore } from "./store.js";
 import type { ScanJob, ScanRunner } from "./scans.js";
 
@@ -113,9 +114,10 @@ export class ScanScheduler {
   constructor(
     private readonly store: MemoryStore,
     private readonly runner: ScanRunner,
+    private readonly clock: Clock = systemClock,
   ) {}
 
-  applySettings(orgId: string, now: string): ScheduleState {
+  applySettings(orgId: string, now: string = this.clock()): ScheduleState {
     const org = this.store.org(orgId);
     if (!org.settings.scanScheduleEnabled) {
       org.schedule.nextRunAt = null;
@@ -125,7 +127,7 @@ export class ScanScheduler {
     return org.schedule;
   }
 
-  tick(orgId: string, now: string): ScheduleTick {
+  tick(orgId: string, now: string = this.clock()): ScheduleTick {
     const org = this.store.org(orgId);
     org.schedule.lastTickAt = now;
     const connection = healthyConnection(org.connections);

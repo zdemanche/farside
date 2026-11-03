@@ -1,4 +1,5 @@
 import { CLOUDS, type Cloud, type Finding, type Inventory } from "@farside/scan-contracts";
+import { systemClock, type Clock } from "./clock.js";
 import type { CoverageEntry } from "./coverage.js";
 import type { ResourceFacts } from "./facts.js";
 import type { StoredIssue } from "./issues.js";
@@ -42,14 +43,14 @@ export type OrgState = {
   contract: Contract | null;
 };
 
-function emptyOrg(): OrgState {
+function emptyOrg(now: string): OrgState {
   return {
     connections: [],
     inventory: null,
     inventories: {},
     coverage: [],
     findings: [],
-    settings: { ...DEFAULT_SETTINGS },
+    settings: { ...DEFAULT_SETTINGS, updatedAt: now },
     scans: [],
     facts: [],
     issues: [],
@@ -66,6 +67,8 @@ export class MemoryStore {
   #orgs = new Map<string, OrgState>();
   #deletions = new Map<string, DeletionRecord>();
 
+  constructor(readonly clock: Clock = systemClock) {}
+
   org(orgId: string): OrgState {
     if (this.#deletions.has(orgId)) {
       throw new DeletedOrgError(orgId);
@@ -74,7 +77,7 @@ export class MemoryStore {
     if (existing) {
       return existing;
     }
-    const created = emptyOrg();
+    const created = emptyOrg(this.clock());
     this.#orgs.set(orgId, created);
     return created;
   }
@@ -109,7 +112,7 @@ export class MemoryStore {
     );
   }
 
-  offboard(orgId: string, now: string): DeletionRecord {
+  offboard(orgId: string, now: string = this.clock()): DeletionRecord {
     const existing = this.#deletions.get(orgId);
     if (existing) {
       return existing;
@@ -167,7 +170,7 @@ export class MemoryStore {
       tenantId: input.tenantId,
       subscriptionId: input.subscriptionId,
       roles: [...REQUIRED_AZURE_ROLES],
-      createdAt: "1970-01-01T00:00:00.000Z",
+      createdAt: this.clock(),
       healthy: true,
     };
     this.org(orgId).connections.push(connection);

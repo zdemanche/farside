@@ -61,6 +61,7 @@ import { defaultHarvester } from "./scans.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const MANIFEST = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/ground-truth.json"), "utf8"),
@@ -496,8 +497,8 @@ describe("certificate expiry checks", () => {
 });
 
 describe("unattached disk harvest to API", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store, { harvester: defaultHarvester() });
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: defaultHarvester() });
 
   afterAll(async () => {
     await app.close();
@@ -589,8 +590,8 @@ describe("unattached disk harvest to API", () => {
 });
 
 describe("snapshot retention from settings", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store, { harvester: defaultHarvester() });
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: defaultHarvester() });
 
   afterAll(async () => {
     await app.close();
