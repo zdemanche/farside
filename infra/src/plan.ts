@@ -1,10 +1,20 @@
 import { moonaanTags, type FarsideTagInput, type FarsideTags } from "./tags.js";
 import { HEALTH_PATH, PRODUCT_KEY, customerAddress } from "./product.js";
 
+export type FunctionUrlAuthType = "AWS_IAM" | "NONE";
+
 export type PlannedResource = {
   name: string;
-  kind: "lambda" | "lambda-url" | "iam-role" | "s3-bucket" | "cloudfront" | "dns-record";
+  kind:
+    | "iam-role"
+    | "lambda"
+    | "lambda-url"
+    | "log-group"
+    | "scheduler-schedule"
+    | "s3-bucket"
+    | "cloudfront";
   tags: FarsideTags;
+  authType?: FunctionUrlAuthType;
 };
 
 export type DeployPlan = {
@@ -13,30 +23,63 @@ export type DeployPlan = {
   accountId: string;
   address: string;
   healthPath: typeof HEALTH_PATH;
+  servesV1: boolean;
   tags: FarsideTags;
   resources: PlannedResource[];
 };
 
+export class PublicApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PublicApiError";
+  }
+}
+
+export const SCHEDULE_RATE = "rate(15 minutes)";
+
 export function planDevStack(input: FarsideTagInput & { accountId: string }): DeployPlan {
   const tags = moonaanTags(input);
+  const prefix = `${PRODUCT_KEY}-${input.customerName}`;
   const resources: PlannedResource[] = [
-    { name: `${PRODUCT_KEY}-${input.customerName}-health-role`, kind: "iam-role", tags },
-    { name: `${PRODUCT_KEY}-${input.customerName}-health`, kind: "lambda", tags },
-    { name: `${PRODUCT_KEY}-${input.customerName}-health-url`, kind: "lambda-url", tags },
-    { name: `${PRODUCT_KEY}-${input.customerName}-console`, kind: "s3-bucket", tags },
-    { name: `${PRODUCT_KEY}-${input.customerName}-console-cdn`, kind: "cloudfront", tags },
-    { name: `${PRODUCT_KEY}-${input.customerName}-dns`, kind: "dns-record", tags },
+    { name: `${prefix}-api-role`, kind: "iam-role", tags },
+    { name: `${prefix}-api-logs`, kind: "log-group", tags },
+    { name: `${prefix}-api`, kind: "lambda", tags },
+    { name: `${prefix}-api-url`, kind: "lambda-url", tags, authType: "AWS_IAM" },
+    { name: `${prefix}-tick-role`, kind: "iam-role", tags },
+    { name: `${prefix}-tick-logs`, kind: "log-group", tags },
+    { name: `${prefix}-tick`, kind: "lambda", tags },
+    { name: `${prefix}-tick-scheduler-role`, kind: "iam-role", tags },
+    { name: `${prefix}-tick-schedule`, kind: "scheduler-schedule", tags },
+    { name: `${prefix}-console`, kind: "s3-bucket", tags },
+    { name: `${prefix}-cdn`, kind: "cloudfront", tags },
   ];
 
-  return {
+  const plan: DeployPlan = {
     product: PRODUCT_KEY,
     customerName: input.customerName,
     accountId: input.accountId,
     address: customerAddress(input.customerName),
     healthPath: HEALTH_PATH,
+    servesV1: true,
     tags,
     resources,
   };
+  assertAuthenticatedEdge(plan);
+  return plan;
+}
+
+export function assertAuthenticatedEdge(plan: DeployPlan): void {
+  if (!plan.servesV1) {
+    return;
+  }
+  const open = plan.resources.filter(
+    (resource) => resource.kind === "lambda-url" && resource.authType !== "AWS_IAM",
+  );
+  if (open.length > 0) {
+    throw new PublicApiError(
+      `Function URL ${open.map((resource) => resource.name).join(", ")} serves /v1 without AWS_IAM auth.`,
+    );
+  }
 }
 
 export function untaggedResources(plan: DeployPlan): PlannedResource[] {

@@ -1,4 +1,5 @@
 name: farside
+main: src/program.ts
 runtime:
   name: nodejs
   options:
