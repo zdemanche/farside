@@ -124,6 +124,11 @@ describe("Estate, Inventory and Settings", () => {
     expect(screen.getByRole("status").textContent).toMatch(/cost-center/);
     expect(screen.getByRole("status").textContent).toMatch(/45 days/);
     expect(screen.getByRole("status").textContent).toMatch(/next scan/);
+    fireEvent.change(screen.getByLabelText("Scan interval hours"), {
+      target: { value: "12" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(screen.getByRole("status").textContent).toMatch(/12-hour schedule/);
     expect(noOwnerCount(SEEDED_RESOURCES)).toBe(1);
     expect(noOwnerCount(applyOwnerTagKey(SEEDED_RESOURCES, "cost-center"))).toBe(
       SEEDED_RESOURCES.length,

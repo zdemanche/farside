@@ -9,6 +9,7 @@ import type { BudgetSnapshot } from "./budgets.js";
 import type { CommitmentSnapshot } from "./commitments.js";
 import type { CostSnapshot } from "./cost.js";
 import type { ScanJob } from "./scans.js";
+import { emptySchedule, type ScheduleState } from "./scheduler.js";
 import { assertNoSecrets } from "./secrets.js";
 import { DEFAULT_SETTINGS, type OrgSettings } from "./settings.js";
 
@@ -18,6 +19,7 @@ export type Connection = {
   subscriptionId: string;
   roles: string[];
   createdAt: string;
+  healthy: boolean;
 };
 
 export type OrgState = {
@@ -33,6 +35,7 @@ export type OrgState = {
   commitments: CommitmentSnapshot | null;
   budgets: BudgetSnapshot | null;
   alerts: AlertAnalysis | null;
+  schedule: ScheduleState;
 };
 
 function emptyOrg(): OrgState {
@@ -49,6 +52,7 @@ function emptyOrg(): OrgState {
     commitments: null,
     budgets: null,
     alerts: null,
+    schedule: emptySchedule(),
   };
 }
 
@@ -88,6 +92,7 @@ export class MemoryStore {
       subscriptionId: input.subscriptionId,
       roles: [...REQUIRED_AZURE_ROLES],
       createdAt: "1970-01-01T00:00:00.000Z",
+      healthy: true,
     };
     this.org(orgId).connections.push(connection);
     return connection;
@@ -189,6 +194,16 @@ export class MemoryStore {
         job.subscriptionId === subscriptionId &&
         (job.status === "queued" || job.status === "running"),
     );
+  }
+
+  patchConnection(orgId: string, connectionId: string, patch: { healthy: boolean }): Connection | null {
+    const connection = this.org(orgId).connections.find((item) => item.id === connectionId);
+    if (!connection) {
+      return null;
+    }
+    connection.healthy = patch.healthy;
+    assertNoSecrets(connection);
+    return connection;
   }
 
   deleteConnection(orgId: string, connectionId: string): boolean {

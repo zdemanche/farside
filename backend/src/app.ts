@@ -43,6 +43,7 @@ import { costWasteView } from "./waste.js";
 import { applyOwnerTag, filterInventory, groupInventory, noOwnerTotal } from "./inventory.js";
 import { SecretLeakError, assertNoSecrets } from "./secrets.js";
 import { defaultHarvester, ScanRunner, toScanView, toScanViews, type Harvester } from "./scans.js";
+import { ScanScheduler } from "./scheduler.js";
 import { parseSettings } from "./settings.js";
 import { assertOrgAccess, sessionFromHeaders, type Session } from "./session.js";
 import { MemoryStore } from "./store.js";
@@ -130,6 +131,7 @@ export function buildApp(
   } = {},
 ) {
   const runner = new ScanRunner(store, options.harvester ?? defaultHarvester());
+  const scheduler = new ScanScheduler(store, runner);
   const app = Fastify({ logger: false });
 
   app.get("/health", async () => ({
@@ -187,6 +189,14 @@ export function buildApp(
       });
     }
     const connection = store.putConnection(request.params.orgId, input);
+    const asOf =
+      request.body && typeof request.body === "object" && !Array.isArray(request.body)
+        ? (request.body as Record<string, unknown>).asOf
+        : undefined;
+    scheduler.applySettings(
+      request.params.orgId,
+      typeof asOf === "string" ? asOf : connection.createdAt,
+    );
     const scan = runner.start({
       orgId: request.params.orgId,
       subscriptionId: input.subscriptionId,
@@ -606,11 +616,50 @@ export function buildApp(
         ],
       });
     }
+    const body = (request.body as Record<string, unknown> | null) ?? {};
     const saved = store.putSettings(request.params.orgId, {
       ...parsed,
       updatedAt: "1970-01-01T00:00:00.000Z",
     });
-    return sendClean(reply, 200, saved);
+    const schedule = scheduler.applySettings(
+      request.params.orgId,
+      typeof body.asOf === "string" ? body.asOf : saved.updatedAt,
+    );
+    return sendClean(reply, 200, { ...saved, nextRunAt: schedule.nextRunAt });
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/schedule", async (request, reply) => {
+    if (!requireOrg(request, reply, store)) {
+      return reply;
+    }
+    const org = store.snapshot(request.params.orgId);
+    const attention = org.connections.length === 0 || org.connections.every((item) => !item.healthy)
+      ? "connection needs attention"
+      : null;
+    return sendClean(reply, 200, {
+      ...org.schedule,
+      enabled: org.settings.scanScheduleEnabled,
+      intervalHours: org.settings.scanIntervalHours,
+      retryLimit: org.settings.scanRetryLimit,
+      attention,
+    });
+  });
+
+  app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/schedule/tick", async (request, reply) => {
+    if (!requireOrg(request, reply, store)) {
+      return reply;
+    }
+    const body = (request.body as Record<string, unknown> | null) ?? {};
+    const now = typeof body.now === "string" ? body.now : "1970-01-01T00:00:00.000Z";
+    const tick = scheduler.tick(request.params.orgId, now);
+    return sendClean(reply, 200, {
+      action: tick.action,
+      attention: tick.attention,
+      record: tick.record,
+      scan: tick.scan ? toScanView(tick.scan, false) : null,
+      scanStarted: tick.scanStarted,
+      schedule: tick.schedule,
+    });
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/inventory/browse", async (request, reply) => {

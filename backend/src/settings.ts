@@ -4,6 +4,9 @@ export type OrgSettings = {
   productionTagValue: string;
   snapshotRetentionDays: number;
   certExpiryFlagDays: number;
+  scanScheduleEnabled: boolean;
+  scanIntervalHours: number;
+  scanRetryLimit: number;
   updatedAt: string;
 };
 
@@ -13,6 +16,9 @@ export const DEFAULT_SETTINGS: OrgSettings = {
   productionTagValue: "prod",
   snapshotRetentionDays: 30,
   certExpiryFlagDays: 60,
+  scanScheduleEnabled: true,
+  scanIntervalHours: 24,
+  scanRetryLimit: 3,
   updatedAt: "1970-01-01T00:00:00.000Z",
 };
 
@@ -38,11 +44,25 @@ export function parseSettings(body: unknown): Omit<OrgSettings, "updatedAt"> | n
     typeof record.certExpiryFlagDays === "number" && record.certExpiryFlagDays > 0
       ? record.certExpiryFlagDays
       : DEFAULT_SETTINGS.certExpiryFlagDays;
+  const scanIntervalHours =
+    typeof record.scanIntervalHours === "number" && record.scanIntervalHours > 0
+      ? record.scanIntervalHours
+      : DEFAULT_SETTINGS.scanIntervalHours;
+  const scanRetryLimit =
+    typeof record.scanRetryLimit === "number" && record.scanRetryLimit > 0
+      ? record.scanRetryLimit
+      : DEFAULT_SETTINGS.scanRetryLimit;
   return {
     ownerTagKey: record.ownerTagKey,
     productionTagKey: record.productionTagKey,
     productionTagValue: record.productionTagValue,
     snapshotRetentionDays,
     certExpiryFlagDays,
+    scanScheduleEnabled:
+      typeof record.scanScheduleEnabled === "boolean"
+        ? record.scanScheduleEnabled
+        : DEFAULT_SETTINGS.scanScheduleEnabled,
+    scanIntervalHours,
+    scanRetryLimit,
   };
 }
