@@ -66,6 +66,20 @@ describe("commitment use checks", () => {
     )[0];
     expect(low?.result).toBe("fail");
     expect(low?.savings).toEqual({ min: "56.00", max: "84.00", currency: "USD" });
+    const eur = checkSavingsPlans(
+      [
+        {
+          savingsPlanId: "sp-eur",
+          committedAmount: "1000.00",
+          usedAmount: "500.00",
+          utilisationPercent: 50,
+          expiryDate: "2027-01-01",
+          currency: "EUR",
+        },
+      ],
+      PERIOD,
+    )[0];
+    expect(eur?.savings).toEqual({ min: "400.00", max: "600.00", currency: "EUR" });
     const none = checkReservations([], PERIOD)[0];
     expect(none?.result).toBe("pass");
     expect(none?.evidence.fields.noneFound).toBe(true);

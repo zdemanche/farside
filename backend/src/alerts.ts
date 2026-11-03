@@ -51,7 +51,17 @@ export type HistoryGate = {
   historyDays: number;
   daysNeeded: number;
   closer: string;
+  reason?: "mixed_currency";
 };
+
+export const CURRENCY_CLOSER = "Daily cost rows in a single currency";
+
+function mixedCurrencyGate(rows: DailyCost[], asOf: string): HistoryGate | null {
+  const currencies = new Set(rows.filter((row) => row.date <= asOf).map((row) => row.currency));
+  return currencies.size > 1
+    ? { historyDays: historyDays(rows, asOf), daysNeeded: 0, closer: CURRENCY_CLOSER, reason: "mixed_currency" }
+    : null;
+}
 
 export type AlertAnalysis = {
   asOf: string;
@@ -206,6 +216,10 @@ export function evaluateAlerts(
   asOf: string,
   previous: SpendAlert[] = [],
 ): { alerts: SpendAlert[]; undetermined: HistoryGate | null; historyDays: number } {
+  const mixed = mixedCurrencyGate(rows, asOf);
+  if (mixed) {
+    return { alerts: [], historyDays: mixed.historyDays, undetermined: mixed };
+  }
   const dates = datesOnOrBefore(rows, asOf);
   const priorDates = dates.filter((date) => date < asOf);
   const available = priorDates.length;
@@ -304,7 +318,7 @@ export function analyzeAlerts(input: {
   return {
     asOf,
     historyDays: evaluated.historyDays,
-    floorBurst: floorBurst(rows, asOf),
+    floorBurst: evaluated.undetermined?.reason === "mixed_currency" ? [] : floorBurst(rows, asOf),
     alerts: evaluated.alerts,
     digest: buildDigest(asOf, evaluated.alerts, input.recipients ?? []),
     undetermined: evaluated.undetermined,

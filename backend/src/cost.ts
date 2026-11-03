@@ -8,6 +8,7 @@ export const SPEND_BY_SERVICE = "azure-cost-spend-by-service";
 export const MONTH_ON_MONTH = "azure-cost-month-on-month";
 export const COST_ROLE_CLOSER = "Cost Management Reader on the right billing scope";
 export const TWO_MONTHS_CLOSER = "Two complete months of Cost Management data at that scope";
+export const CURRENCY_CLOSER = "Cost Management rows in a single currency at that scope";
 
 export type CostQueryRow = {
   date: string;
@@ -65,7 +66,7 @@ export type CostSnapshot = {
 
 export type CostHarvestResult =
   | { ok: true; snapshot: CostSnapshot; coverage: CoverageEntry[] }
-  | { ok: false; reason: "missing_role"; coverage: CoverageEntry[] };
+  | { ok: false; reason: "missing_role" | "mixed_currency"; coverage: CoverageEntry[] };
 
 export class CrossCurrencyError extends Error {
   constructor() {
@@ -158,6 +159,30 @@ function yearMonth(date: string): string {
   return date.slice(0, 7);
 }
 
+function mixedCurrencyCoverage(subscriptionId: string): CoverageEntry[] {
+  return [SPEND_BY_SERVICE, MONTH_ON_MONTH].map((checkId) =>
+    recordCoverageScope({
+      subscriptionOrProject: subscriptionId,
+      checkId,
+      state: "undetermined",
+      closer: CURRENCY_CLOSER,
+    }),
+  );
+}
+
+function completeMonthRows(rows: CostQueryRow[]): CostQueryRow[] {
+  const dates = rows.map((row) => row.date).sort();
+  const first = dates[0];
+  const last = dates.at(-1);
+  // The query window is not known here, so the first row date stands in for it: a scope with $0 on the 1st reads as a partial month.
+  const leadingPartial = first && !first.endsWith("-01") ? yearMonth(first) : null;
+  const trailing = last ? yearMonth(last) : null;
+  return rows.filter((row) => {
+    const month = yearMonth(row.date);
+    return month !== leadingPartial && month !== trailing;
+  });
+}
+
 function missingRoleCoverage(subscriptionId: string): CoverageEntry[] {
   return [SPEND_BY_SERVICE, MONTH_ON_MONTH].map((checkId) =>
     recordCoverageScope({
@@ -244,9 +269,7 @@ export function figuresFromRows(
   }
   const dates = rows.map((row) => row.date).sort();
   const latest = dates[dates.length - 1] ?? null;
-  const provisionalMonth = latest ? yearMonth(latest) : null;
-  const tagged = rows.map((row) => ({ ...row, provisional: row.date === latest }));
-  const complete = tagged.filter((row) => yearMonth(row.date) !== provisionalMonth);
+  const complete = completeMonthRows(rows);
   const monthKeys = [...new Set(complete.map((row) => yearMonth(row.date)))].sort();
   const latestComplete = monthKeys[monthKeys.length - 1];
   const services = [...new Set(complete.map((row) => row.serviceName))].sort();
@@ -346,6 +369,9 @@ export async function harvestCost(input: {
     if (error instanceof MissingCostRoleError) {
       return { ok: false, reason: "missing_role", coverage: missingRoleCoverage(input.subscriptionId) };
     }
+    if (error instanceof CrossCurrencyError) {
+      return { ok: false, reason: "mixed_currency", coverage: mixedCurrencyCoverage(input.subscriptionId) };
+    }
     throw error;
   }
 }
@@ -361,10 +387,7 @@ function monthlyServiceFigures(
   if (rows.length === 0) {
     return [];
   }
-  const dates = rows.map((row) => row.date).sort();
-  const latest = dates[dates.length - 1];
-  const provisionalMonth = latest ? yearMonth(latest) : null;
-  const complete = rows.filter((row) => yearMonth(row.date) !== provisionalMonth);
+  const complete = completeMonthRows(rows);
   const keys = new Map<string, CostQueryRow[]>();
   for (const row of complete) {
     const key = `${yearMonth(row.date)}:${row.serviceName}`;

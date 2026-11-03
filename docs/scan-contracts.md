@@ -50,10 +50,11 @@ Console screens import these words from `console/src/terms.ts`. Blind spots list
 
 ## Health score
 
-See `HEALTH_SCORE_FORMULA` in `@farside/scan-contracts`. Scopes that were not assessed are omitted from the score. A fixture with no findings yields **coverage only and `score: null`**.
+See `HEALTH_SCORE_FORMULA` in `@farside/scan-contracts`. Scopes that were not assessed are omitted from the score. The score counts distinct assessed scopes with at least one `fail`, not failing findings: 3 failing disks in 1 of 2 assessed scopes score 50. A fixture with no findings yields **coverage only and `score: null`**.
 
 ## Leftover
 
+- Month-on-month uses the first cost row date as the window start: a leading month whose first row is after the 1st is partial, so a scope with no spend on the 1st reads as partial and month-on-month stays undetermined.
 - Publishing `@farside/scan-contracts` to GitHub Packages (dashmeta’s path) is switch-on-later; the workspace package is the published build for this repo.
 - Mapping Farside findings onto dashmeta SARIF for a combined Atlas view is not done.
 - Azure billing-scope / GCP export fields land with the cost stories, not this package’s 0.1.0 core.

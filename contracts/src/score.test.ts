@@ -35,4 +35,20 @@ describe("health score", () => {
     expect(withAssessedFail.score).toBe(0);
     expect(withAssessedFail.coverage).toBe(0.5);
   });
+
+  it("counts failing scopes, not failing findings", () => {
+    const twoAssessed: Coverage = {
+      scopes: coverage.scopes.map((scope) => ({ ...scope, assessed: true })),
+    };
+    const threeFails: Finding[] = [1, 2, 3].map((n) => ({
+      ...failing,
+      evidence: { fields: { diskId: `disk-${n}` } },
+    }));
+    expect(scoreHealth(twoAssessed, threeFails).score).toBe(50);
+    const secondScopeFail: Finding = {
+      ...failing,
+      scope: { ...failing.scope, id: "sub-2:azure-waste-unattached-disks" },
+    };
+    expect(scoreHealth(twoAssessed, [...threeFails, secondScopeFail]).score).toBe(0);
+  });
 });

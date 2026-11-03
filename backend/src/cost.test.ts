@@ -1,8 +1,11 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
 import {
+  CURRENCY_CLOSER,
   CrossCurrencyError,
   MONTH_ON_MONTH,
+  TWO_MONTHS_CLOSER,
+  type CostQueryRow,
   SPEND_BY_SERVICE,
   addAmounts,
   fixtureCostClient,
@@ -122,6 +125,56 @@ describe("cost harvest", () => {
     expect(harvested.coverage.find((entry) => entry.checkId === MONTH_ON_MONTH)?.state).toBe(
       "assessed",
     );
+  });
+
+  function dailyRows(from: string, to: string, currency = "USD"): CostQueryRow[] {
+    const rows: CostQueryRow[] = [];
+    for (let day = Date.parse(from); day <= Date.parse(to); day += 86_400_000) {
+      const date = new Date(day).toISOString().slice(0, 10);
+      rows.push({ date, serviceName: "Virtual Machines", costAmount: "1.00", currency });
+    }
+    return rows;
+  }
+
+  const harvestRows = (rows: CostQueryRow[]) =>
+    harvestCost({
+      client: { query: async () => ({ rows }) },
+      subscriptionId: "main",
+      billingScope: SCOPE,
+      agreementType: "payg",
+    });
+
+  it("treats a month starting on the 2nd as partial and leaves month-on-month undetermined", async () => {
+    const harvested = await harvestRows(dailyRows("2026-08-20", "2026-10-05"));
+    expect(harvested.ok).toBe(true);
+    if (!harvested.ok) {
+      return;
+    }
+    expect(harvested.snapshot.monthOnMonth).toEqual([]);
+    expect(harvested.snapshot.months.map((row) => row.periodStart)).toEqual(["2026-09-01"]);
+    const mom = harvested.coverage.find((entry) => entry.checkId === MONTH_ON_MONTH);
+    expect(mom).toMatchObject({ state: "undetermined", closer: TWO_MONTHS_CLOSER });
+  });
+
+  it("counts a leading month starting on the 1st as complete", async () => {
+    const first = await harvestRows(dailyRows("2026-08-01", "2026-10-05"));
+    expect(first.ok && first.snapshot.monthOnMonth.map((row) => row.previousMonth)).toEqual(["2026-08"]);
+    const second = await harvestRows(dailyRows("2026-08-02", "2026-10-05"));
+    expect(second.ok && second.snapshot.monthOnMonth).toEqual([]);
+  });
+
+  it("returns an undetermined currency row instead of throwing on mixed currencies", async () => {
+    const rows = [...dailyRows("2026-08-01", "2026-10-05"), ...dailyRows("2026-09-10", "2026-09-10", "EUR")];
+    const harvested = await harvestRows(rows);
+    expect(harvested.ok).toBe(false);
+    if (harvested.ok) {
+      return;
+    }
+    expect(harvested.reason).toBe("mixed_currency");
+    expect(harvested.coverage.map((entry) => [entry.state, entry.closer])).toEqual([
+      ["undetermined", CURRENCY_CLOSER],
+      ["undetermined", CURRENCY_CLOSER],
+    ]);
   });
 
   it("leaves cost unassessed when Cost Management Reader is missing", async () => {

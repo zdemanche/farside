@@ -189,7 +189,7 @@ export function checkSavingsPlans(
   return plans.map((row) => {
     const low = row.utilisationPercent < LOW_UTILISATION_PERCENT;
     const unused = Math.max(Number(row.committedAmount) - Number(row.usedAmount), 0);
-    const savings = low && unused > 0 ? unusedSavingsPlanSavings(unused) : null;
+    const savings = low && unused > 0 ? unusedSavingsPlanSavings(unused, row.currency) : null;
     return acceptFinding({
       checkId: SAVINGS_PLAN_USE,
       result: low ? "fail" : "pass",

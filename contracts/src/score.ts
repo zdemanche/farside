@@ -9,10 +9,11 @@ import type { Coverage, Finding } from "./types.js";
  *
  * If there are no findings, score is null — coverage only.
  * If there are findings but no assessed scopes, score is also null.
- * Otherwise score = 100 * (1 - failingAssessedFindings / assessedScopes), clamped to 0..100.
+ * Otherwise score = 100 * (1 - failingAssessedScopes / assessedScopes), clamped to 0..100,
+ * where failingAssessedScopes counts distinct assessed scopes with at least one fail.
  */
 export const HEALTH_SCORE_FORMULA =
-  "coverage = assessed / total scopes; score is null when there are no findings; otherwise score uses only assessed scopes: 100 * (1 - failingAssessed / assessed).";
+  "coverage = assessed / total scopes; score is null when there are no findings; otherwise score uses only assessed scopes: 100 * (1 - failing assessed scopes / assessed scopes), where a failing scope is an assessed scope with at least one fail.";
 
 export type HealthScore = {
   coverage: number;
@@ -37,10 +38,12 @@ export function scoreHealth(coverage: Coverage, findings: Finding[]): HealthScor
   }
 
   const assessedIds = new Set(assessed.map((scope) => scope.id));
-  const failingAssessed = findings.filter(
-    (finding) => finding.result === "fail" && assessedIds.has(finding.scope.id),
-  ).length;
-  const raw = 100 * (1 - failingAssessed / assessed.length);
+  const failingScopes = new Set(
+    findings
+      .filter((finding) => finding.result === "fail" && assessedIds.has(finding.scope.id))
+      .map((finding) => finding.scope.id),
+  );
+  const raw = 100 * (1 - failingScopes.size / assessed.length);
   const score = Math.max(0, Math.min(100, raw));
 
   return {

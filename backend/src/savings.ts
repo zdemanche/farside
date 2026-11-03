@@ -84,6 +84,7 @@ export const RESERVATION_SAVINGS_BASIS =
 export const SAVINGS_PLAN_SAVINGS_BASIS =
   "Unused committed savings-plan spend for the period, as a range";
 
+// Reservation savings stay USD: they come from a USD list-price constant.
 export function unusedReservationSavings(unusedHours: number): NamedSavingsRange {
   return savingsRange({
     min: unusedHours * 0.1,
@@ -93,11 +94,11 @@ export function unusedReservationSavings(unusedHours: number): NamedSavingsRange
   });
 }
 
-export function unusedSavingsPlanSavings(unusedAmount: number): NamedSavingsRange {
+export function unusedSavingsPlanSavings(unusedAmount: number, currency: string): NamedSavingsRange {
   return savingsRange({
     min: unusedAmount * 0.8,
     max: unusedAmount * 1.2,
-    currency: "USD",
+    currency,
     basis: SAVINGS_PLAN_SAVINGS_BASIS,
   });
 }

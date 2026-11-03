@@ -97,20 +97,39 @@ function latestMonthCost(cost: CostSnapshot | null): string | null {
   return last?.costAmount ?? null;
 }
 
+const RESOURCE_ID_FIELDS = ["vmId", "sqlResourceId", "instanceName", "resourceName"];
+const LIFECYCLE_DATE_FIELDS = ["retirementDate", "expirationDate", "supportEnd", "expireTime"];
+const LIFECYCLE_WINDOW_DAYS = 90;
+const DAY_MS = 86_400_000;
+
+function resourceKey(finding: Finding): string {
+  const field = RESOURCE_ID_FIELDS.find((name) => typeof finding.evidence.fields[name] === "string");
+  const id = field ? String(finding.evidence.fields[field]) : finding.scope.id;
+  return `${finding.checkId}:${finding.scope.subscriptionOrProject}:${id}`;
+}
+
 function backupCounts(findings: Finding[], coverage: CoverageEntry[], records: RunRecord[], cloud: Cloud) {
-  const relevant = findings.filter(
-    (finding) =>
-      BACKUP_IDS[cloud].includes(finding.checkId) &&
-      isProven(finding.checkId, records) &&
-      isAssessedFinding(coverage, finding) &&
-      finding.result === "fail",
+  const proven = findings.filter(
+    (finding) => BACKUP_IDS[cloud].includes(finding.checkId) && isProven(finding.checkId, records),
   );
-  const unprotected = relevant.length;
-  const production = relevant.reduce((max, finding) => {
-    const count = finding.evidence.fields.productionCount;
-    return typeof count === "number" && count > max ? count : max;
-  }, 0);
-  return { unprotected, production };
+  const assessed = proven.filter((finding) => isAssessedFinding(coverage, finding));
+  const keysWhere = (list: Finding[], predicate: (finding: Finding) => boolean) =>
+    new Set(list.filter(predicate).map(resourceKey));
+  return {
+    unprotected: keysWhere(assessed, (finding) => finding.result === "fail").size,
+    production: keysWhere(assessed, (finding) => finding.result !== "undetermined").size,
+    undetermined: keysWhere(proven, (finding) => finding.result === "undetermined").size,
+  };
+}
+
+function withinLifecycleWindow(finding: Finding, now: string): boolean {
+  const field = LIFECYCLE_DATE_FIELDS.find((name) => typeof finding.evidence.fields[name] === "string");
+  if (!field) {
+    return false;
+  }
+  const date = Date.parse(String(finding.evidence.fields[field]).slice(0, 10));
+  const today = Date.parse(now.slice(0, 10));
+  return Number.isFinite(date) && Number.isFinite(today) && date - today <= LIFECYCLE_WINDOW_DAYS * DAY_MS;
 }
 
 function lifecycleCount(
@@ -118,13 +137,15 @@ function lifecycleCount(
   coverage: CoverageEntry[],
   records: RunRecord[],
   cloud: Cloud,
+  now: string,
 ): number {
   return findings.filter(
     (finding) =>
       LIFECYCLE_IDS[cloud].includes(finding.checkId) &&
       isProven(finding.checkId, records) &&
       isAssessedFinding(coverage, finding) &&
-      finding.result === "fail",
+      finding.result === "fail" &&
+      withinLifecycleWindow(finding, now),
   ).length;
 }
 
@@ -159,6 +180,7 @@ export function buildCloudFigures(input: {
   findings: Finding[];
   coverage: CoverageEntry[];
   records: RunRecord[];
+  now: string;
 }): HeadlineFigure[] {
   const prefix = wastePrefix(input.cloud);
   const spendId = spendCheckId(input.cloud);
@@ -192,7 +214,7 @@ export function buildCloudFigures(input: {
     : "not_supported";
   const totals = wasteTotals(provenWasteFindings, provenWasteCoverage);
   const backup = backupCounts(findings, coverage, input.records, input.cloud);
-  const losingSupport = lifecycleCount(findings, coverage, input.records, input.cloud);
+  const losingSupport = lifecycleCount(findings, coverage, input.records, input.cloud, input.now);
   const unseen = coverage.filter(
     (entry) => isProven(entry.checkId, input.records) && entry.state !== "assessed",
   ).length;
@@ -216,7 +238,7 @@ export function buildCloudFigures(input: {
       "Production systems not backed up",
       "#recovery",
       backupStatus,
-      backupStatus === "ok" ? { unprotected: backup.unprotected, production: backup.production } : null,
+      backupStatus === "ok" ? backup : null,
     ),
     figure(
       "lifecycle",
@@ -273,6 +295,7 @@ function pickCountValue(
     return {
       unprotected: ok.reduce((sum, value) => sum + (Number(value.unprotected) || 0), 0),
       production: ok.reduce((sum, value) => sum + (Number(value.production) || 0), 0),
+      undetermined: ok.reduce((sum, value) => sum + (Number(value.undetermined) || 0), 0),
     };
   }
   return { count: ok.reduce((sum, value) => sum + (Number(value.count) || 0), 0) };
@@ -299,6 +322,7 @@ export function buildHeadline(input: {
   coverage: CoverageEntry[];
   records?: RunRecord[];
   cloud?: Cloud;
+  now: string;
 }): Headline {
   const records = input.records ?? runRecordsFromSpec();
   const selected = input.cloud ? [input.cloud] : [...CLOUDS];
@@ -314,6 +338,7 @@ export function buildHeadline(input: {
       findings: input.findings,
       coverage: input.coverage,
       records,
+      now: input.now,
     }),
   }));
   const figures: HeadlineFigure[] = [
