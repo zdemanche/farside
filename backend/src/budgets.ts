@@ -1,6 +1,6 @@
 import type { Finding } from "@farside/scan-contracts";
 import { acceptFinding } from "./checks/define.js";
-import { applyCoverageResult, recordCoverageScope, type CoverageEntry } from "./coverage.js";
+import { applyCoverageResults, recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import { rejectUnconfigured } from "./providers/unconfigured.js";
 import docAzureGroundTruth from "../../docs/azure/ground-truth.json" with { type: "json" };
 
@@ -153,12 +153,15 @@ export async function harvestBudgets(input: {
 }
 
 export function applyBudgetCoverage(
-  existing: CoverageEntry[],
-  harvested: CoverageEntry[],
+  existing: readonly CoverageEntry[],
+  harvested: readonly CoverageEntry[],
 ): CoverageEntry[] {
-  return harvested.reduce((coverage, entry) => applyCoverageResult(coverage, entry), existing);
+  return applyCoverageResults(existing, harvested);
 }
 
-export function mergeBudgetFindings(existing: Finding[], next: Finding[]): Finding[] {
+export function mergeBudgetFindings(
+  existing: readonly Finding[],
+  next: readonly Finding[],
+): Finding[] {
   return [...existing.filter((finding) => finding.checkId !== NO_BUDGETS), ...next];
 }

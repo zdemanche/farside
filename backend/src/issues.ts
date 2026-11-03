@@ -58,7 +58,7 @@ export function issueIdentity(checkId: string, resourceId: string, scopeId: stri
   return `${checkId}:${resourceId}:${scopeId}`;
 }
 
-function rekeyLegacyIssues(byId: Map<string, StoredIssue>, findings: Finding[]): void {
+function rekeyLegacyIssues(byId: Map<string, StoredIssue>, findings: readonly Finding[]): void {
   for (const finding of findings) {
     if (finding.result === "pass") {
       continue;
@@ -75,14 +75,10 @@ function rekeyLegacyIssues(byId: Map<string, StoredIssue>, findings: Finding[]):
   }
 }
 
-function coverageFor(entries: CoverageEntry[], scopeId: string): CoverageEntry | undefined {
-  return entries.find((entry) => entry.id === scopeId);
-}
-
 export function applyScanToIssues(input: {
-  issues: StoredIssue[];
-  findings: Finding[];
-  coverage: CoverageEntry[];
+  issues: readonly StoredIssue[];
+  findings: readonly Finding[];
+  coverage: readonly CoverageEntry[];
   scanId: string;
   observedAt: string;
   checkIds?: readonly string[];
@@ -93,6 +89,12 @@ export function applyScanToIssues(input: {
     byId,
     limit ? input.findings.filter((finding) => limit.has(finding.checkId)) : input.findings,
   );
+  const coverageById = new Map<string, CoverageEntry>();
+  for (const entry of input.coverage) {
+    if (!coverageById.has(entry.id)) {
+      coverageById.set(entry.id, entry);
+    }
+  }
   const seen = new Set<string>();
   const undetermined = new Map<string, string | undefined>();
 
@@ -136,7 +138,7 @@ export function applyScanToIssues(input: {
     if (limit && !limit.has(issue.checkId)) {
       continue;
     }
-    const coverage = coverageFor(input.coverage, issue.scopeId);
+    const coverage = coverageById.get(issue.scopeId);
     if (undetermined.has(issue.id)) {
       issue.status = "not_confirmed";
       issue.coverage = "undetermined";

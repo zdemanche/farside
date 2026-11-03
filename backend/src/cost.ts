@@ -1,4 +1,4 @@
-import { applyCoverageResult, recordCoverageScope, type CoverageEntry } from "./coverage.js";
+import { applyCoverageResults, recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import { rejectUnconfigured } from "./providers/unconfigured.js";
 import docAzureCostQueryPages from "../../docs/azure/cost-query-pages.json" with { type: "json" };
 
@@ -375,8 +375,11 @@ export async function harvestCost(input: {
   }
 }
 
-export function applyCostCoverage(existing: CoverageEntry[], harvested: CoverageEntry[]): CoverageEntry[] {
-  return harvested.reduce((coverage, entry) => applyCoverageResult(coverage, entry), existing);
+export function applyCostCoverage(
+  existing: readonly CoverageEntry[],
+  harvested: readonly CoverageEntry[],
+): CoverageEntry[] {
+  return applyCoverageResults(existing, harvested);
 }
 
 function monthlyServiceFigures(

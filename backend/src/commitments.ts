@@ -1,6 +1,6 @@
 import type { Finding } from "@farside/scan-contracts";
 import { acceptFinding } from "./checks/define.js";
-import { applyCoverageResult, recordCoverageScope, type CoverageEntry } from "./coverage.js";
+import { applyCoverageResults, recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import {
   RESERVATION_SAVINGS_BASIS,
   SAVINGS_PLAN_SAVINGS_BASIS,
@@ -268,15 +268,15 @@ export async function harvestCommitments(input: {
 }
 
 export function applyCommitmentCoverage(
-  existing: CoverageEntry[],
-  harvested: CoverageEntry[],
+  existing: readonly CoverageEntry[],
+  harvested: readonly CoverageEntry[],
 ): CoverageEntry[] {
-  return harvested.reduce((coverage, entry) => applyCoverageResult(coverage, entry), existing);
+  return applyCoverageResults(existing, harvested);
 }
 
 export function mergeCommitmentFindings(
-  existing: Finding[],
-  next: Finding[],
+  existing: readonly Finding[],
+  next: readonly Finding[],
   subscriptionId?: string,
 ): Finding[] {
   const replace = new Set([RESERVATION_USE, SAVINGS_PLAN_USE]);

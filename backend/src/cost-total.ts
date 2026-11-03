@@ -1,4 +1,4 @@
-import { applyCoverageResult, type CoverageEntry } from "./coverage.js";
+import { applyCoverageResults, type CoverageEntry, type CoverageResult } from "./coverage.js";
 import {
   addAmounts,
   CURRENCY_CLOSER,
@@ -38,7 +38,12 @@ function sumMonthly(figures: readonly CostFigure[], scopes: string): CostFigure[
   const groups = new Map<string, CostFigure[]>();
   for (const figure of figures) {
     const key = `${figure.serviceName}|${monthOf(figure)}`;
-    groups.set(key, [...(groups.get(key) ?? []), figure]);
+    const group = groups.get(key);
+    if (group) {
+      group.push(figure);
+    } else {
+      groups.set(key, [figure]);
+    }
   }
   return [...groups.values()]
     .flatMap((group) => {
@@ -108,40 +113,43 @@ export function markMixedCurrency(
   coverage: CoverageEntry[],
   subscriptionIds: readonly string[],
 ): CoverageEntry[] {
-  let next = coverage;
-  for (const subscriptionOrProject of subscriptionIds) {
-    for (const checkId of COST_CHECK_IDS) {
-      next = applyCoverageResult(next, {
+  if (subscriptionIds.length === 0) {
+    return coverage;
+  }
+  return applyCoverageResults(
+    coverage,
+    subscriptionIds.flatMap((subscriptionOrProject) =>
+      COST_CHECK_IDS.map((checkId): CoverageResult => ({
         subscriptionOrProject,
         checkId,
         state: "undetermined",
         closer: MIXED_CURRENCY_CLOSER,
-      });
-    }
-  }
-  return next;
+      })),
+    ),
+  );
 }
 
 export function restoreAfterMixedCurrency(
   coverage: CoverageEntry[],
   snapshots: Record<string, CostSnapshot>,
 ): CoverageEntry[] {
-  const stale = coverage.filter(
-    (entry) =>
-      COST_CHECK_IDS.includes(entry.checkId) &&
-      entry.state === "undetermined" &&
-      entry.closer === MIXED_CURRENCY_CLOSER &&
-      snapshots[entry.subscriptionOrProject] !== undefined,
-  );
-  return stale.reduce((next, entry) => {
-    const snapshot = snapshots[entry.subscriptionOrProject];
-    const hasChange = (snapshot?.monthOnMonth.length ?? 0) > 0;
-    const unresolved = entry.checkId === MONTH_ON_MONTH && !hasChange;
-    return applyCoverageResult(next, {
-      subscriptionOrProject: entry.subscriptionOrProject,
-      checkId: entry.checkId,
-      state: unresolved ? "undetermined" : "assessed",
-      ...(unresolved ? { closer: TWO_MONTHS_CLOSER } : {}),
+  const restored = coverage
+    .filter(
+      (entry) =>
+        COST_CHECK_IDS.includes(entry.checkId) &&
+        entry.state === "undetermined" &&
+        entry.closer === MIXED_CURRENCY_CLOSER &&
+        snapshots[entry.subscriptionOrProject] !== undefined,
+    )
+    .map((entry): CoverageResult => {
+      const hasChange = (snapshots[entry.subscriptionOrProject]?.monthOnMonth.length ?? 0) > 0;
+      const unresolved = entry.checkId === MONTH_ON_MONTH && !hasChange;
+      return {
+        subscriptionOrProject: entry.subscriptionOrProject,
+        checkId: entry.checkId,
+        state: unresolved ? "undetermined" : "assessed",
+        ...(unresolved ? { closer: TWO_MONTHS_CLOSER } : {}),
+      };
     });
-  }, coverage);
+  return restored.length > 0 ? applyCoverageResults(coverage, restored) : coverage;
 }

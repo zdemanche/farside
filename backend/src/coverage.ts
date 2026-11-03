@@ -63,7 +63,7 @@ export function recordCoverageScope(input: {
   return entry;
 }
 
-export function toContractCoverage(entries: CoverageEntry[]): Coverage {
+export function toContractCoverage(entries: readonly CoverageEntry[]): Coverage {
   return {
     scopes: entries.map((entry) => ({
       id: entry.id,
@@ -104,21 +104,35 @@ export function coverageFromHarvest(
   return entries;
 }
 
-export function applyCoverageResult(
-  entries: CoverageEntry[],
-  result: {
-    subscriptionOrProject: string;
-    checkId: string;
-    state: CoverageState;
-    causeId?: CoverageCauseId;
-    closer?: string;
-  },
+export type CoverageResult = {
+  subscriptionOrProject: string;
+  checkId: string;
+  state: CoverageState;
+  causeId?: CoverageCauseId;
+  closer?: string;
+};
+
+export function applyCoverageResults(
+  entries: readonly CoverageEntry[],
+  results: readonly CoverageResult[],
 ): CoverageEntry[] {
-  const next = recordCoverageScope(result);
-  return [...entries.filter((entry) => entry.id !== next.id), next];
+  const incoming = new Map<string, CoverageEntry>();
+  for (const result of results) {
+    const next = recordCoverageScope(result);
+    incoming.delete(next.id);
+    incoming.set(next.id, next);
+  }
+  return [...entries.filter((entry) => !incoming.has(entry.id)), ...incoming.values()];
 }
 
-export function blindSpots(entries: CoverageEntry[]): BlindSpot[] {
+export function applyCoverageResult(
+  entries: readonly CoverageEntry[],
+  result: CoverageResult,
+): CoverageEntry[] {
+  return applyCoverageResults(entries, [result]);
+}
+
+export function blindSpots(entries: readonly CoverageEntry[]): BlindSpot[] {
   return entries.flatMap((entry) => {
     if (entry.state === "assessed") {
       return [];
@@ -135,7 +149,10 @@ export function blindSpots(entries: CoverageEntry[]): BlindSpot[] {
   });
 }
 
-export function coverageHealth(entries: CoverageEntry[], findings: Finding[]): HealthScore {
+export function coverageHealth(
+  entries: readonly CoverageEntry[],
+  findings: Finding[],
+): HealthScore {
   const coverage = toContractCoverage(entries);
   assertValid(validateCoverage(coverage));
   return scoreHealth(coverage, findings);
