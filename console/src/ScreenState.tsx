@@ -3,6 +3,7 @@ import { useOverview } from "./data/context";
 import { failureMessage, isRetryable } from "./data/error";
 import type { EstateOverview } from "./data/types";
 import type { Resource } from "./data/use-resource";
+import { TERMS } from "./terms";
 
 function PartialNotice() {
   const overview = useOverview();
@@ -23,8 +24,8 @@ function PartialNotice() {
   }
   return (
     <p className="notice">
-      Partial: {notAssessed} {notAssessed === 1 ? "scope" : "scopes"} not assessed. What follows
-      covers assessed scopes only. <a href="#blind-spots">See blind spots</a>
+      Partial: {notAssessed} {notAssessed === 1 ? "scope" : "scopes"} {TERMS.notAssessed}. What
+      follows is limited to {TERMS.assessed} scopes. <a href="#blind-spots">See blind spots</a>
     </p>
   );
 }

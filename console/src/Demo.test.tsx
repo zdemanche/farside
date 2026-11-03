@@ -40,8 +40,8 @@ describe("demo mode screens", () => {
     await screen.findByText(/Assessed scopes/);
     const text = estate.container.textContent ?? "";
     const [assessed] = numbersIn(text, /Assessed scopes (\d+)/);
-    const [unassessed] = numbersIn(text, /Unassessed scopes (\d+)/);
-    const [undetermined] = numbersIn(text, /Undetermined scopes (\d+)/);
+    const [unassessed] = numbersIn(text, /Not assessed scopes (\d+)/);
+    const [undetermined] = numbersIn(text, /Undetermined results (\d+)/);
     estate.unmount();
 
     window.location.hash = "#blind-spots";
@@ -55,7 +55,7 @@ describe("demo mode screens", () => {
     const current = await within(scans.container).findByRole("row", { name: /scan-1/ });
     const [scanAssessed, scanUnassessed, scanUndetermined] = numbersIn(
       current.textContent ?? "",
-      /(\d+) assessed, (\d+) unassessed, (\d+) undetermined/,
+      /(\d+) assessed, (\d+) not assessed, (\d+) undetermined/,
     );
 
     expect(assessed).toBeGreaterThan(0);
