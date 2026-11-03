@@ -9,6 +9,7 @@ import {
 } from "./demo.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const DEMO = { [ORG_HEADER]: DEMO_ORG_ID, [ACTOR_HEADER]: "actor-demo" };
 const CUSTOMER = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
@@ -27,11 +28,11 @@ describe("synthetic demo estate", () => {
 });
 
 describe("demo org mode", () => {
-  const store = new MemoryStore();
+  const store = new MemoryStore(fixedClock);
   const outbound = vi.fn(() => {
     throw new Error("outbound call");
   });
-  const app = buildApp(store, {
+  const app = buildApp(store, { ...TEST_APP_OPTIONS,
     harvester: { harvest: outbound },
     costClient: { query: outbound },
     commitmentClient: { list: outbound },
