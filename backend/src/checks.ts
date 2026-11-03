@@ -15,7 +15,7 @@ import {
   GCP_UNUSED_IPS,
 } from "./gcp-checks.js";
 import { checkGcpSqlGkeSupport, GCP_SQL_GKE_SUPPORT } from "./gcp-support.js";
-import { projectOf } from "./gcp-inventory.js";
+import { scopeOf, subscriptionOf } from "./scope.js";
 import { loadRetiringSkus } from "./retiring.js";
 import type { OrgSettings } from "./settings.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
@@ -85,9 +85,7 @@ export function acceptFinding(finding: Finding): Finding {
   return finding;
 }
 
-function subscriptionOf(resourceUri: string): string {
-  return resourceUri.split("/")[2] ?? "";
-}
+export { scopeOf, subscriptionOf } from "./scope.js";
 
 function countByTypeField(resources: Inventory["resources"]): string {
   const counts = new Map<string, number>();
@@ -108,12 +106,12 @@ export function checkAllResources(
   const incomplete = new Set(
     facts
       .filter((row) => row.fields.argIncomplete === true)
-      .map((row) => subscriptionOf(row.resourceUri))
+      .map((row) => scopeOf(inventory.cloud, row.resourceUri))
       .filter(Boolean),
   );
   const bySub = new Map<string, Inventory["resources"]>();
   for (const resource of inventory.resources) {
-    const subscriptionOrProject = subscriptionOf(resource.resourceUri);
+    const subscriptionOrProject = scopeOf(inventory.cloud, resource.resourceUri);
     if (!subscriptionOrProject) {
       continue;
     }
@@ -129,7 +127,7 @@ export function checkAllResources(
   return [...bySub.entries()].map(([subscriptionOrProject, resources]) => {
     const scope = {
       id: `${subscriptionOrProject}:${ALL_RESOURCES}`,
-      cloud: "azure" as const,
+      cloud: inventory.cloud,
       subscriptionOrProject,
     };
     if (incomplete.has(subscriptionOrProject)) {
@@ -176,7 +174,7 @@ export function checkNoOwnerTag(
   const byUri = new Map(facts.map((row) => [row.resourceUri, row]));
   if (!(settings.ownerTagKey.length > 0)) {
     const subscriptions = [
-      ...new Set(inventory.resources.map((resource) => subscriptionOf(resource.resourceUri))),
+      ...new Set(inventory.resources.map((resource) => scopeOf(inventory.cloud, resource.resourceUri))),
     ].filter(Boolean);
     return subscriptions.map((subscriptionOrProject) =>
       acceptFinding({
@@ -194,17 +192,17 @@ export function checkNoOwnerTag(
         },
         scope: {
           id: `${subscriptionOrProject}:${NO_OWNER_TAG}`,
-          cloud: "azure",
+          cloud: inventory.cloud,
           subscriptionOrProject,
         },
       }),
     );
   }
   return inventory.resources.map((resource) => {
-    const subscriptionOrProject = subscriptionOf(resource.resourceUri);
+    const subscriptionOrProject = scopeOf(inventory.cloud, resource.resourceUri);
     const scope = {
       id: `${subscriptionOrProject}:${NO_OWNER_TAG}`,
-      cloud: "azure" as const,
+      cloud: inventory.cloud,
       subscriptionOrProject,
     };
     const row = byUri.get(resource.resourceUri);
@@ -244,7 +242,7 @@ export function checkNoOwnerTag(
 }
 
 export function scopeKey(resourceUri: string, cloud: Inventory["cloud"]): string {
-  return cloud === "gcp" ? projectOf(resourceUri) : subscriptionOf(resourceUri);
+  return scopeOf(cloud, resourceUri);
 }
 
 export function checkUnattachedDisks(

@@ -7,6 +7,7 @@ import { buildApp } from "./app.js";
 import { COVERAGE_CAUSES } from "./causes.js";
 import {
   AZURE_LAUNCH_CHECK_IDS,
+  GCP_LAUNCH_CHECK_IDS,
   applyCoverageResult,
   blindSpots,
   coverageFromHarvest,
@@ -28,6 +29,10 @@ const LAUNCH = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/launch-checks.json"), "utf8"),
 ) as { checks: Array<{ id: string }> };
 
+const GCP_LAUNCH = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/gcp/launch-checks.json"), "utf8"),
+) as { checks: Array<{ id: string }> };
+
 const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 
 const assessedFail: Finding = {
@@ -45,6 +50,12 @@ describe("coverage states", () => {
   it("keeps launch check ids aligned with the Azure spec", () => {
     expect([...AZURE_LAUNCH_CHECK_IDS].sort()).toEqual(
       LAUNCH.checks.map((check) => check.id).sort(),
+    );
+  });
+
+  it("keeps launch check ids aligned with the GCP spec", () => {
+    expect([...GCP_LAUNCH_CHECK_IDS].sort()).toEqual(
+      GCP_LAUNCH.checks.map((check) => check.id).sort(),
     );
   });
 
