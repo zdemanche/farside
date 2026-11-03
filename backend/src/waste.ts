@@ -63,14 +63,14 @@ export function isWasteFinding(finding: Finding): boolean {
   return /^(azure|gcp)-waste-/.test(finding.checkId) && finding.result === "fail" && finding.savings != null;
 }
 
-export function isAssessedFinding(coverage: CoverageEntry[], finding: Finding): boolean {
+export function isAssessedFinding(coverage: readonly CoverageEntry[], finding: Finding): boolean {
   const id = scopeId(finding.scope.subscriptionOrProject, finding.checkId);
   return coverage.some((entry) => entry.id === id && entry.state === "assessed");
 }
 
 export function wasteTotals(
-  findings: Finding[],
-  coverage: CoverageEntry[],
+  findings: readonly Finding[],
+  coverage: readonly CoverageEntry[],
 ): WasteTotals {
   const assessed = findings.filter((finding) => isWasteFinding(finding) && isAssessedFinding(coverage, finding));
   const unassessedScopes = coverage.filter(
@@ -90,8 +90,8 @@ export function costWasteView(input: {
   cost: CostSnapshot | null;
   alerts: AlertAnalysis | null;
   commitments: CommitmentSnapshot | null;
-  findings: Finding[];
-  coverage: CoverageEntry[];
+  findings: readonly Finding[];
+  coverage: readonly CoverageEntry[];
 }): CostWasteView {
   const waste = input.findings.flatMap((finding) => {
     if (!isWasteFinding(finding) || !isAssessedFinding(input.coverage, finding) || !finding.savings) {

@@ -70,7 +70,7 @@ function rejectLocked(
     void problem(reply, 403, "Demo is read-only");
     return true;
   }
-  if (READ_ONLY_EXEMPT.has(route) || !isReadOnly(ctx.store.snapshot(orgId).contract, ctx.clock())) {
+  if (READ_ONLY_EXEMPT.has(route) || !isReadOnly(ctx.store.view(orgId).contract, ctx.clock())) {
     return false;
   }
   void problem(reply, 409, "Console read-only", {

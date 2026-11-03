@@ -3,6 +3,7 @@ import { systemClock, type Clock } from "./clock.js";
 import type { CoverageEntry } from "./coverage.js";
 import { combineCosts, hasFigures, hasMixedCurrencies, markMixedCurrency, restoreAfterMixedCurrency } from "./cost-total.js";
 import { scopeOf } from "./scope.js";
+import type { DeepReadonly } from "./readonly.js";
 import type { ResourceFacts } from "./facts.js";
 import type { StoredIssue } from "./issues.js";
 import { applyOwnerTag } from "./inventory.js";
@@ -16,7 +17,7 @@ import type { CostSnapshot } from "./cost.js";
 import { DeletedOrgError, type DeletionRecord, type RowsPurged } from "./offboard.js";
 import type { ScanJob } from "./scans.js";
 import { emptySchedule, type ScheduleState } from "./scheduler.js";
-import { assertNoSecrets } from "./secrets.js";
+import { assertNoSecrets, markVerified, markVerifiedAll } from "./secrets.js";
 import { DEFAULT_SETTINGS, type OrgSettings } from "./settings.js";
 
 export type Connection = {
@@ -47,7 +48,14 @@ export type OrgState = {
   alerts: AlertAnalysis | null;
   schedule: ScheduleState;
   contract: Contract | null;
+  sequences: Record<Sequence, number>;
 };
+
+export type OrgView = DeepReadonly<OrgState>;
+
+export const MAX_SCANS_PER_ORG = 200;
+
+type Sequence = "scan" | "schedule" | "connection";
 
 function emptyOrg(now: string): OrgState {
   return {
@@ -68,6 +76,7 @@ function emptyOrg(now: string): OrgState {
     alerts: null,
     schedule: emptySchedule(),
     contract: null,
+    sequences: { scan: 0, schedule: 0, connection: 0 },
   };
 }
 
@@ -91,6 +100,19 @@ function combineCommitments(snapshots: readonly CommitmentSnapshot[]): Commitmen
       savingsPlans: snapshots.every((item) => item.noneFound.savingsPlans),
     },
   };
+}
+
+function pruneScans(scans: ScanJob[]): ScanJob[] {
+  const current = [...scans].reverse().find((job) => job.status === "succeeded" && job.complete);
+  let excess = scans.length - MAX_SCANS_PER_ORG;
+  return scans.filter((job) => {
+    const settled = job.status !== "queued" && job.status !== "running" && job !== current;
+    if (excess > 0 && settled) {
+      excess -= 1;
+      return false;
+    }
+    return true;
+  });
 }
 
 export class MemoryStore {
@@ -221,6 +243,16 @@ export class MemoryStore {
     return due.map((orgId) => this.offboard(orgId, now, "retention"));
   }
 
+  view(orgId: string): OrgView {
+    return this.org(orgId);
+  }
+
+  nextSequence(orgId: string, kind: Sequence): number {
+    const { sequences } = this.org(orgId);
+    sequences[kind] += 1;
+    return sequences[kind];
+  }
+
   snapshot(orgId: string): OrgState {
     const copy = structuredClone(this.org(orgId));
     assertNoSecrets(copy);
@@ -229,6 +261,7 @@ export class MemoryStore {
 
   putInventory(orgId: string, inventory: Inventory): Inventory {
     assertNoSecrets(inventory);
+    markVerified(inventory);
     const org = this.org(orgId);
     org.inventories[inventory.cloud] = inventory;
     org.inventory = inventory;
@@ -252,7 +285,7 @@ export class MemoryStore {
     assertNoSecrets(input);
     const cloud = input.cloud ?? DEFAULT_CLOUD;
     const connection: Connection = {
-      id: `conn-${this.org(orgId).connections.length + 1}`,
+      id: `conn-${this.nextSequence(orgId, "connection")}`,
       cloud,
       tenantId: input.tenantId,
       subscriptionId: input.subscriptionId,
@@ -260,6 +293,7 @@ export class MemoryStore {
       createdAt: this.clock(),
       healthy: true,
     };
+    markVerified(connection);
     this.org(orgId).connections.push(connection);
     return connection;
   }
@@ -274,6 +308,7 @@ export class MemoryStore {
 
   putFindings(orgId: string, findings: Finding[]): Finding[] {
     assertNoSecrets(findings);
+    markVerifiedAll(findings);
     this.org(orgId).findings = findings;
     return findings;
   }
@@ -286,6 +321,7 @@ export class MemoryStore {
 
   putIssues(orgId: string, issues: StoredIssue[]): StoredIssue[] {
     assertNoSecrets(issues);
+    markVerifiedAll(issues);
     this.org(orgId).issues = issues;
     return issues;
   }
@@ -370,11 +406,11 @@ export class MemoryStore {
     for (const cloud of CLOUDS) {
       const inventory = org.inventories[cloud];
       if (inventory) {
-        org.inventories[cloud] = applyOwnerTag(inventory, settings.ownerTagKey);
+        org.inventories[cloud] = markVerified(applyOwnerTag(inventory, settings.ownerTagKey));
       }
     }
     if (org.inventory) {
-      org.inventory = applyOwnerTag(org.inventory, settings.ownerTagKey);
+      org.inventory = markVerified(applyOwnerTag(org.inventory, settings.ownerTagKey));
     }
     return settings;
   }
@@ -389,8 +425,13 @@ export class MemoryStore {
 
   putJob(input: Omit<ScanJob, "id">): ScanJob {
     assertNoSecrets(input);
-    const job: ScanJob = { ...input, id: `scan-${this.org(input.orgId).scans.length + 1}` };
-    this.org(input.orgId).scans.push(job);
+    const job: ScanJob = { ...input, id: `scan-${this.nextSequence(input.orgId, "scan")}` };
+    const org = this.org(input.orgId);
+    markVerified(job);
+    org.scans.push(job);
+    if (org.scans.length > MAX_SCANS_PER_ORG) {
+      org.scans = pruneScans(org.scans);
+    }
     return job;
   }
 
@@ -407,6 +448,7 @@ export class MemoryStore {
     }
     const next = { ...current, ...patch, id: current.id, orgId: current.orgId };
     assertNoSecrets(next);
+    markVerified(next);
     org.scans[index] = next;
     return next;
   }
@@ -430,6 +472,7 @@ export class MemoryStore {
     }
     connection.healthy = patch.healthy;
     assertNoSecrets(connection);
+    markVerified(connection);
     return connection;
   }
 
@@ -439,18 +482,18 @@ export class MemoryStore {
     for (const cloud of CLOUDS) {
       const inventory = org.inventories[cloud];
       if (inventory) {
-        org.inventories[cloud] = {
+        org.inventories[cloud] = markVerified({
           ...inventory,
           resources: inventory.resources.filter((resource) => !inScope(cloud, resource.resourceUri)),
-        };
+        });
       }
     }
     const latest = org.inventory;
     if (latest) {
-      org.inventory = {
+      org.inventory = markVerified({
         ...latest,
         resources: latest.resources.filter((resource) => !inScope(latest.cloud, resource.resourceUri)),
-      };
+      });
     }
     org.facts = org.facts.filter((row) => !CLOUDS.some((cloud) => inScope(cloud, row.resourceUri)));
     for (const key of Object.keys(org.costs)) {
@@ -474,6 +517,7 @@ export class MemoryStore {
       const { closingScanId: _closing, notConfirmedReason: _reason, ...rest } = issue;
       return { ...rest, status: "closed", closedReason: SUBSCRIPTION_DISCONNECTED };
     });
+    markVerifiedAll(org.issues);
     this.#refreshCost(org);
   }
 

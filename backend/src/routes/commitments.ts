@@ -24,7 +24,7 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/commitments",
     { schema: { params: orgParams } },
     async (request, reply) => {
-      const commitments = ctx.store.snapshot(request.params.orgId).commitments;
+      const commitments = ctx.store.view(request.params.orgId).commitments;
       return commitments ? sendClean(reply, 200, commitments) : problem(reply, 404, "Not found");
     },
   );
@@ -37,7 +37,7 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
         rejectSecrets: true,
         invalidTitle: "Invalid commitment harvest",
         demo: (store, orgId) => {
-          const org = store.snapshot(orgId);
+          const org = store.view(orgId);
           return {
             status: 200,
             body: { harvested: true, commitments: org.commitments, findings: org.findings },
@@ -73,7 +73,7 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
       const commitmentHarvest = harvested.value;
       ctx.store.putCoverage(
         orgId,
-        applyCommitmentCoverage(ctx.store.snapshot(orgId).coverage, commitmentHarvest.coverage),
+        applyCommitmentCoverage(ctx.store.view(orgId).coverage, commitmentHarvest.coverage),
       );
       if (!commitmentHarvest.ok) {
         ctx.store.putCommitments(orgId, null, connected);
@@ -87,7 +87,7 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
       ctx.store.putFindings(
         orgId,
         mergeCommitmentFindings(
-          ctx.store.snapshot(orgId).findings,
+          ctx.store.view(orgId).findings,
           commitmentHarvest.findings,
           connected,
         ),
@@ -95,9 +95,9 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
       ctx.store.putIssues(
         orgId,
         applyScanToIssues({
-          issues: ctx.store.snapshot(orgId).issues,
+          issues: ctx.store.view(orgId).issues,
           findings: commitmentHarvest.findings,
-          coverage: ctx.store.snapshot(orgId).coverage,
+          coverage: ctx.store.view(orgId).coverage,
           scanId: "harvest-commitments",
           observedAt: commitmentHarvest.snapshot.periodEnd,
           checkIds: [RESERVATION_USE, SAVINGS_PLAN_USE],
@@ -115,7 +115,7 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/budgets",
     { schema: { params: orgParams } },
     async (request, reply) => {
-      const budgets = ctx.store.snapshot(request.params.orgId).budgets;
+      const budgets = ctx.store.view(request.params.orgId).budgets;
       return budgets ? sendClean(reply, 200, budgets) : problem(reply, 404, "Not found");
     },
   );
@@ -126,7 +126,7 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
       schema: { params: orgParams },
       config: {
         demo: (store, orgId) => {
-          const org = store.snapshot(orgId);
+          const org = store.view(orgId);
           return {
             status: 200,
             body: { harvested: true, budgets: org.budgets, findings: org.findings },
@@ -148,19 +148,19 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
       const budgetHarvest = harvested.value;
       ctx.store.putCoverage(
         orgId,
-        applyBudgetCoverage(ctx.store.snapshot(orgId).coverage, budgetHarvest.coverage),
+        applyBudgetCoverage(ctx.store.view(orgId).coverage, budgetHarvest.coverage),
       );
       ctx.store.putBudgets(orgId, budgetHarvest.snapshot);
       ctx.store.putFindings(
         orgId,
-        mergeBudgetFindings(ctx.store.snapshot(orgId).findings, budgetHarvest.findings),
+        mergeBudgetFindings(ctx.store.view(orgId).findings, budgetHarvest.findings),
       );
       ctx.store.putIssues(
         orgId,
         applyScanToIssues({
-          issues: ctx.store.snapshot(orgId).issues,
+          issues: ctx.store.view(orgId).issues,
           findings: budgetHarvest.findings,
-          coverage: ctx.store.snapshot(orgId).coverage,
+          coverage: ctx.store.view(orgId).coverage,
           scanId: "harvest-budgets",
           observedAt: budgetHarvest.snapshot.lastConfirmed,
           checkIds: [NO_BUDGETS],

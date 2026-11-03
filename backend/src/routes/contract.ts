@@ -15,7 +15,7 @@ export const contractRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/contract",
     { schema: { params: orgParams } },
     async (request, reply) => {
-      const contract = ctx.store.snapshot(request.params.orgId).contract;
+      const contract = ctx.store.view(request.params.orgId).contract;
       return contract
         ? sendClean(reply, 200, billingView(contract, ctx.clock()))
         : problem(reply, 404, "Not found");
@@ -59,7 +59,7 @@ export const contractRoutes: RoutePlugin = (ctx) => async (app) => {
     },
     async (request, reply) => {
       const { orgId } = request.params;
-      const current = ctx.store.snapshot(orgId).contract;
+      const current = ctx.store.view(orgId).contract;
       if (!current) {
         return problem(reply, 404, "Not found");
       }

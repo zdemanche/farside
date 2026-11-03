@@ -103,12 +103,12 @@ function resourceKey(finding: Finding): string {
   return `${finding.checkId}:${finding.scope.subscriptionOrProject}:${id}`;
 }
 
-function backupCounts(findings: Finding[], coverage: CoverageEntry[], records: RunRecord[], cloud: Cloud) {
+function backupCounts(findings: readonly Finding[], coverage: readonly CoverageEntry[], records: RunRecord[], cloud: Cloud) {
   const proven = findings.filter(
     (finding) => BACKUP_IDS[cloud].includes(finding.checkId) && isProven(finding.checkId, records),
   );
   const assessed = proven.filter((finding) => isAssessedFinding(coverage, finding));
-  const keysWhere = (list: Finding[], predicate: (finding: Finding) => boolean) =>
+  const keysWhere = (list: readonly Finding[], predicate: (finding: Finding) => boolean) =>
     new Set(list.filter(predicate).map(resourceKey));
   return {
     unprotected: keysWhere(assessed, (finding) => finding.result === "fail").size,
@@ -128,8 +128,8 @@ function withinLifecycleWindow(finding: Finding, now: string): boolean {
 }
 
 function lifecycleCount(
-  findings: Finding[],
-  coverage: CoverageEntry[],
+  findings: readonly Finding[],
+  coverage: readonly CoverageEntry[],
   records: RunRecord[],
   cloud: Cloud,
   now: string,
@@ -144,7 +144,7 @@ function lifecycleCount(
   ).length;
 }
 
-function groupStatus(checkIds: string[], coverage: CoverageEntry[], records: RunRecord[]): HeadlineStatus {
+function groupStatus(checkIds: string[], coverage: readonly CoverageEntry[], records: RunRecord[]): HeadlineStatus {
   const proven = checkIds.filter((checkId) => isProven(checkId, records));
   if (proven.length === 0) {
     return "not_supported";
@@ -172,8 +172,8 @@ function costForCloud(input: {
 export function buildCloudFigures(input: {
   cloud: Cloud;
   cost: CostSnapshot | null;
-  findings: Finding[];
-  coverage: CoverageEntry[];
+  findings: readonly Finding[];
+  coverage: readonly CoverageEntry[];
   records: RunRecord[];
   now: string;
 }): HeadlineFigure[] {
@@ -313,8 +313,8 @@ function combineStatus(figures: CloudHeadline[], id: HeadlineFigure["id"]): Head
 export function buildHeadline(input: {
   cost?: CostSnapshot | null;
   costs?: Partial<Record<Cloud, CostSnapshot | null>>;
-  findings: Finding[];
-  coverage: CoverageEntry[];
+  findings: readonly Finding[];
+  coverage: readonly CoverageEntry[];
   records?: RunRecord[];
   cloud?: Cloud;
   now: string;

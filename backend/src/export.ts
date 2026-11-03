@@ -1,3 +1,4 @@
+import type { DeepReadonly } from "./readonly.js";
 import { RAW_PROVIDER_KEYS, type Cloud, type Inventory } from "@farside/scan-contracts";
 import type { CostSnapshot } from "./cost.js";
 import type { StoredIssue } from "./issues.js";
@@ -50,7 +51,7 @@ export type ExportEnvelope = {
 
 const RAW_KEY_SET = new Set<string>(RAW_PROVIDER_KEYS);
 
-export function exportIssues(orgId: string, issues: StoredIssue[], exportedAt: string): ExportEnvelope {
+export function exportIssues(orgId: string, issues: readonly StoredIssue[], exportedAt: string): ExportEnvelope {
   return {
     format: EXPORT_FORMAT,
     kind: "issues",
@@ -74,7 +75,7 @@ export function exportIssues(orgId: string, issues: StoredIssue[], exportedAt: s
 
 export function exportInventory(
   orgId: string,
-  inventory: Inventory | null,
+  inventory: DeepReadonly<Inventory> | null,
   exportedAt: string,
 ): ExportEnvelope {
   return {
