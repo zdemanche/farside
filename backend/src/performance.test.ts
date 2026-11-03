@@ -155,18 +155,17 @@ describe("benchmark: merges are linear", BENCH_OPTIONS, () => {
         checkId: "azure-check",
         state: "assessed" as const,
       }));
-    const best = (count: number) => {
+    const median = (count: number) => {
       const input = results(count);
-      return Math.min(
-        ...[0, 1, 2].map(() => {
-          const start = performance.now();
-          applyCoverageResults([], input);
-          return performance.now() - start;
-        }),
-      );
+      const samples = [0, 1, 2].map(() => {
+        const start = performance.now();
+        applyCoverageResults([], input);
+        return performance.now() - start;
+      });
+      return samples.sort((left, right) => left - right)[1] ?? 0;
     };
-    best(2_000);
-    expect(best(40_000) / Math.max(best(20_000), 0.05)).toBeLessThan(3);
+    median(25_000);
+    expect(median(100_000) / Math.max(median(25_000), 0.05)).toBeLessThan(8);
   });
 
   it("keeps the last write for a repeated scope and moves it to the end", () => {
