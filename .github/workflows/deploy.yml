@@ -52,8 +52,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Fetch main
         run: git fetch --depth=1 origin main
-      - if: github.ref == 'refs/heads/main'
-        name: Validate accountId against the registry
+      - name: Validate accountId against the registry
         env:
           CUSTOMER_NAME: ${{ inputs.customerName || 'moonaan-dev' }}
           ACCOUNT_ID: ${{ inputs.accountId || secrets.FARSIDE_DEV_ACCOUNT_ID }}

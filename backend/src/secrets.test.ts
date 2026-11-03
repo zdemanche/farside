@@ -149,6 +149,10 @@ describe("no-secrets guard", () => {
       "underscore-leading JWT",
       { note: "_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
     ],
+    [
+      "glued match false positive (accepted)",
+      { note: "surveyJavascriptBundleLoader.production" },
+    ],
     ["JWT value", { note: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" }],
   ])("rejects %s", (_name, payload) => {
     expect(() => assertNoSecrets(payload)).toThrow(SecretLeakError);
