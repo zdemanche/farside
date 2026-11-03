@@ -6,6 +6,16 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_MANIFEST = join(ROOT, "plugin/.claude-plugin/plugin.json");
 const DEFAULT_PACKAGE = join(ROOT, "package.json");
+const DEFAULT_SKILL = join(ROOT, "plugin/skills/findings-method/SKILL.md");
+
+export const FINDINGS_SKILL_PHRASES = [
+  "issue id",
+  "assessed",
+  "not assessed",
+  "undetermined",
+  "closer",
+  "range",
+];
 
 export const PLUGIN_NAME = "farside";
 export const PLUGIN_AUTHOR = "Moonaan, LLC";
@@ -27,6 +37,10 @@ export function lintPluginManifest(manifest, productVersion) {
   if (manifest.license !== PLUGIN_LICENSE) {
     errors.push(`license must be '${PLUGIN_LICENSE}'`);
   }
+  const skills = manifest.skills;
+  if (!Array.isArray(skills) || !skills.some((skill) => skill === "./skills" || skill === "./skills/findings-method")) {
+    errors.push("skills must include './skills'");
+  }
   if (typeof productVersion !== "string" || productVersion.length === 0) {
     errors.push("product version is required");
   } else if (manifest.version !== productVersion) {
@@ -35,9 +49,27 @@ export function lintPluginManifest(manifest, productVersion) {
   return errors;
 }
 
+export function lintFindingsMethodSkill(markdown) {
+  if (typeof markdown !== "string" || markdown.length === 0) {
+    return ["findings-method skill is empty"];
+  }
+  const errors = [];
+  const lower = markdown.toLowerCase();
+  for (const phrase of FINDINGS_SKILL_PHRASES) {
+    if (!lower.includes(phrase)) {
+      errors.push(`findings-method skill is missing '${phrase}'`);
+    }
+  }
+  if (!lower.includes("did not produce") && !lower.includes("cli did not")) {
+    errors.push("findings-method skill must forbid findings the CLI did not produce");
+  }
+  return errors;
+}
+
 export function lintPluginManifestFile(
   manifestPath = DEFAULT_MANIFEST,
   packagePath = DEFAULT_PACKAGE,
+  skillPath = DEFAULT_SKILL,
 ) {
   let manifest;
   try {
@@ -51,7 +83,13 @@ export function lintPluginManifestFile(
   } catch (error) {
     return [`package.json is not valid JSON: ${error instanceof Error ? error.message : error}`];
   }
-  return lintPluginManifest(manifest, product.version);
+  let skill;
+  try {
+    skill = readFileSync(skillPath, "utf8");
+  } catch (error) {
+    return [`findings-method skill is missing: ${error instanceof Error ? error.message : error}`];
+  }
+  return [...lintPluginManifest(manifest, product.version), ...lintFindingsMethodSkill(skill)];
 }
 
 function isMain() {
