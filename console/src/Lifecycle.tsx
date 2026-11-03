@@ -16,9 +16,7 @@ export function Lifecycle() {
       <h1 className="page-title" id="page-title" tabIndex={-1}>
         Lifecycle
       </h1>
-      <p className="page-description">
-        Items losing support or expiring, listed by date.
-      </p>
+      <p className="page-description">Items losing support or expiring, listed by date.</p>
       <LastScan />
       <ScreenState
         label="lifecycle items"
@@ -45,9 +43,7 @@ export function Lifecycle() {
               tabIndex={0}
             >
               <table>
-                <caption id="lifecycle-caption">
-                  Lifecycle items by date
-                </caption>
+                <caption id="lifecycle-caption">Lifecycle items by date</caption>
                 <thead>
                   <tr>
                     <th scope="col">Date</th>

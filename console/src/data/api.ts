@@ -89,7 +89,11 @@ export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): Dat
     try {
       return (await response.json()) as T;
     } catch {
-      throw new DataError("failed", response.status, "The Farside API returned an unreadable response");
+      throw new DataError(
+        "failed",
+        response.status,
+        "The Farside API returned an unreadable response",
+      );
     }
   }
 

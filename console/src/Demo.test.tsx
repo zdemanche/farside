@@ -22,13 +22,16 @@ describe("demo mode screens", () => {
     window.location.hash = "";
   });
 
-  it.each(PAGES)("shows the Demo label and populated $heading", async ({ hash, heading, populated }) => {
-    window.location.hash = hash;
-    render(<App demo />);
-    expect(await screen.findByText(DEMO_LABEL)).toBeTruthy();
-    expect(screen.getByRole("heading", { name: heading })).toBeTruthy();
-    expect(await screen.findByText(populated)).toBeTruthy();
-  });
+  it.each(PAGES)(
+    "shows the Demo label and populated $heading",
+    async ({ hash, heading, populated }) => {
+      window.location.hash = hash;
+      render(<App demo />);
+      expect(await screen.findByText(DEMO_LABEL)).toBeTruthy();
+      expect(screen.getByRole("heading", { name: heading })).toBeTruthy();
+      expect(await screen.findByText(populated)).toBeTruthy();
+    },
+  );
 
   describe("coverage totals", () => {
     const coverage = async () => (await demoSource().overview()).coverage;

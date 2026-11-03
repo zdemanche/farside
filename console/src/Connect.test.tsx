@@ -1,11 +1,4 @@
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { CONNECT_STEPS, REQUIRED_AZURE_ROLES } from "./connect-data";
@@ -38,9 +31,7 @@ describe("Connect screen", () => {
   });
 
   it("lists required roles and steps and sends tenant and subscription ids to the source", async () => {
-    const connect = vi
-      .fn()
-      .mockResolvedValue({ scanStarted: true, attention: null });
+    const connect = vi.fn().mockResolvedValue({ scanStarted: true, attention: null });
     render(<App source={sourceWith({ connect })} />);
     expect(screen.getByRole("heading", { name: "Connect Azure" })).toBeTruthy();
     for (const role of REQUIRED_AZURE_ROLES) {
@@ -55,20 +46,18 @@ describe("Connect screen", () => {
 
     fillAndSubmit();
     await waitFor(() =>
-      expect(
-        within(screen.getByRole("main")).getByRole("status").textContent,
-      ).toContain("First scan started"),
+      expect(within(screen.getByRole("main")).getByRole("status").textContent).toContain(
+        "First scan started",
+      ),
     );
     expect(connect.mock.calls[0]?.[0]).toEqual({
       tenantId: TENANT,
       subscriptionId: SUBSCRIPTION,
     });
-    expect(
-      within(screen.getByRole("main")).getByRole("status").textContent,
-    ).toContain(TENANT);
-    expect(
-      within(screen.getByRole("main")).getByRole("status").textContent,
-    ).toContain(SUBSCRIPTION);
+    expect(within(screen.getByRole("main")).getByRole("status").textContent).toContain(TENANT);
+    expect(within(screen.getByRole("main")).getByRole("status").textContent).toContain(
+      SUBSCRIPTION,
+    );
   });
 
   it("does not claim a scan started when the source says none did", async () => {
@@ -87,14 +76,10 @@ describe("Connect screen", () => {
   });
 
   it("reports a failed connect as an alert and not as success", async () => {
-    const connect = vi
-      .fn()
-      .mockRejectedValue(new DataError("failed", 502, "502 Bad Gateway"));
+    const connect = vi.fn().mockRejectedValue(new DataError("failed", 502, "502 Bad Gateway"));
     render(<App source={sourceWith({ connect })} />);
     fillAndSubmit();
-    expect((await screen.findByRole("alert")).textContent).toMatch(
-      /502 Bad Gateway/,
-    );
+    expect((await screen.findByRole("alert")).textContent).toMatch(/502 Bad Gateway/);
     expect(document.body.textContent).not.toContain("First scan started");
   });
 
@@ -105,22 +90,18 @@ describe("Connect screen", () => {
   });
 
   it("shows only the attention text when no scan started because scans are paused", async () => {
-    const connect = vi
-      .fn()
-      .mockResolvedValue({ scanStarted: false, attention: "scans paused" });
+    const connect = vi.fn().mockResolvedValue({ scanStarted: false, attention: "scans paused" });
     render(<App source={sourceWith({ connect })} />);
     fillAndSubmit();
     await waitFor(() =>
-      expect(
-        within(screen.getByRole("main")).getByRole("status").textContent,
-      ).toContain("scans paused"),
+      expect(within(screen.getByRole("main")).getByRole("status").textContent).toContain(
+        "scans paused",
+      ),
     );
   });
 
   it("links to Scans after a successful connect", async () => {
-    const connect = vi
-      .fn()
-      .mockResolvedValue({ scanStarted: true, attention: null });
+    const connect = vi.fn().mockResolvedValue({ scanStarted: true, attention: null });
     render(<App source={sourceWith({ connect })} />);
     fillAndSubmit();
     const link = await screen.findByRole("link", { name: "View scans" });
@@ -136,29 +117,18 @@ describe("Connect screen", () => {
     fireEvent.change(screen.getByLabelText("Azure subscription id"), {
       target: { value: SUBSCRIPTION },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Connect subscription" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Connect subscription" }));
     const tenant = screen.getByLabelText("Azure tenant id");
     expect(tenant.getAttribute("aria-invalid")).toBe("true");
-    expect(screen.getByText(/Enter a GUID/).id).toBe(
-      tenant.getAttribute("aria-describedby"),
-    );
-    expect(
-      screen
-        .getByLabelText("Azure subscription id")
-        .hasAttribute("aria-invalid"),
-    ).toBe(false);
+    expect(screen.getByText(/Enter a GUID/).id).toBe(tenant.getAttribute("aria-describedby"));
+    expect(screen.getByLabelText("Azure subscription id").hasAttribute("aria-invalid")).toBe(false);
     expect(document.activeElement).toBe(tenant);
     expect(connect).not.toHaveBeenCalled();
     expect(document.body.textContent).not.toContain("First scan started");
   });
 
   it("shows a pending button while the connect is in flight", async () => {
-    let finish: (value: {
-      scanStarted: boolean;
-      attention: null;
-    }) => void = () => {};
+    let finish: (value: { scanStarted: boolean; attention: null }) => void = () => {};
     const connect = vi.fn(
       () =>
         new Promise((resolve) => {

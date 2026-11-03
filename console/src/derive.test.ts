@@ -84,7 +84,12 @@ describe("lifecycleFrom", () => {
     const dated = (resourceId: string, retirementDate: string) =>
       finding("azure-lifecycle-retiring-skus", "fail", { resourceId, retirementDate });
     const view = lifecycleFrom(
-      [dated("c", "2027-03-01"), dated("a", "2026-11-01"), dated("d", "2028-01-01"), dated("b", "2026-12-01")],
+      [
+        dated("c", "2027-03-01"),
+        dated("a", "2026-11-01"),
+        dated("d", "2028-01-01"),
+        dated("b", "2026-12-01"),
+      ],
       "2026-10-15T12:00:00.000Z",
     );
     expect(view.rows.map((row) => row.resourceId)).toEqual(["a", "b", "c", "d"]);
@@ -94,7 +99,10 @@ describe("lifecycleFrom", () => {
   it("drops passing findings and findings without a date", () => {
     const view = lifecycleFrom(
       [
-        finding("azure-lifecycle-retiring-skus", "pass", { resourceId: "a", retirementDate: "2026-11-01" }),
+        finding("azure-lifecycle-retiring-skus", "pass", {
+          resourceId: "a",
+          retirementDate: "2026-11-01",
+        }),
         finding("azure-lifecycle-retiring-skus", "fail", { resourceId: "b" }),
       ],
       "2026-10-15T12:00:00.000Z",

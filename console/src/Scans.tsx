@@ -21,8 +21,7 @@ type Tracked = { rows: ScanRow[] | undefined; inFlight: ScanRow[] };
 const MAX_POLLS = 100;
 const MAX_DELAY_MS = 60_000;
 
-const isInFlight = (scan: ScanRow) =>
-  scan.status === "queued" || scan.status === "running";
+const isInFlight = (scan: ScanRow) => scan.status === "queued" || scan.status === "running";
 
 function selectedId(hash: string): string {
   const match = hash.match(/^scans\/(.+)$/)?.[1] ?? "";
@@ -70,10 +69,7 @@ function outcomeText(scan: ScanRow): string {
 
 function ScanDetail({ id }: { id: string }) {
   const source = useSource();
-  const resource = useResource(
-    (signal) => source.scan(id, signal),
-    [source, id],
-  );
+  const resource = useResource((signal) => source.scan(id, signal), [source, id]);
   useEffect(() => {
     if (resource.status === "ready" || resource.status === "error") {
       document.getElementById("scan-detail-title")?.focus();
@@ -153,9 +149,7 @@ function ScanDetail({ id }: { id: string }) {
 }
 
 export function Scans({
-  hash = typeof window === "undefined"
-    ? "scans"
-    : window.location.hash.replace(/^#\/?/, ""),
+  hash = typeof window === "undefined" ? "scans" : window.location.hash.replace(/^#\/?/, ""),
   pollMs = 3000,
 }: {
   hash?: string;
@@ -199,10 +193,7 @@ export function Scans({
     if (polls.current >= MAX_POLLS) {
       return;
     }
-    const delay = Math.min(
-      pollMs * 2 ** Math.min(polls.current, 16),
-      MAX_DELAY_MS,
-    );
+    const delay = Math.min(pollMs * 2 ** Math.min(polls.current, 16), MAX_DELAY_MS);
     const timer = window.setTimeout(() => {
       polls.current += 1;
       refresh();
@@ -216,8 +207,8 @@ export function Scans({
         Scans
       </h1>
       <p className="page-description">
-        Each scan, when it ran, and which scopes were assessed. A failed scan is
-        never the current one.
+        Each scan, when it ran, and which scopes were assessed. A failed scan is never the current
+        one.
       </p>
       <p
         className="page-meta"
@@ -279,9 +270,7 @@ export function Scans({
                       </td>
                       <td className="num">{formatDuration(scan.durationMs)}</td>
                       <td>
-                        <Chip tone={STATUS_TONE[scan.status]}>
-                          {scan.status}
-                        </Chip>
+                        <Chip tone={STATUS_TONE[scan.status]}>{scan.status}</Chip>
                         {scan.current ? " current" : ""}
                         {scan.error ? " " : ""}
                         <ScanError scan={scan} />

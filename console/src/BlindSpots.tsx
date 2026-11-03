@@ -64,8 +64,7 @@ export function BlindSpots() {
                       <td>{coverageStateLabel(spot.state)}</td>
                       <td>{spot.reason}</td>
                       <td>
-                        {spot.closer}{" "}
-                        {closerLink(spot.closer)}
+                        {spot.closer} {closerLink(spot.closer)}
                       </td>
                     </tr>
                   ))}

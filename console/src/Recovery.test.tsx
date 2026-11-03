@@ -24,8 +24,20 @@ describe("Recovery screen", () => {
   const gaps = sourceWith({
     recovery: async () => ({
       rows: [
-        { id: "1", system: "vm-one", checkId: "check-one", evidence: "protected false", coverage: "assessed" },
-        { id: "2", system: "db-two", checkId: "check-two", evidence: "zoneRedundant false", coverage: "undetermined" },
+        {
+          id: "1",
+          system: "vm-one",
+          checkId: "check-one",
+          evidence: "protected false",
+          coverage: "assessed",
+        },
+        {
+          id: "2",
+          system: "db-two",
+          checkId: "check-two",
+          evidence: "zoneRedundant false",
+          coverage: "undetermined",
+        },
       ],
       unprotected: 1,
       checked: 3,

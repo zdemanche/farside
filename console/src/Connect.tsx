@@ -5,8 +5,7 @@ import { failureMessage, toDataError } from "./data/error";
 import { FieldError, fieldProps } from "./form";
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const GUID_ERROR =
-  "Enter a GUID, for example 00000000-0000-0000-0000-000000000000.";
+const GUID_ERROR = "Enter a GUID, for example 00000000-0000-0000-0000-000000000000.";
 
 type Errors = { tenantId?: string; subscriptionId?: string };
 
@@ -54,9 +53,7 @@ export function Connect() {
       setConnected(true);
       refreshScans();
     } catch (error) {
-      setFailure(
-        failureMessage(toDataError(error), "connect this subscription"),
-      );
+      setFailure(failureMessage(toDataError(error), "connect this subscription"));
     } finally {
       setConnecting(false);
     }
@@ -120,11 +117,7 @@ export function Connect() {
           <FieldError id={subscriptionFieldId} error={errors.subscriptionId} />
         </div>
         <div>
-          <button
-            className="action action-primary"
-            type="submit"
-            disabled={connecting}
-          >
+          <button className="action action-primary" type="submit" disabled={connecting}>
             {connecting ? "Connecting..." : "Connect subscription"}
           </button>
         </div>

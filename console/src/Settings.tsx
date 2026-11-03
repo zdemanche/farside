@@ -50,9 +50,7 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
   const [owner, setOwner] = useState(initial.ownerTagKey);
   const [prodKey, setProdKey] = useState(initial.productionTagKey);
   const [prodValue, setProdValue] = useState(initial.productionTagValue);
-  const [retention, setRetention] = useState(
-    String(initial.snapshotRetentionDays),
-  );
+  const [retention, setRetention] = useState(String(initial.snapshotRetentionDays));
   const [scheduleOn, setScheduleOn] = useState(initial.scanScheduleEnabled);
   const [interval, setInterval] = useState(String(initial.scanIntervalHours));
   const [retryLimit, setRetryLimit] = useState(String(initial.scanRetryLimit));
@@ -103,8 +101,7 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
     setSaving(true);
     try {
       const saved = await source.saveSettings(next);
-      const demoPrefix =
-        source.mode === "demo" ? "Saved for this demo session only. " : "";
+      const demoPrefix = source.mode === "demo" ? "Saved for this demo session only. " : "";
       setStatus(
         `${demoPrefix}Saved owner tag ${saved.ownerTagKey}, production marker ${saved.productionTagKey}=${saved.productionTagValue}, and snapshot retention ${saved.snapshotRetentionDays} days. The next scan will use these conventions. Next run follows the ${saved.scanIntervalHours}-hour schedule.`,
       );
@@ -117,12 +114,7 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
 
   return (
     <>
-      <form
-        className="panel form"
-        onSubmit={submit}
-        noValidate
-        aria-label="Organisation settings"
-      >
+      <form className="panel form" onSubmit={submit} noValidate aria-label="Organisation settings">
         <div className="field">
           <label htmlFor={ownerId}>Owner tag key</label>
           <input
@@ -228,11 +220,7 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
           <FieldError id={retryId} error={errors.retryLimit} />
         </div>
         <div>
-          <button
-            className="action action-primary"
-            type="submit"
-            disabled={saving}
-          >
+          <button className="action action-primary" type="submit" disabled={saving}>
             {saving ? "Saving..." : "Save settings"}
           </button>
         </div>

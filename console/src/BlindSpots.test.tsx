@@ -18,7 +18,10 @@ describe("Blind spots screen", () => {
     renderScreen(
       <BlindSpots />,
       sourceWith({
-        blindSpots: async () => ({ ...(await demoSource().blindSpots()), formula: "Score is passes over assessed scopes" }),
+        blindSpots: async () => ({
+          ...(await demoSource().blindSpots()),
+          formula: "Score is passes over assessed scopes",
+        }),
       }),
     );
     expect(screen.getByRole("heading", { name: "Blind spots" })).toBeTruthy();
@@ -37,9 +40,7 @@ describe("Blind spots screen", () => {
     expect(undetermined.textContent).toMatch(/missing a required Azure role/);
     expect(undetermined.textContent).toMatch(/Grant Reservations Reader/);
     expect(
-      within(undetermined)
-        .getByRole("link", { name: "Open Connect" })
-        .getAttribute("href"),
+      within(undetermined).getByRole("link", { name: "Open Connect" }).getAttribute("href"),
     ).toBe("#connect");
   });
 
@@ -48,18 +49,16 @@ describe("Blind spots screen", () => {
     const table = await screen.findByRole("table", {
       name: "What Farside could not check",
     });
+    expect(within(table).getByRole("columnheader", { name: "State" })).toBeTruthy();
     expect(
-      within(table).getByRole("columnheader", { name: "State" }),
+      within(screen.getByRole("row", { name: /azure-cost-reservation-use/ })).getByText(
+        "undetermined",
+      ),
     ).toBeTruthy();
     expect(
-      within(
-        screen.getByRole("row", { name: /azure-cost-reservation-use/ }),
-      ).getByText("undetermined"),
-    ).toBeTruthy();
-    expect(
-      within(
-        screen.getByRole("row", { name: /azure-cost-spend-by-service/ }),
-      ).getByText("not assessed"),
+      within(screen.getByRole("row", { name: /azure-cost-spend-by-service/ })).getByText(
+        "not assessed",
+      ),
     ).toBeTruthy();
   });
 

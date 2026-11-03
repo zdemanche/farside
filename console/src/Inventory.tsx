@@ -59,9 +59,7 @@ function matches(resource: InventoryRow, filters: Filters): boolean {
 }
 
 const distinct = (values: (string | null | undefined)[]) =>
-  [
-    ...new Set(values.filter((value): value is string => Boolean(value))),
-  ].sort();
+  [...new Set(values.filter((value): value is string => Boolean(value)))].sort();
 
 function InventoryBody({
   orgId,
@@ -87,9 +85,7 @@ function InventoryBody({
     () => ({
       owner: distinct(resources.map((resource) => resource.ownerTag)),
       service: distinct(resources.map((resource) => resource.resourceType)),
-      subscription: distinct(
-        resources.map((resource) => resource.subscriptionOrProject),
-      ),
+      subscription: distinct(resources.map((resource) => resource.subscriptionOrProject)),
       region: distinct(resources.map((resource) => resource.region)),
     }),
     [resources],
@@ -99,14 +95,10 @@ function InventoryBody({
   for (const resource of filtered) {
     const key = resource.ownerTag ?? "none";
     byOwner.set(key, (byOwner.get(key) ?? 0) + 1);
-    byService.set(
-      resource.resourceType,
-      (byService.get(resource.resourceType) ?? 0) + 1,
-    );
+    byService.set(resource.resourceType, (byService.get(resource.resourceType) ?? 0) + 1);
   }
-  const change =
-    (key: keyof Filters) => (event: { target: { value: string } }) =>
-      setFilters((current) => ({ ...current, [key]: event.target.value }));
+  const change = (key: keyof Filters) => (event: { target: { value: string } }) =>
+    setFilters((current) => ({ ...current, [key]: event.target.value }));
 
   const scopes = options.subscription;
   return (
@@ -122,9 +114,7 @@ function InventoryBody({
       </p>
       {filters.resource ? (
         <p className="notice">
-          Showing resource{" "}
-          <span title={filters.resource}>{shortName(filters.resource)}</span>{" "}
-          only.{" "}
+          Showing resource <span title={filters.resource}>{shortName(filters.resource)}</span> only.{" "}
           <button
             className="action action-secondary"
             type="button"
@@ -137,19 +127,10 @@ function InventoryBody({
           </button>
         </p>
       ) : null}
-      <form
-        className="panel filters"
-        role="search"
-        aria-label="Filter inventory"
-      >
+      <form className="panel filters" role="search" aria-label="Filter inventory">
         <div className="field">
           <label htmlFor={ids.owner}>Owner</label>
-          <select
-            className="input"
-            id={ids.owner}
-            value={filters.owner}
-            onChange={change("owner")}
-          >
+          <select className="input" id={ids.owner} value={filters.owner} onChange={change("owner")}>
             <option value="">Any owner</option>
             <option value="none">No owner</option>
             {options.owner.map((value) => (
@@ -274,9 +255,7 @@ function InventoryBody({
 }
 
 export function Inventory({
-  hash = typeof window === "undefined"
-    ? "inventory"
-    : window.location.hash.replace(/^#\/?/, ""),
+  hash = typeof window === "undefined" ? "inventory" : window.location.hash.replace(/^#\/?/, ""),
 }: {
   hash?: string;
 }) {

@@ -28,8 +28,7 @@ const SCAN_ERROR_TEXT: Record<string, string> = {
   [NO_CLOUD_ERROR]: "No cloud is connected yet",
 };
 
-export const scanErrorText = (code: string): string =>
-  SCAN_ERROR_TEXT[code] ?? code;
+export const scanErrorText = (code: string): string => SCAN_ERROR_TEXT[code] ?? code;
 
 export function shortName(resourceId: string): string {
   const isUri = resourceId.startsWith("/");

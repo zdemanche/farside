@@ -7,11 +7,7 @@ import { inventoryHref } from "./links";
 import { ScreenState, gapsMessage } from "./ScreenState";
 import { TERMS, coverageStateLabel, shortName } from "./terms";
 
-function backupSummary({
-  unprotected,
-  checked,
-  undetermined,
-}: RecoveryView): string {
+function backupSummary({ unprotected, checked, undetermined }: RecoveryView): string {
   if (undetermined === 0) {
     return `${unprotected} of ${checked} production systems lack backup`;
   }
