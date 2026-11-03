@@ -13,6 +13,7 @@ The GCP control spec lists every launch check from the proposal table as unverif
 | E6-S3-T4 | #203 | Empty Recommender lists say none were returned and do not claim the estate is clean. Missing Recommender Viewer is unassessed. Savings are Recommender min/max ranges only. Live harvest is leftover (#202). |
 | E6-S4-T1 | #205 | `gcp-resilience-sql-ha-or-backup` fails `sql-zonal` / `sql-no-backup` and passes regional instances with backups enabled. Missing `availabilityType` or `backupEnabled` is undetermined. Live Cloud SQL reads stay leftover. |
 | E6-S4-T2 | #206 | `docs/gcp/support-versions.json` lists MYSQL_5_6 and GKE 1.24 with sources. The check fails `sql-stale` / `gke-stale` and passes unlisted current versions with the catalogue source and date. |
+| E6-S4-T3 | #207 | `gcp-lifecycle-expiring-certs` fails `cert-expiring` and passes `cert-current` using `Settings.certExpiryFlagDays`. Missing `expireTime` is undetermined. Live Certificate Manager reads stay leftover. |
 | E6-S5-T3 | #211 | Alert analysis reports `historyDays` and stays undetermined until 14 completed days exist, including an empty first export day. Empty-first-day UI is leftover (#210 / #243). |
 | E6-S6-T3 | #215 | `docs/gcp/alert-replay.json` drives the same floor/burst/relative alerts with `projectId` mapped to the shared daily-cost row. Live BigQuery harvest is leftover (#213). |
 | E6-S7-T1 | #217 | List APIs accept `?cloud=azure` or `?cloud=gcp` and keep per-cloud inventory. Console labels/filters and the two-cloud e2e stay leftover. |

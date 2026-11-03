@@ -8,6 +8,7 @@ import {
   inventoryFromGcpManifest,
   type GcpGroundTruthManifest,
 } from "../gcp-inventory.js";
+import { checkGcpExpiringCerts } from "../gcp-lifecycle.js";
 import { checkGcpSqlHaOrBackup } from "../gcp-resilience.js";
 import { checkGcpSqlGkeSupport } from "../gcp-support.js";
 import docGcpGroundTruth from "../../../docs/gcp/ground-truth.json" with { type: "json" };
@@ -33,5 +34,6 @@ export const gcpProvider: CloudProvider = {
     checkGcpOldSnapshotsAndImages,
     checkGcpSqlHaOrBackup,
     checkGcpSqlGkeSupport,
+    checkGcpExpiringCerts,
   ],
 };
