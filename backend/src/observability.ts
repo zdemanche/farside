@@ -1,8 +1,10 @@
 import type { Writable } from "node:stream";
-import type { FastifyBaseLogger } from "fastify";
 import type { DeletionRecord } from "./offboard.js";
 
-export type LogSink = Pick<FastifyBaseLogger, "info" | "error">;
+export type LogSink = {
+  info: (obj: object, msg?: string) => void;
+  error: (obj: object, msg?: string) => void;
+};
 
 export const silentLog: LogSink = {
   info: () => undefined,
