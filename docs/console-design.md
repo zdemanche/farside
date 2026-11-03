@@ -16,7 +16,7 @@ Only the first comment line of the two vendored CSS files differs from Identity'
 
 ## Theme
 
-`data-theme` on `<html>` is `moonaan` or `daylight`. `index.html` ships `moonaan` for no-JS, then `theme-guard.js` replaces it from `localStorage` key `reflow-theme`, so a Moonaan user's choice carries across products. Settings, Appearance changes the attribute and writes the key (storage failures are swallowed; the choice then lasts for the page view).
+`data-theme` on `<html>` is `moonaan` or `daylight`. `index.html` ships `moonaan` for no-JS, then `theme-guard.js` replaces it from `localStorage` key `reflow-theme`. The key is the same one Identity and Reflow use; the choice is shared only when the products are served from the same origin. Settings, Appearance changes the attribute and writes the key (storage failures are swallowed; the choice then lasts for the page view).
 
 ## Rules
 

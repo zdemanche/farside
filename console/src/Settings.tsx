@@ -2,7 +2,7 @@ import { useId, useState, type FormEvent } from "react";
 
 export const THEME_STORAGE_KEY = "reflow-theme";
 
-export const THEMES = [
+const THEMES = [
   { value: "moonaan", label: "Moonaan dark" },
   { value: "daylight", label: "Daylight" },
 ] as const;

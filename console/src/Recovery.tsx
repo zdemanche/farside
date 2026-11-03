@@ -21,9 +21,9 @@ export function Recovery({
       <p className="page-meta" role="status" aria-live="polite">
         {unprotected} of {production} production systems lack backup
       </p>
-      <div className="table-wrap" tabIndex={0}>
+      <div className="table-wrap" role="region" aria-labelledby="recovery-caption" tabIndex={0}>
         <table>
-          <caption>Recovery gaps</caption>
+          <caption id="recovery-caption">Recovery gaps</caption>
           <thead>
             <tr>
               <th scope="col">System</th>

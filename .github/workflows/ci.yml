@@ -24,7 +24,9 @@ jobs:
           cache: npm
       - name: Reject paths that differ only by case
         run: |
-          collisions=$(git ls-files | tr 'A-Z' 'a-z' | sort | uniq -d)
+          files=$(git ls-files | tr 'A-Z' 'a-z' | sort | uniq -d)
+          dirs=$(git ls-files | xargs -n1 dirname | sort -u | tr 'A-Z' 'a-z' | sort | uniq -d)
+          collisions="$files$dirs"
           if [ -n "$collisions" ]; then
             echo "$collisions"
             exit 1

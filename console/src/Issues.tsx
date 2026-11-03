@@ -104,9 +104,9 @@ export function Issues({
       <p className="page-meta" role="status" aria-live="polite">
         {visible.length} issues
       </p>
-      <div className="table-wrap" tabIndex={0}>
+      <div className="table-wrap" role="region" aria-labelledby="issues-caption" tabIndex={0}>
         <table>
-          <caption>Issue queue</caption>
+          <caption id="issues-caption">Issue queue</caption>
           <thead>
             <tr>
               <th scope="col">Resource</th>

@@ -112,7 +112,7 @@ export function Inventory({ resources = SEEDED_RESOURCES }: { resources?: Invent
         </div>
       </form>
       <h2>By owner</h2>
-      <ul className="tag-list">
+      <ul className="tag-list" role="list">
         {[...byOwner.entries()].map(([key, count]) => (
           <li className="chip chip-neutral" key={key}>
             {key} {count}
@@ -120,16 +120,16 @@ export function Inventory({ resources = SEEDED_RESOURCES }: { resources?: Invent
         ))}
       </ul>
       <h2>By service</h2>
-      <ul className="tag-list">
+      <ul className="tag-list" role="list">
         {[...byService.entries()].map(([key, count]) => (
           <li className="chip chip-neutral" key={key}>
             {key} {count}
           </li>
         ))}
       </ul>
-      <div className="table-wrap" tabIndex={0}>
+      <div className="table-wrap" role="region" aria-labelledby="inventory-caption" tabIndex={0}>
         <table>
-          <caption>Inventory resources</caption>
+          <caption id="inventory-caption">Inventory resources</caption>
           <thead>
             <tr>
               <th scope="col">Name</th>

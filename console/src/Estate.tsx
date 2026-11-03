@@ -13,7 +13,7 @@ export function Estate({ overview = EMPTY_OVERVIEW }: { overview?: EstateOvervie
         </p>
       ) : (
         <>
-          <ul className="stats">
+          <ul className="stats" role="list">
             <li className="stat">Resources {overview.resourceTotal}</li>
             <li className="stat">No owner {overview.noOwnerTotal}</li>
             <li className="stat">Assessed scopes {overview.coverage.assessed}</li>

@@ -23,9 +23,9 @@ export function BlindSpots({
       <p className="page-meta" role="status" aria-live="polite">
         {leftOut} of {total} scopes were left out of the score.
       </p>
-      <div className="table-wrap" tabIndex={0}>
+      <div className="table-wrap" role="region" aria-labelledby="blind-spots-caption" tabIndex={0}>
         <table>
-          <caption>What Farside could not check</caption>
+          <caption id="blind-spots-caption">What Farside could not check</caption>
           <thead>
             <tr>
               <th scope="col">Check</th>

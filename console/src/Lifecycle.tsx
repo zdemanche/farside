@@ -16,9 +16,9 @@ export function Lifecycle({
       <p className="page-meta" role="status" aria-live="polite">
         {within90} things losing support in 90 days
       </p>
-      <div className="table-wrap" tabIndex={0}>
+      <div className="table-wrap" role="region" aria-labelledby="lifecycle-caption" tabIndex={0}>
         <table>
-          <caption>Lifecycle items by date</caption>
+          <caption id="lifecycle-caption">Lifecycle items by date</caption>
           <thead>
             <tr>
               <th scope="col">Date</th>

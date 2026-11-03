@@ -64,9 +64,9 @@ export function Scans({
       >
         {inFlight ? (inFlight.progress ?? "Running") : `${rows.length} scans`}
       </p>
-      <div className="table-wrap" tabIndex={0}>
+      <div className="table-wrap" role="region" aria-labelledby="scans-caption" tabIndex={0}>
         <table>
-          <caption>Scan history</caption>
+          <caption id="scans-caption">Scan history</caption>
           <thead>
             <tr>
               <th scope="col">Scan</th>
@@ -108,9 +108,9 @@ export function Scans({
           </p>
           <p>Coverage {formatCoverage(selected.coverageSummary)}</p>
           {selected.error ? <p>Failed {selected.error}</p> : null}
-          <div className="table-wrap" tabIndex={0}>
+          <div className="table-wrap" role="region" aria-labelledby="scan-checks-caption" tabIndex={0}>
             <table>
-              <caption>Per-check results</caption>
+              <caption id="scan-checks-caption">Per-check results</caption>
               <thead>
                 <tr>
                   <th scope="col">Check</th>

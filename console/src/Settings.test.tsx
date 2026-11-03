@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Settings, THEME_STORAGE_KEY } from "./Settings";
 
@@ -11,6 +12,12 @@ describe("Settings appearance", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  it("has no axe violations", async () => {
+    const { container } = render(<Settings />);
+    const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
+    expect(results.violations).toEqual([]);
   });
 
   it("starts from the theme the guard set on the document", () => {

@@ -24,7 +24,7 @@ export function Connect() {
         Farside uses federated credentials. It never asks for a client secret.
       </p>
       <h2>Required read-only roles</h2>
-      <ul className="tag-list">
+      <ul className="tag-list" role="list">
         {REQUIRED_AZURE_ROLES.map((role) => (
           <li className="chip chip-neutral" key={role}>
             {role}
