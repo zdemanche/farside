@@ -279,9 +279,8 @@ export class ScanScheduler {
     now: string,
     rescheduled: boolean,
   ): Promise<ScheduleState> {
-    const { settings } = await this.store.read(orgId, "settings");
     const fields = scheduleFields(schedule);
-    return this.store.updateSchedule(orgId, (live) => {
+    return this.store.updateSchedule(orgId, (live, settings) => {
       Object.assign(live, fields);
       if (!settings.scanScheduleEnabled) {
         live.nextRunAt = null;

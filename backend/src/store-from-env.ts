@@ -1,10 +1,12 @@
 import { systemClock, type Clock } from "./clock.js";
+import { silentLog, type LogSink } from "./observability.js";
 import type { OrgRepository } from "./repository.js";
 import { MemoryStore } from "./store.js";
 
 export async function storeFromEnv(
   env: NodeJS.ProcessEnv = process.env,
   clock: Clock = systemClock,
+  log: LogSink = silentLog,
 ): Promise<OrgRepository> {
   const kind = env.FARSIDE_STORE ?? "memory";
   if (kind === "memory") {
@@ -23,5 +25,5 @@ export async function storeFromEnv(
   }
   const { DynamoStore, documentClient } = await import("./dynamo-store.js");
   const { S3BlobStore } = await import("./s3-blob-store.js");
-  return new DynamoStore(documentClient(), table, new S3BlobStore(bucket), clock);
+  return new DynamoStore(documentClient(), table, new S3BlobStore(bucket), clock, log);
 }

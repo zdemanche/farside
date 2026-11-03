@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { CreateTableCommand, DynamoDBClient, waitUntilTableExists } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { MemoryBlobStore } from "./blob-store.js";
+import { MemoryBlobStore, type BlobStore } from "./blob-store.js";
+import { sweepRetention } from "./org-ops.js";
 import { seedDemoOrg } from "./demo.js";
 import type { Finding, Inventory } from "@farside/scan-contracts";
 import dynalite from "dynalite";
@@ -414,6 +415,17 @@ describe.each(implementations)("OrgRepository contract: $name", ({ create }) => 
     expect(read.inventories.azure?.resources).toHaveLength(2);
   });
 
+  it("keeps fixed-id writes from colliding with later generated ids", async () => {
+    const store = create();
+    const org = orgName();
+    await store.putConnection(org, { tenantId: "t", subscriptionId: "a" }, "conn-5");
+    await store.putConnection(org, { tenantId: "t", subscriptionId: "a" }, "conn-5");
+    expect((await store.putConnection(org, { tenantId: "t", subscriptionId: "b" })).id).toBe("conn-6");
+    await store.putJob(job(org), "scan-3");
+    expect((await store.putJob(job(org))).id).toBe("scan-4");
+    expect((await store.read(org, "connections")).connections.map((item) => item.id)).toEqual(["conn-5", "conn-6"]);
+  });
+
   it("hands out unique, monotonic sequence numbers under concurrent increments", async () => {
     const store = create();
     const org = orgName();
@@ -682,6 +694,43 @@ describe("DynamoStore persistence", () => {
     await store.putInventory(org, inventoryOf("azure", 1));
     expect(stored()).toHaveLength(0);
     expect((await rawItems(org)).find((item) => item.sk === "INV#azure")?.blobKey).toBeUndefined();
+  });
+
+  it("still serves the new body when deleting the superseded blob fails", async () => {
+    const flaky: BlobStore = {
+      put: (key, body) => blobs.put(key, body),
+      get: (key) => blobs.get(key),
+      delete: async () => {
+        throw new Error("s3 unavailable");
+      },
+      deletePrefix: (prefix) => blobs.deletePrefix(prefix),
+    };
+    const store = new DynamoStore(docClient, TABLE, flaky, fixedClock);
+    const org = orgName();
+    await store.putInventory(org, inventoryOf("azure", 6_000));
+    await store.putInventory(org, inventoryOf("azure", 6_000, "other-subscription"));
+    const read = await newDynamo().read(org, "inventories");
+    expect(read.inventories.azure?.resources[0]?.resourceUri).toContain("/other-subscription/");
+    await newDynamo().offboard(org, NOW);
+    expect(blobs.keys(`ORG#${org}/`)).toEqual([]);
+  });
+
+  it("keeps sweeping when reading one org fails with an unexpected error", async () => {
+    const errors: unknown[] = [];
+    const repository = {
+      orgIds: async () => ["bad", "good"],
+      hasOrg: async () => true,
+      read: async (orgId: string) => {
+        if (orgId === "bad") {
+          throw new Error("throttled");
+        }
+        return { contract: contractEndedLongAgo };
+      },
+      offboard: async (orgId: string) => ({ orgId }),
+    } as unknown as OrgRepository;
+    const records = await sweepRetention(repository, NOW, undefined, { info: () => undefined, error: (fields: unknown) => errors.push(fields) });
+    expect(records).toEqual([{ orgId: "good" }]);
+    expect(errors).toHaveLength(1);
   });
 
   it("re-reads the header once when the blob it pointed at was replaced", async () => {

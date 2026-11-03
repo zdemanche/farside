@@ -91,12 +91,7 @@ function grantBlobs(name: string, role: aws.iam.Role, bucketArn: pulumi.Input<st
             Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
             Resource: `${arn}/${BLOB_PREFIX}*`,
           },
-          {
-            Effect: "Allow",
-            Action: "s3:ListBucket",
-            Resource: arn,
-            Condition: { StringLike: { "s3:prefix": `${BLOB_PREFIX}*` } },
-          },
+          { Effect: "Allow", Action: "s3:ListBucket", Resource: arn },
         ],
       }),
     ),
@@ -168,6 +163,23 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
   new aws.s3.BucketServerSideEncryptionConfiguration(`${prefix}-store-blobs-encryption`, {
     bucket: blobs.id,
     rules: [{ applyServerSideEncryptionByDefault: { sseAlgorithm: "AES256" } }],
+  });
+  new aws.s3.BucketPolicy(`${prefix}-store-blobs-policy`, {
+    bucket: blobs.id,
+    policy: blobs.arn.apply((arn) =>
+      JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Deny",
+            Principal: "*",
+            Action: "s3:*",
+            Resource: [arn, `${arn}/*`],
+            Condition: { Bool: { "aws:SecureTransport": "false" } },
+          },
+        ],
+      }),
+    ),
   });
   new aws.s3.BucketLifecycleConfiguration(`${prefix}-store-blobs-lifecycle`, {
     bucket: blobs.id,

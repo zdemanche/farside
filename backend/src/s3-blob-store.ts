@@ -9,6 +9,7 @@ import {
 import type { BlobStore } from "./blob-store.js";
 
 const DELETE_BATCH = 1000;
+const DELETE_ATTEMPTS = 5;
 
 export class S3BlobStore implements BlobStore {
   constructor(
@@ -52,14 +53,26 @@ export class S3BlobStore implements BlobStore {
       );
       const keys = (listed.Contents ?? []).flatMap((object) => (object.Key ? [{ Key: object.Key }] : []));
       for (let start = 0; start < keys.length; start += DELETE_BATCH) {
-        await this.client.send(
-          new DeleteObjectsCommand({
-            Bucket: this.bucket,
-            Delete: { Objects: keys.slice(start, start + DELETE_BATCH), Quiet: true },
-          }),
-        );
+        await this.deleteBatch(keys.slice(start, start + DELETE_BATCH));
       }
       token = listed.NextContinuationToken;
     } while (token);
+  }
+
+  private async deleteBatch(objects: { Key: string }[]): Promise<void> {
+    let pending = objects;
+    for (let attempt = 0; attempt < DELETE_ATTEMPTS && pending.length > 0; attempt += 1) {
+      const result = await this.client.send(
+        new DeleteObjectsCommand({ Bucket: this.bucket, Delete: { Objects: pending, Quiet: true } }),
+      );
+      const failed = new Set((result.Errors ?? []).flatMap((error) => (error.Key ? [error.Key] : [])));
+      pending = pending.filter((object) => failed.has(object.Key));
+      if (pending.length > 0) {
+        await new Promise((resolve) => setTimeout(resolve, Math.random() * Math.min(1_000, 20 * 2 ** attempt)));
+      }
+    }
+    if (pending.length > 0) {
+      throw new Error(`could not delete ${pending.length} objects from ${this.bucket}`);
+    }
   }
 }

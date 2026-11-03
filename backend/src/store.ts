@@ -165,7 +165,11 @@ export class MemoryStore implements OrgRepository {
       healthy: true,
     };
     markVerified(connection);
-    this.org(orgId).connections.push(connection);
+    const org = this.org(orgId);
+    org.connections.push(connection);
+    if (fixedId !== undefined) {
+      org.sequences.connection = Math.max(org.sequences.connection, Number(fixedId.slice(fixedId.lastIndexOf("-") + 1)) || 0);
+    }
     return connection;
   }
 
@@ -252,9 +256,12 @@ export class MemoryStore implements OrgRepository {
     return contract;
   }
 
-  async updateSchedule(orgId: string, mutate: (schedule: ScheduleState) => void): Promise<ScheduleState> {
-    const { schedule } = this.org(orgId);
-    mutate(schedule);
+  async updateSchedule(
+    orgId: string,
+    mutate: (schedule: ScheduleState, settings: OrgSettings) => void,
+  ): Promise<ScheduleState> {
+    const { schedule, settings } = this.org(orgId);
+    mutate(schedule, settings);
     return schedule;
   }
 
@@ -268,6 +275,9 @@ export class MemoryStore implements OrgRepository {
     const org = this.org(input.orgId);
     markVerified(job);
     org.scans.push(job);
+    if (fixedId !== undefined) {
+      org.sequences.scan = Math.max(org.sequences.scan, Number(fixedId.slice(fixedId.lastIndexOf("-") + 1)) || 0);
+    }
     if (org.scans.length > MAX_SCANS_PER_ORG) {
       org.scans = pruneScans(org.scans);
     }

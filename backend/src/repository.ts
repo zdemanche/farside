@@ -102,7 +102,10 @@ export interface OrgRepository {
   putAlerts(orgId: string, alerts: AlertAnalysis | null): Promise<AlertAnalysis | null>;
   putSettings(orgId: string, settings: OrgSettings): Promise<OrgSettings>;
   putContract(orgId: string, contract: Contract | null): Promise<Contract | null>;
-  updateSchedule(orgId: string, mutate: (schedule: ScheduleState) => void): Promise<ScheduleState>;
+  updateSchedule(
+    orgId: string,
+    mutate: (schedule: ScheduleState, settings: OrgSettings) => void,
+  ): Promise<ScheduleState>;
 
   putJob(input: Omit<ScanJob, "id">, fixedId?: string): Promise<ScanJob>;
   mergeScan(orgId: string, cloud: Cloud, merge: (draft: ScanMergeDraft) => void): Promise<void>;

@@ -51,6 +51,7 @@ import {
 import type { ScanJob } from "./scans.js";
 import { emptySchedule, type ScheduleState } from "./scheduler.js";
 import { assertNoSecrets, markVerified } from "./secrets.js";
+import { silentLog, type LogSink } from "./observability.js";
 import type { OrgSettings } from "./settings.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
 
@@ -172,6 +173,7 @@ export class DynamoStore implements OrgRepository {
     private readonly table: string,
     private readonly blobs: BlobStore,
     readonly clock: Clock = systemClock,
+    private readonly log: LogSink = silentLog,
   ) {
     const single = <V>(sk: string, empty: () => V): Codec => ({
       load: async (orgId) => {
@@ -274,24 +276,38 @@ export class DynamoStore implements OrgRepository {
     if (header.body !== undefined) {
       return JSON.parse(header.body) as T;
     }
-    let current = header;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const text = current.blobKey ? await this.blobs.get(current.blobKey) : undefined;
-      if (text !== undefined && sha256(text) === current.sha256) {
-        return JSON.parse(text) as T;
-      }
-      const again = await this.client.send(
-        new GetCommand({ TableName: this.table, Key: { pk: orgKey(orgId), sk: header.sk }, ConsistentRead: true }),
-      );
-      if (!again.Item) {
-        break;
-      }
-      current = again.Item as Header;
-      if (current.body !== undefined) {
-        return JSON.parse(current.body) as T;
-      }
+    const first = await this.#fetchBlob(header);
+    if (first !== undefined) {
+      return JSON.parse(first) as T;
     }
-    throw new Error(`document ${header.sk} of ${orgId} points at a missing or changed blob`);
+    const again = await this.client.send(
+      new GetCommand({ TableName: this.table, Key: { pk: orgKey(orgId), sk: header.sk }, ConsistentRead: true }),
+    );
+    const current = again.Item as Header | undefined;
+    if (current?.body !== undefined) {
+      return JSON.parse(current.body) as T;
+    }
+    const second = current ? await this.#fetchBlob(current) : undefined;
+    if (second === undefined) {
+      throw new Error(`document ${header.sk} of ${orgId} points at a missing or changed blob`);
+    }
+    return JSON.parse(second) as T;
+  }
+
+  async #fetchBlob(header: Header): Promise<string | undefined> {
+    const text = header.blobKey ? await this.blobs.get(header.blobKey) : undefined;
+    return text !== undefined && sha256(text) === header.sha256 ? text : undefined;
+  }
+
+  async #dropBlob(key: string | undefined, keep?: string): Promise<void> {
+    if (!key || key === keep) {
+      return;
+    }
+    try {
+      await this.blobs.delete(key);
+    } catch (error) {
+      this.log.error({ err: error, blobKey: key }, "could not delete a superseded blob; offboard will sweep it");
+    }
   }
 
   async #getDoc<T>(orgId: string, sk: string): Promise<Stored<T> | undefined> {
@@ -351,8 +367,9 @@ export class DynamoStore implements OrgRepository {
     if (expected !== undefined && expected !== 0) {
       values[":expected"] = expected;
     }
+    let result;
     try {
-      const result = await this.client.send(
+      result = await this.client.send(
         new UpdateCommand({
           TableName: this.table,
           Key: { pk, sk },
@@ -365,16 +382,13 @@ export class DynamoStore implements OrgRepository {
             : { ConditionExpression: expected === 0 ? "attribute_not_exists(pk)" : "#version = :expected" }),
         }),
       );
-      const previous = (result.Attributes as Header | undefined)?.blobKey;
-      if (previous && previous !== blobKey) {
-        await this.blobs.delete(previous);
-      }
     } catch (error) {
-      if (blobKey) {
-        await this.blobs.delete(blobKey);
+      if (blobKey && error instanceof ConditionalCheckFailedException) {
+        await this.#dropBlob(blobKey);
       }
       throw error;
     }
+    await this.#dropBlob((result.Attributes as Header | undefined)?.blobKey, blobKey);
     if (sk !== SK.deletion) {
       await this.#abortIfDeleted(orgId, sk);
     }
@@ -391,10 +405,7 @@ export class DynamoStore implements OrgRepository {
     const result = await this.client.send(
       new DeleteCommand({ TableName: this.table, Key: { pk: orgKey(orgId), sk }, ReturnValues: "ALL_OLD" }),
     );
-    const previous = (result.Attributes as Header | undefined)?.blobKey;
-    if (previous) {
-      await this.blobs.delete(previous);
-    }
+    await this.#dropBlob((result.Attributes as Header | undefined)?.blobKey);
   }
 
   async deletion(orgId: string): Promise<DeletionRecord | null> {
@@ -569,6 +580,25 @@ export class DynamoStore implements OrgRepository {
     return (result.Attributes as Record<Sequence, number>)[kind];
   }
 
+  async #raiseSequence(orgId: string, kind: Sequence, floor: number): Promise<void> {
+    try {
+      await this.client.send(
+        new UpdateCommand({
+          TableName: this.table,
+          Key: { pk: orgKey(orgId), sk: SK.seq },
+          UpdateExpression: "SET #kind = :floor",
+          ConditionExpression: "attribute_not_exists(#kind) OR #kind < :floor",
+          ExpressionAttributeNames: { "#kind": kind },
+          ExpressionAttributeValues: { ":floor": floor },
+        }),
+      );
+    } catch (error) {
+      if (!(error instanceof ConditionalCheckFailedException)) {
+        throw error;
+      }
+    }
+  }
+
   async putConnection(orgId: string, input: ConnectionInput, fixedId?: string): Promise<Connection> {
     assertNoSecrets(input);
     const cloud = input.cloud ?? DEFAULT_CLOUD;
@@ -589,6 +619,7 @@ export class DynamoStore implements OrgRepository {
     await this.#touch(orgId);
     try {
       await this.#putDoc(orgId, connectionSk(fixedId), connection, { expected: 0 });
+      await this.#raiseSequence(orgId, "connection", sequenceOf(fixedId));
       return connection;
     } catch (error) {
       const existing = await this.#getDoc<Connection>(orgId, connectionSk(fixedId));
@@ -752,12 +783,18 @@ export class DynamoStore implements OrgRepository {
     return settings;
   }
 
-  async updateSchedule(orgId: string, mutate: (schedule: ScheduleState) => void): Promise<ScheduleState> {
+  async updateSchedule(
+    orgId: string,
+    mutate: (schedule: ScheduleState, settings: OrgSettings) => void,
+  ): Promise<ScheduleState> {
     await this.#touch(orgId);
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-      const current = await this.#getDoc<ScheduleState>(orgId, SK.schedule);
+      const [current, loadedSettings] = await Promise.all([
+        this.#getDoc<ScheduleState>(orgId, SK.schedule),
+        this.#codecs.settings.load(orgId),
+      ]);
       const next = current?.value ?? emptySchedule();
-      mutate(next);
+      mutate(next, loadedSettings.value as OrgSettings);
       try {
         await this.#putDoc(orgId, SK.schedule, next, { expected: current?.version ?? 0 });
         return next;
@@ -779,6 +816,9 @@ export class DynamoStore implements OrgRepository {
     await this.#touch(input.orgId);
     try {
       await this.#putDoc(input.orgId, scanSk(job.id), job, { ...scanOptions(job), expected: 0 });
+      if (fixedId !== undefined) {
+        await this.#raiseSequence(input.orgId, "scan", sequence);
+      }
     } catch (error) {
       const existing = fixedId === undefined ? undefined : await this.#getDoc<ScanJob>(input.orgId, scanSk(fixedId));
       if (error instanceof ConditionalCheckFailedException && existing) {
@@ -951,7 +991,7 @@ export class DynamoStore implements OrgRepository {
   }
 
   sweepRetention(now: string = this.clock(), onlyOrgId?: string): Promise<DeletionRecord[]> {
-    return sweepRetention(this, now, onlyOrgId);
+    return sweepRetention(this, now, onlyOrgId, this.log);
   }
 }
 

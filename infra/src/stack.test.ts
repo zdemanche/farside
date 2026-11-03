@@ -214,14 +214,20 @@ describe("deployStack", () => {
       const policy = JSON.parse(await resolved(pulumi.output(grant.inputs.policy as pulumi.Input<string>)));
       expect(policy.Statement).toEqual([
         { Effect: "Allow", Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], Resource: `${bucket}/ORG#*` },
-        {
-          Effect: "Allow",
-          Action: "s3:ListBucket",
-          Resource: bucket,
-          Condition: { StringLike: { "s3:prefix": "ORG#*" } },
-        },
+        { Effect: "Allow", Action: "s3:ListBucket", Resource: bucket },
       ]);
     }
+    const [tls] = ofType("aws:s3/bucketPolicy:BucketPolicy").filter((policy) => policy.name.endsWith("store-blobs-policy"));
+    const denied = JSON.parse(await resolved(pulumi.output(tls?.inputs.policy as pulumi.Input<string>)));
+    expect(denied.Statement).toEqual([
+      {
+        Effect: "Deny",
+        Principal: "*",
+        Action: "s3:*",
+        Resource: [bucket, `${bucket}/*`],
+        Condition: { Bool: { "aws:SecureTransport": "false" } },
+      },
+    ]);
   });
 
   it("keeps the operator token out of the Lambda environment", async () => {

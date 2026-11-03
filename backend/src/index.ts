@@ -1,6 +1,7 @@
 import { buildApp } from "./app.js";
 import { systemClock } from "./clock.js";
-import { auditRetention, loggerFromEnv } from "./observability.js";
+import { pino } from "pino";
+import { auditRetention, loggerFromEnv, pinoOptions } from "./observability.js";
 import { storeFromEnv } from "./store-from-env.js";
 import { runRetentionSweep } from "./store.js";
 
@@ -8,7 +9,7 @@ const port = Number.parseInt(process.env.PORT ?? "8080", 10);
 const host = process.env.HOST ?? "0.0.0.0";
 const RETENTION_SWEEP_MS = 3_600_000;
 
-const store = await storeFromEnv(process.env, systemClock);
+const store = await storeFromEnv(process.env, systemClock, pino(pinoOptions(loggerFromEnv()) || {}));
 const app = buildApp(store, {
   clock: systemClock,
   logger: loggerFromEnv(),

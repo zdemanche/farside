@@ -20,6 +20,7 @@ import {
   type OrgRepository,
   type OrgState,
 } from "./repository.js";
+import { silentLog, type LogSink } from "./observability.js";
 import { emptySchedule } from "./scheduler.js";
 import { scopeOf } from "./scope.js";
 import { markVerified, markVerifiedAll } from "./secrets.js";
@@ -280,6 +281,7 @@ export async function sweepRetention(
   repository: OrgRepository,
   now: string,
   onlyOrgId?: string,
+  log: LogSink = silentLog,
 ): Promise<DeletionRecord[]> {
   const candidates =
     onlyOrgId === undefined
@@ -296,7 +298,7 @@ export async function sweepRetention(
       }
     } catch (error) {
       if (!(error instanceof DeletedOrgError)) {
-        throw error;
+        log.error({ err: error, orgId }, "retention sweep skipped an org");
       }
     }
   }

@@ -89,7 +89,7 @@ export async function runScheduledTick(deps: TickDeps): Promise<TickSummary> {
 const log = pino(pinoOptions(loggerFromEnv()) || {});
 
 async function createDeps(): Promise<TickDeps> {
-  const store = await storeFromEnv(process.env, systemClock);
+  const store = await storeFromEnv(process.env, systemClock, log);
   const runner = new ScanRunner(store, guardHarvester(unconfiguredHarvester()), {}, systemClock, log);
   return { store, scheduler: new ScanScheduler(store, runner, systemClock, log), clock: systemClock, log };
 }
