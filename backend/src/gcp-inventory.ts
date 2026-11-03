@@ -13,6 +13,7 @@ const COLLECTIONS: Record<string, string> = {
   Instance: "instances",
   Cluster: "clusters",
   Certificate: "certificates",
+  Recommendation: "recommendations",
 };
 
 export type GcpGroundTruthItem = {
@@ -123,6 +124,10 @@ export function factsFromGcpManifest(manifest: GcpGroundTruthManifest): Resource
     }
     if (item.type === "certificatemanager.googleapis.com/Certificate") {
       fields.certificateId = item.id;
+    }
+    if (item.type === "recommender.googleapis.com/Recommendation") {
+      fields.recommendationId = item.id;
+      fields.projectId = item.project;
     }
     return { resourceUri: gcpResourceUri(item), fields };
   });

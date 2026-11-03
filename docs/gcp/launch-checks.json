@@ -117,7 +117,7 @@
       "group": "waste",
       "title": "Idle VM and disk recommendations",
       "role": "Recommender Viewer",
-      "dataSource": "Recommender idle VM and idle disk recommendations. Live run is leftover (#202).",
+      "dataSource": "Recommender idle VM and idle disk recommendations. Fixture harvest is seeded; live run is leftover.",
       "evidenceFields": ["recommendationId", "recommenderId", "resourceName", "subtype"],
       "savingsBasis": "Recommender savings range when present; otherwise undetermined, not a point value",
       "billingExportRequired": false,
