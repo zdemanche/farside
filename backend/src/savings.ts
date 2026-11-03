@@ -78,3 +78,26 @@ export function idleLbMonthlySavings(): NamedSavingsRange {
 export function idleNatMonthlySavings(): NamedSavingsRange {
   return savingsRange({ min: 32, max: 48, currency: "USD", basis: IDLE_NAT_SAVINGS_BASIS });
 }
+
+export const RESERVATION_SAVINGS_BASIS =
+  "Unused committed reservation spend for the period, as a range";
+export const SAVINGS_PLAN_SAVINGS_BASIS =
+  "Unused committed savings-plan spend for the period, as a range";
+
+export function unusedReservationSavings(unusedHours: number): NamedSavingsRange {
+  return savingsRange({
+    min: unusedHours * 0.1,
+    max: unusedHours * 0.15,
+    currency: "USD",
+    basis: RESERVATION_SAVINGS_BASIS,
+  });
+}
+
+export function unusedSavingsPlanSavings(unusedAmount: number): NamedSavingsRange {
+  return savingsRange({
+    min: unusedAmount * 0.8,
+    max: unusedAmount * 1.2,
+    currency: "USD",
+    basis: SAVINGS_PLAN_SAVINGS_BASIS,
+  });
+}

@@ -30,8 +30,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 13. **E3-S5** — merged (#239).
 14. **E3-S6** — merged (#240).
 15. **E3-S7** — merged (#241).
-16. **E4-S1** — this change: Cost Management harvest (multi-page fake), billing scope/currency, month-on-month.
-17. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131.
+16. **E4-S1** — merged (#242).
+17. **E4-S2** — this change: commitment-use checks, none-found, missing Reservations Reader.
+18. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -200,10 +201,10 @@ Azure Cost Management and reservations need a live subscription. Floor/burst mat
 | `E4-S1-T2` | #129 | Record billing scope and currency per figure | (a) this change | Billing scope and currency rules. |
 | `E4-S1-T3` | #130 | Compute month-on-month change | (a) this change | Month-on-month change. |
 | `E4-S1-T4` | #131 | Verify totals against the portal and note untested agreement types | (c) live Azure / GCP / test tenant | Verify totals against the portal; list untested agreement types. |
-| `E4-S2` | #132 | Reservation and savings plan use shown | (c) live Azure / GCP / test tenant | Reservation/savings-plan APIs. Unverified if the test sub has no commitments. |
-| `E4-S2-T1` | #133 | Harvest reservation and savings plan utilization | (c) live Azure / GCP / test tenant | Harvest utilization with Reservations Reader. |
-| `E4-S2-T2` | #134 | Implement the commitment use check | (a) doable in code now | Low-use findings with ranges. |
-| `E4-S2-T3` | #135 | Handle none-found and missing-role cases | (a) doable in code now | None-found and missing-role states. |
+| `E4-S2` | #132 | Reservation and savings plan use shown | (a) this change | Fixture utilization and checks. Live harvest is (c) #133. |
+| `E4-S2-T1` | #133 | Harvest reservation and savings plan utilization | (c) live leftover | Fixture list exists. Live Reservations Reader run is leftover. |
+| `E4-S2-T2` | #134 | Implement the commitment use check | (a) this change | Low-use findings with ranges. |
+| `E4-S2-T3` | #135 | Handle none-found and missing-role cases | (a) this change | None-found and missing-role states. |
 | `E4-S3` | #136 | Subscriptions without budgets flagged | (c) live Azure / GCP / test tenant | Budget check against the seeded empty second subscription. D3 (#3). |
 | `E4-S3-T1` | #137 | Harvest budgets per subscription | (c) live Azure / GCP / test tenant | Harvest budgets live. |
 | `E4-S3-T2` | #138 | Implement the no-budget check | (a) doable in code now | No-budget check against stored definitions. |

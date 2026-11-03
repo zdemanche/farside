@@ -16,6 +16,13 @@ import {
 } from "./coverage.js";
 import type { CoverageCauseId } from "./causes.js";
 import {
+  applyCommitmentCoverage,
+  defaultCommitmentClient,
+  harvestCommitments,
+  mergeCommitmentFindings,
+  type CommitmentClient,
+} from "./commitments.js";
+import {
   applyCostCoverage,
   defaultCostClient,
   harvestCost,
@@ -100,7 +107,11 @@ function connectionInput(body: unknown): { tenantId: string; subscriptionId: str
 
 export function buildApp(
   store: MemoryStore = new MemoryStore(),
-  options: { harvester?: Harvester; costClient?: CostQueryClient } = {},
+  options: {
+    harvester?: Harvester;
+    costClient?: CostQueryClient;
+    commitmentClient?: CommitmentClient;
+  } = {},
 ) {
   const runner = new ScanRunner(store, options.harvester ?? defaultHarvester());
   const app = Fastify({ logger: false });
@@ -348,6 +359,64 @@ export function buildApp(
     }
     store.putCost(request.params.orgId, harvested.snapshot);
     return sendClean(reply, 200, { harvested: true, cost: harvested.snapshot });
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/commitments", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    const commitments = store.snapshot(request.params.orgId).commitments;
+    if (!commitments) {
+      return problem(reply, 404, "Not found");
+    }
+    return sendClean(reply, 200, commitments);
+  });
+
+  app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/commitments", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    if (rejectSecrets(request.body, reply)) {
+      return reply;
+    }
+    const body = request.body as Record<string, unknown> | null;
+    const subscriptionId = body && typeof body.subscriptionId === "string" ? body.subscriptionId : "";
+    if (!subscriptionId) {
+      return problem(reply, 400, "Invalid commitment harvest", {
+        errors: [{ path: "subscriptionId", message: "required string" }],
+      });
+    }
+    const billingScope =
+      body && typeof body.billingScope === "string" && body.billingScope.length > 0
+        ? body.billingScope
+        : `/subscriptions/${subscriptionId}`;
+    const harvested = await harvestCommitments({
+      client: options.commitmentClient ?? defaultCommitmentClient(),
+      subscriptionId,
+      billingScope,
+    });
+    store.putCoverage(
+      request.params.orgId,
+      applyCommitmentCoverage(store.snapshot(request.params.orgId).coverage, harvested.coverage),
+    );
+    if (!harvested.ok) {
+      store.putCommitments(request.params.orgId, null);
+      return sendClean(reply, 200, {
+        harvested: false,
+        reason: harvested.reason,
+        closer: harvested.coverage[0]?.closer,
+      });
+    }
+    store.putCommitments(request.params.orgId, harvested.snapshot);
+    store.putFindings(
+      request.params.orgId,
+      mergeCommitmentFindings(store.snapshot(request.params.orgId).findings, harvested.findings),
+    );
+    return sendClean(reply, 200, {
+      harvested: true,
+      commitments: harvested.snapshot,
+      findings: harvested.findings,
+    });
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/estate", async (request, reply) => {
