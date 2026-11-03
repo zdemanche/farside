@@ -50,7 +50,7 @@ Console screens import these words from `console/src/terms.ts`. Blind spots list
 
 ## Health score
 
-See `HEALTH_SCORE_FORMULA` in `@farside/scan-contracts`. Scopes that were not assessed are omitted from the score. A fixture with no findings yields **coverage only and `score: null`**.
+See `HEALTH_SCORE_FORMULA` in `@farside/scan-contracts`. Scopes that were not assessed are omitted from the score. The score counts distinct assessed scopes with at least one `fail`, not failing findings: 3 failing disks in 1 of 2 assessed scopes score 50. A fixture with no findings yields **coverage only and `score: null`**.
 
 ## Leftover
 

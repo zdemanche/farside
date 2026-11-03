@@ -16,11 +16,26 @@ const WASTE_SNAP = "azure-waste-old-snapshots";
 const BACKUP_VM = "azure-resilience-prod-vms-outside-backup";
 const LIFECYCLE = "azure-lifecycle-retiring-skus";
 
-const spendRecord: RunRecord = { checkId: SPEND, liveRunAt: "2026-10-01T00:00:00Z" };
-const wasteDiskRecord: RunRecord = { checkId: WASTE_DISK, liveRunAt: "2026-10-01T00:00:00Z" };
-const wasteSnapRecord: RunRecord = { checkId: WASTE_SNAP, liveRunAt: "2026-10-01T00:00:00Z" };
-const backupRecord: RunRecord = { checkId: BACKUP_VM, liveRunAt: "2026-10-01T00:00:00Z" };
-const lifecycleRecord: RunRecord = { checkId: LIFECYCLE, liveRunAt: "2026-10-01T00:00:00Z" };
+const spendRecord: RunRecord = {
+  checkId: SPEND,
+  liveRunAt: "2026-10-01T00:00:00Z",
+};
+const wasteDiskRecord: RunRecord = {
+  checkId: WASTE_DISK,
+  liveRunAt: "2026-10-01T00:00:00Z",
+};
+const wasteSnapRecord: RunRecord = {
+  checkId: WASTE_SNAP,
+  liveRunAt: "2026-10-01T00:00:00Z",
+};
+const backupRecord: RunRecord = {
+  checkId: BACKUP_VM,
+  liveRunAt: "2026-10-01T00:00:00Z",
+};
+const lifecycleRecord: RunRecord = {
+  checkId: LIFECYCLE,
+  liveRunAt: "2026-10-01T00:00:00Z",
+};
 
 const cost: CostSnapshot = {
   subscriptionId: "main",
@@ -61,7 +76,11 @@ const diskFail: Finding = {
   checkId: WASTE_DISK,
   result: "fail",
   evidence: { fields: { diskId: "disk-unattached", diskState: "Unattached" } },
-  scope: { id: "main:azure-waste-unattached-disks", cloud: "azure", subscriptionOrProject: "main" },
+  scope: {
+    id: "main:azure-waste-unattached-disks",
+    cloud: "azure",
+    subscriptionOrProject: "main",
+  },
   savings: { min: "8.00", max: "12.00", currency: "USD" },
 };
 
@@ -69,30 +88,82 @@ const snapFail: Finding = {
   checkId: WASTE_SNAP,
   result: "fail",
   evidence: { fields: { snapshotId: "snapshot-old" } },
-  scope: { id: "main:azure-waste-old-snapshots", cloud: "azure", subscriptionOrProject: "main" },
+  scope: {
+    id: "main:azure-waste-old-snapshots",
+    cloud: "azure",
+    subscriptionOrProject: "main",
+  },
   savings: { min: "50.00", max: "90.00", currency: "USD" },
 };
 
 const backupFail: Finding = {
   checkId: BACKUP_VM,
   result: "fail",
-  evidence: { fields: { vmId: "vm-prod-no-backup", productionCount: 2, unprotectedCount: 1 } },
-  scope: { id: "main:azure-resilience-prod-vms-outside-backup", cloud: "azure", subscriptionOrProject: "main" },
+  evidence: {
+    fields: {
+      vmId: "vm-prod-no-backup",
+      productionCount: 2,
+      unprotectedCount: 1,
+    },
+  },
+  scope: {
+    id: "main:azure-resilience-prod-vms-outside-backup",
+    cloud: "azure",
+    subscriptionOrProject: "main",
+  },
 };
+
+const NOW = "2026-11-02T00:00:00.000Z";
+
+function daysFromNow(days: number): string {
+  return new Date(Date.parse(NOW) + days * 86_400_000).toISOString().slice(0, 10);
+}
 
 const lifecycleFail: Finding = {
   checkId: LIFECYCLE,
   result: "fail",
-  evidence: { fields: { vmId: "vm-retiring-sku" } },
-  scope: { id: "main:azure-lifecycle-retiring-skus", cloud: "azure", subscriptionOrProject: "main" },
+  evidence: {
+    fields: { vmId: "vm-retiring-sku", retirementDate: daysFromNow(30) },
+  },
+  scope: {
+    id: "main:azure-lifecycle-retiring-skus",
+    cloud: "azure",
+    subscriptionOrProject: "main",
+  },
+};
+
+const backupPass: Finding = {
+  ...backupFail,
+  result: "pass",
+  evidence: { fields: { vmId: "vm-prod-protected", productionCount: 2 } },
 };
 
 const assessed = [
-  recordCoverageScope({ subscriptionOrProject: "main", checkId: SPEND, state: "assessed" }),
-  recordCoverageScope({ subscriptionOrProject: "main", checkId: WASTE_DISK, state: "assessed" }),
-  recordCoverageScope({ subscriptionOrProject: "main", checkId: WASTE_SNAP, state: "assessed" }),
-  recordCoverageScope({ subscriptionOrProject: "main", checkId: BACKUP_VM, state: "assessed" }),
-  recordCoverageScope({ subscriptionOrProject: "main", checkId: LIFECYCLE, state: "assessed" }),
+  recordCoverageScope({
+    subscriptionOrProject: "main",
+    checkId: SPEND,
+    state: "assessed",
+  }),
+  recordCoverageScope({
+    subscriptionOrProject: "main",
+    checkId: WASTE_DISK,
+    state: "assessed",
+  }),
+  recordCoverageScope({
+    subscriptionOrProject: "main",
+    checkId: WASTE_SNAP,
+    state: "assessed",
+  }),
+  recordCoverageScope({
+    subscriptionOrProject: "main",
+    checkId: BACKUP_VM,
+    state: "assessed",
+  }),
+  recordCoverageScope({
+    subscriptionOrProject: "main",
+    checkId: LIFECYCLE,
+    state: "assessed",
+  }),
 ];
 
 function figureOf(headline: ReturnType<typeof buildHeadline>, id: string) {
@@ -123,9 +194,10 @@ describe("headline figures", () => {
   it("fills monthly cost, waste range, backup N of M, lifecycle and unseen when records exist", () => {
     const headline = buildHeadline({
       cost,
-      findings: [diskFail, snapFail, backupFail, lifecycleFail],
+      findings: [diskFail, snapFail, backupFail, backupPass, lifecycleFail],
       coverage: assessed,
       records: [spendRecord, wasteDiskRecord, wasteSnapRecord, backupRecord, lifecycleRecord],
+      now: NOW,
     });
     expect(figureOf(headline, "monthlyCost")).toMatchObject({
       status: "ok",
@@ -140,7 +212,7 @@ describe("headline figures", () => {
     expect(figureOf(headline, "backup")).toMatchObject({
       status: "ok",
       href: "#recovery",
-      value: { unprotected: 1, production: 2 },
+      value: { unprotected: 1, production: 2, undetermined: 0 },
     });
     expect(figureOf(headline, "lifecycle")).toMatchObject({
       status: "ok",
@@ -187,7 +259,10 @@ describe("headline figures", () => {
       ...input,
       records: [spendRecord, wasteDiskRecord, wasteSnapRecord, backupRecord, lifecycleRecord],
     });
-    expect(figureOf(withBoth, "waste").value).toMatchObject({ min: "58.00", max: "102.00" });
+    expect(figureOf(withBoth, "waste").value).toMatchObject({
+      min: "58.00",
+      max: "102.00",
+    });
     const withoutSnap = buildHeadline({
       ...input,
       records: [spendRecord, wasteDiskRecord, backupRecord, lifecycleRecord],
@@ -251,7 +326,13 @@ describe("headline two clouds", () => {
   const gcpLifecycleFail: Finding = {
     checkId: gcpLifecycle,
     result: "fail",
-    evidence: { fields: { resourceKind: "sql", version: "MYSQL_5_6" } },
+    evidence: {
+      fields: {
+        resourceKind: "sql",
+        version: "MYSQL_5_6",
+        supportEnd: daysFromNow(10),
+      },
+    },
     scope: {
       id: "farside-test:gcp-lifecycle-sql-gke-support",
       cloud: "gcp",
@@ -280,6 +361,7 @@ describe("headline two clouds", () => {
   it("keeps money figures per cloud and does not sum USD with EUR", () => {
     const headline = buildHeadline({
       costs: { azure: cost, gcp: gcpCost },
+      now: NOW,
       findings: [diskFail, gcpDisk, lifecycleFail, gcpLifecycleFail],
       coverage: [
         ...assessed,
@@ -330,5 +412,106 @@ describe("headline two clouds", () => {
     expect(orgCost.value).not.toHaveProperty("amount");
     expect(JSON.stringify(orgCost.value)).not.toMatch(/"amount":"102\.00"/);
     expect(figureOf(headline, "lifecycle").value).toEqual({ count: 2 });
+  });
+});
+
+describe("headline backup and lifecycle math", () => {
+  const baseInput = {
+    cost,
+    coverage: assessed,
+    records: [backupRecord, lifecycleRecord],
+    now: NOW,
+  };
+
+  it("counts distinct production resources across pass and fail findings, not the max productionCount", () => {
+    const vm = (id: string, result: Finding["result"]): Finding => ({
+      ...backupFail,
+      result,
+      evidence: { fields: { vmId: id, productionCount: 1 } },
+    });
+    const sql: Finding = {
+      ...backupFail,
+      checkId: "azure-resilience-prod-sql-outside-backup",
+      evidence: { fields: { sqlResourceId: "sql-1", productionCount: 1 } },
+    };
+    const headline = buildHeadline({
+      ...baseInput,
+      findings: [vm("vm-1", "pass"), vm("vm-2", "pass"), sql],
+      coverage: [
+        ...assessed,
+        recordCoverageScope({
+          subscriptionOrProject: "main",
+          checkId: "azure-resilience-prod-sql-outside-backup",
+          state: "assessed",
+        }),
+      ],
+      records: [
+        backupRecord,
+        {
+          checkId: "azure-resilience-prod-sql-outside-backup",
+          liveRunAt: "2026-10-01T00:00:00Z",
+        },
+      ],
+    });
+    expect(figureOf(headline, "backup").value).toEqual({
+      unprotected: 1,
+      production: 3,
+      undetermined: 0,
+    });
+  });
+
+  it("reports 0 of N when all are protected and exposes undetermined resources", () => {
+    const undetermined: Finding = {
+      ...backupFail,
+      result: "undetermined",
+      closer: "Backup Reader on the vaults in scope",
+      evidence: { fields: { vmId: "vm-unreadable", protected: null } },
+    };
+    const headline = buildHeadline({
+      ...baseInput,
+      findings: [backupPass, undetermined],
+    });
+    expect(figureOf(headline, "backup").value).toEqual({
+      unprotected: 0,
+      production: 1,
+      undetermined: 1,
+    });
+  });
+
+  it.each([
+    [89, 1],
+    [90, 1],
+    [91, 0],
+  ])("lifecycle finding %i days out counts %i", (days, expected) => {
+    const finding: Finding = {
+      ...lifecycleFail,
+      evidence: { fields: { vmId: "vm-x", retirementDate: daysFromNow(days) } },
+    };
+    const headline = buildHeadline({ ...baseInput, findings: [finding] });
+    expect(figureOf(headline, "lifecycle").value).toEqual({ count: expected });
+  });
+
+  it("applies the window to expirationDate and supportEnd and skips undated findings", () => {
+    const expiring: Finding = {
+      ...lifecycleFail,
+      evidence: { fields: { certId: "c", expirationDate: daysFromNow(150) } },
+    };
+    const undated: Finding = {
+      ...lifecycleFail,
+      evidence: { fields: { vmId: "vm-undated" } },
+    };
+    const soon: Finding = {
+      ...lifecycleFail,
+      evidence: { fields: { certId: "d", expirationDate: daysFromNow(5) } },
+    };
+    const retiring2029: Finding = {
+      ...lifecycleFail,
+      evidence: { fields: { vmId: "vm-y", retirementDate: "2029-01-01" } },
+    };
+    const headline = buildHeadline({
+      ...baseInput,
+      findings: [expiring, undated, soon, retiring2029],
+    });
+    expect(figureOf(headline, "lifecycle").value).toEqual({ count: 1 });
   });
 });
