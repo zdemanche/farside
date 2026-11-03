@@ -42,6 +42,7 @@ describe("offboard", () => {
         checkId: fail.checkId,
         resourceId: "disk-unattached",
         scopeId: fail.scope.id,
+        cloud: "azure",
         subscriptionOrProject: "main",
         status: "open",
         evidence: { diskId: "disk-unattached" },

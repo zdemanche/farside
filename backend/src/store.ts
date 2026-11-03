@@ -1,4 +1,4 @@
-import type { Finding, Inventory } from "@farside/scan-contracts";
+import { CLOUDS, type Cloud, type Finding, type Inventory } from "@farside/scan-contracts";
 import type { CoverageEntry } from "./coverage.js";
 import type { ResourceFacts } from "./facts.js";
 import type { StoredIssue } from "./issues.js";
@@ -27,6 +27,7 @@ export type Connection = {
 export type OrgState = {
   connections: Connection[];
   inventory: Inventory | null;
+  inventories: Partial<Record<Cloud, Inventory>>;
   coverage: CoverageEntry[];
   findings: Finding[];
   settings: OrgSettings;
@@ -45,6 +46,7 @@ function emptyOrg(): OrgState {
   return {
     connections: [],
     inventory: null,
+    inventories: {},
     coverage: [],
     findings: [],
     settings: { ...DEFAULT_SETTINGS },
@@ -92,7 +94,8 @@ export class MemoryStore {
     }
     return (
       org.connections.length +
-      (org.inventory ? 1 : 0) +
+      Object.keys(org.inventories).length +
+      (org.inventory && !org.inventories[org.inventory.cloud] ? 1 : 0) +
       org.coverage.length +
       org.findings.length +
       org.scans.length +
@@ -138,8 +141,20 @@ export class MemoryStore {
 
   putInventory(orgId: string, inventory: Inventory): Inventory {
     assertNoSecrets(inventory);
-    this.org(orgId).inventory = inventory;
+    const org = this.org(orgId);
+    org.inventories[inventory.cloud] = inventory;
+    org.inventory = inventory;
     return inventory;
+  }
+
+  inventoriesOf(orgId: string, cloud?: Cloud): Inventory[] {
+    const org = this.org(orgId);
+    const stored = CLOUDS.flatMap((name) => {
+      const inventory = org.inventories[name];
+      return inventory ? [inventory] : [];
+    });
+    const pool = stored.length > 0 ? stored : org.inventory ? [org.inventory] : [];
+    return pool.filter((inventory) => cloud == null || inventory.cloud === cloud);
   }
 
   putConnection(
@@ -219,6 +234,12 @@ export class MemoryStore {
     assertNoSecrets(settings);
     const org = this.org(orgId);
     org.settings = settings;
+    for (const cloud of CLOUDS) {
+      const inventory = org.inventories[cloud];
+      if (inventory) {
+        org.inventories[cloud] = applyOwnerTag(inventory, settings.ownerTagKey);
+      }
+    }
     if (org.inventory) {
       org.inventory = applyOwnerTag(org.inventory, settings.ownerTagKey);
     }

@@ -1,7 +1,6 @@
-import { RAW_PROVIDER_KEYS } from "@farside/scan-contracts";
+import { RAW_PROVIDER_KEYS, type Cloud, type Inventory } from "@farside/scan-contracts";
 import type { CostSnapshot } from "./cost.js";
 import type { StoredIssue } from "./issues.js";
-import type { Inventory } from "@farside/scan-contracts";
 
 export const EXPORT_FORMAT = "farside-export/1";
 export const EXPORT_KINDS = ["issues", "inventory", "cost"] as const;
@@ -12,6 +11,7 @@ export type ExportIssueRow = {
   checkId: string;
   resourceId: string;
   scopeId: string;
+  cloud: Cloud;
   subscriptionOrProject: string;
   status: StoredIssue["status"];
   coverage: StoredIssue["coverage"];
@@ -21,6 +21,7 @@ export type ExportIssueRow = {
 };
 
 export type ExportInventoryRow = {
+  cloud: Cloud;
   resourceUri: string;
   resourceType: string;
   region: string;
@@ -60,6 +61,7 @@ export function exportIssues(orgId: string, issues: StoredIssue[], exportedAt: s
       checkId: issue.checkId,
       resourceId: issue.resourceId,
       scopeId: issue.scopeId,
+      cloud: issue.cloud,
       subscriptionOrProject: issue.subscriptionOrProject,
       status: issue.status,
       coverage: issue.coverage,
@@ -80,13 +82,16 @@ export function exportInventory(
     kind: "inventory",
     orgId,
     exportedAt,
-    rows: (inventory?.resources ?? []).map((resource) => ({
-      resourceUri: resource.resourceUri,
-      resourceType: resource.resourceType,
-      region: resource.region,
-      displayName: resource.displayName,
-      ownerTag: resource.ownerTag ?? null,
-    })),
+    rows: inventory
+      ? inventory.resources.map((resource) => ({
+          cloud: inventory.cloud,
+          resourceUri: resource.resourceUri,
+          resourceType: resource.resourceType,
+          region: resource.region,
+          displayName: resource.displayName,
+          ownerTag: resource.ownerTag ?? null,
+        }))
+      : [],
   };
 }
 

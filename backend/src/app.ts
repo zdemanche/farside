@@ -40,10 +40,11 @@ import { CardDataError, advanceContract, billingView, canScan, parseContract } f
 import { deletionView } from "./offboard.js";
 import { demoDescriptor, isDemoOrg, seedDemoOrg } from "./demo.js";
 import { exportCost, exportFilename, exportInventory, exportIssues } from "./export.js";
-import { estateOverview } from "./estate.js";
+import { estateOverview, inventoriesFor } from "./estate.js";
 import { buildHeadline } from "./headline.js";
 import { costWasteView } from "./waste.js";
-import { applyOwnerTag, filterInventory, groupInventory, noOwnerTotal } from "./inventory.js";
+import { matchesCloud, parseCloudQuery, type Cloud } from "./cloud.js";
+import { applyOwnerTag, browseInventories, groupInventory, noOwnerTotal } from "./inventory.js";
 import { SecretLeakError, assertNoSecrets } from "./secrets.js";
 import { defaultHarvester, ScanRunner, toScanView, toScanViews, type Harvester } from "./scans.js";
 import { ScanScheduler } from "./scheduler.js";
@@ -111,6 +112,20 @@ function rejectSecrets(body: unknown, reply: FastifyReply): boolean {
   }
 }
 
+function readCloud(
+  query: unknown,
+  reply: FastifyReply,
+): { ok: true; cloud?: Cloud } | { ok: false } {
+  const parsed = parseCloudQuery((query ?? {}) as Record<string, unknown>);
+  if (parsed.error) {
+    void problem(reply, 400, "Invalid cloud", {
+      errors: [{ path: "cloud", message: parsed.error }],
+    });
+    return { ok: false };
+  }
+  return parsed.cloud ? { ok: true, cloud: parsed.cloud } : { ok: true };
+}
+
 function sendClean(reply: FastifyReply, status: number, body: unknown) {
   assertNoSecrets(body);
   return reply.code(status).send(body);
@@ -159,7 +174,12 @@ export function buildApp(
     if (!requireOrg(request, reply, store)) {
       return reply;
     }
-    const inventory = store.snapshot(request.params.orgId).inventory;
+    const cloud = readCloud(request.query, reply);
+    if (!cloud.ok) {
+      return reply;
+    }
+    const inventories = inventoriesFor(store.snapshot(request.params.orgId), cloud.cloud);
+    const inventory = cloud.cloud ? inventories[0] : store.snapshot(request.params.orgId).inventory;
     if (!inventory) {
       return problem(reply, 404, "Not found");
     }
@@ -170,11 +190,22 @@ export function buildApp(
     if (!requireOrg(request, reply, store)) {
       return reply;
     }
-    const inventory = store.snapshot(request.params.orgId).inventory;
-    if (!inventory) {
+    const cloud = readCloud(request.query, reply);
+    if (!cloud.ok) {
+      return reply;
+    }
+    const inventories = inventoriesFor(store.snapshot(request.params.orgId), cloud.cloud);
+    if (inventories.length === 0) {
       return problem(reply, 404, "Not found");
     }
-    return sendClean(reply, 200, noOwnerTotal(inventory));
+    const totals = inventories.reduce(
+      (sum, inventory) => {
+        const next = noOwnerTotal(inventory);
+        return { total: sum.total + next.total, resourceUris: [...sum.resourceUris, ...next.resourceUris] };
+      },
+      { total: 0, resourceUris: [] as string[] },
+    );
+    return sendClean(reply, 200, totals);
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/connections", async (request, reply) => {
@@ -262,11 +293,17 @@ export function buildApp(
     if (!requireOrg(request, reply, store)) {
       return reply;
     }
+    const cloud = readCloud(request.query, reply);
+    if (!cloud.ok) {
+      return reply;
+    }
     const org = store.snapshot(request.params.orgId);
-    const health = coverageHealth(org.coverage, org.findings);
+    const coverage = org.coverage.filter((entry) => matchesCloud(entry.cloud, cloud.cloud));
+    const findings = org.findings.filter((finding) => matchesCloud(finding.scope.cloud, cloud.cloud));
+    const health = coverageHealth(coverage, findings);
     return sendClean(reply, 200, {
-      coverage: toContractCoverage(org.coverage),
-      entries: org.coverage,
+      coverage: toContractCoverage(coverage),
+      entries: coverage,
       health,
       formula: HEALTH_SCORE_FORMULA,
     });
@@ -294,9 +331,15 @@ export function buildApp(
     if (!requireOrg(request, reply, store)) {
       return reply;
     }
+    const cloud = readCloud(request.query, reply);
+    if (!cloud.ok) {
+      return reply;
+    }
     const org = store.snapshot(request.params.orgId);
-    const spots = blindSpots(org.coverage);
-    const health = coverageHealth(org.coverage, org.findings);
+    const coverage = org.coverage.filter((entry) => matchesCloud(entry.cloud, cloud.cloud));
+    const findings = org.findings.filter((finding) => matchesCloud(finding.scope.cloud, cloud.cloud));
+    const spots = blindSpots(coverage);
+    const health = coverageHealth(coverage, findings);
     return sendClean(reply, 200, { spots, health, formula: HEALTH_SCORE_FORMULA });
   });
 
@@ -304,7 +347,14 @@ export function buildApp(
     if (!requireOrg(request, reply, store)) {
       return reply;
     }
-    return sendClean(reply, 200, { scans: toScanViews(store.snapshot(request.params.orgId).scans) });
+    const cloud = readCloud(request.query, reply);
+    if (!cloud.ok) {
+      return reply;
+    }
+    const scans = toScanViews(store.snapshot(request.params.orgId).scans).filter(
+      (scan) => cloud.cloud == null || scan.cloud === cloud.cloud,
+    );
+    return sendClean(reply, 200, { scans });
   });
 
   app.get<{ Params: { orgId: string; scanId: string } }>(
@@ -356,38 +406,63 @@ export function buildApp(
     if (!requireOrg(request, reply, store)) {
       return reply;
     }
-    return sendClean(reply, 200, { findings: store.snapshot(request.params.orgId).findings });
+    const cloud = readCloud(request.query, reply);
+    if (!cloud.ok) {
+      return reply;
+    }
+    const findings = store
+      .snapshot(request.params.orgId)
+      .findings.filter((finding) => matchesCloud(finding.scope.cloud, cloud.cloud));
+    return sendClean(reply, 200, { findings });
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/issues", async (request, reply) => {
     if (!requireOrg(request, reply, store)) {
       return reply;
     }
-    return sendClean(reply, 200, { issues: store.snapshot(request.params.orgId).issues });
+    const cloud = readCloud(request.query, reply);
+    if (!cloud.ok) {
+      return reply;
+    }
+    const issues = store
+      .snapshot(request.params.orgId)
+      .issues.filter((issue) => matchesCloud(issue.cloud, cloud.cloud));
+    return sendClean(reply, 200, { issues });
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/export/issues", async (request, reply) => {
     if (!requireOrg(request, reply, store)) {
       return reply;
     }
+    const cloud = readCloud(request.query, reply);
+    if (!cloud.ok) {
+      return reply;
+    }
     const query = request.query as Record<string, unknown>;
     const exportedAt = typeof query.asOf === "string" ? query.asOf : "1970-01-01T00:00:00.000Z";
+    const issues = store
+      .snapshot(request.params.orgId)
+      .issues.filter((issue) => matchesCloud(issue.cloud, cloud.cloud));
     void reply.header("content-disposition", `attachment; filename="${exportFilename("issues")}"`);
-    return sendClean(reply, 200, exportIssues(request.params.orgId, store.snapshot(request.params.orgId).issues, exportedAt));
+    return sendClean(reply, 200, exportIssues(request.params.orgId, issues, exportedAt));
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/export/inventory", async (request, reply) => {
     if (!requireOrg(request, reply, store)) {
       return reply;
     }
+    const cloud = readCloud(request.query, reply);
+    if (!cloud.ok) {
+      return reply;
+    }
     const query = request.query as Record<string, unknown>;
     const exportedAt = typeof query.asOf === "string" ? query.asOf : "1970-01-01T00:00:00.000Z";
+    const inventories = inventoriesFor(store.snapshot(request.params.orgId), cloud.cloud);
+    const inventory = cloud.cloud
+      ? inventories[0] ?? null
+      : store.snapshot(request.params.orgId).inventory;
     void reply.header("content-disposition", `attachment; filename="${exportFilename("inventory")}"`);
-    return sendClean(
-      reply,
-      200,
-      exportInventory(request.params.orgId, store.snapshot(request.params.orgId).inventory, exportedAt),
-    );
+    return sendClean(reply, 200, exportInventory(request.params.orgId, inventory ?? null, exportedAt));
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/export/cost", async (request, reply) => {
@@ -404,6 +479,10 @@ export function buildApp(
     if (!requireOrg(request, reply, store)) {
       return reply;
     }
+    const cloud = readCloud(request.query, reply);
+    if (!cloud.ok) {
+      return reply;
+    }
     const org = store.snapshot(request.params.orgId);
     return sendClean(
       reply,
@@ -412,8 +491,8 @@ export function buildApp(
         cost: org.cost,
         alerts: org.alerts,
         commitments: org.commitments,
-        findings: org.findings,
-        coverage: org.coverage,
+        findings: org.findings.filter((finding) => matchesCloud(finding.scope.cloud, cloud.cloud)),
+        coverage: org.coverage.filter((entry) => matchesCloud(entry.cloud, cloud.cloud)),
       }),
     );
   });
@@ -642,7 +721,11 @@ export function buildApp(
     if (!requireOrg(request, reply, store)) {
       return reply;
     }
-    return sendClean(reply, 200, estateOverview(store.snapshot(request.params.orgId)));
+    const cloud = readCloud(request.query, reply);
+    if (!cloud.ok) {
+      return reply;
+    }
+    return sendClean(reply, 200, estateOverview(store.snapshot(request.params.orgId), cloud.cloud));
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/settings", async (request, reply) => {
@@ -821,8 +904,12 @@ export function buildApp(
     if (!requireOrg(request, reply, store)) {
       return reply;
     }
-    const inventory = store.snapshot(request.params.orgId).inventory;
-    if (!inventory) {
+    const cloud = readCloud(request.query, reply);
+    if (!cloud.ok) {
+      return reply;
+    }
+    const inventories = inventoriesFor(store.snapshot(request.params.orgId), cloud.cloud);
+    if (inventories.length === 0) {
       return problem(reply, 404, "Not found");
     }
     const query = request.query as Record<string, unknown>;
@@ -831,6 +918,7 @@ export function buildApp(
       service?: string;
       subscription?: string;
       region?: string;
+      cloud?: Cloud;
     } = {};
     if (typeof query.owner === "string") {
       filters.owner = query.owner;
@@ -844,7 +932,10 @@ export function buildApp(
     if (typeof query.region === "string") {
       filters.region = query.region;
     }
-    const resources = filterInventory(inventory, filters);
+    if (cloud.cloud) {
+      filters.cloud = cloud.cloud;
+    }
+    const resources = browseInventories(inventories, filters);
     return sendClean(reply, 200, {
       resources,
       total: resources.length,

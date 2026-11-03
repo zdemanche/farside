@@ -261,6 +261,7 @@ export function generateDemoEstate(): {
   const scan: Omit<ScanJob, "id"> = {
     orgId: DEMO_ORG_ID,
     subscriptionId: DEMO_SUBSCRIPTION,
+    cloud: "azure",
     actor: "system",
     status: "succeeded",
     complete: true,
