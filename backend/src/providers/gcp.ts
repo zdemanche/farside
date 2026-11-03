@@ -8,6 +8,7 @@ import {
   inventoryFromGcpManifest,
   type GcpGroundTruthManifest,
 } from "../gcp-inventory.js";
+import { checkGcpCud } from "../gcp-commitments.js";
 import { checkGcpExpiringCerts } from "../gcp-lifecycle.js";
 import { checkGcpSqlHaOrBackup } from "../gcp-resilience.js";
 import { checkGcpSqlGkeSupport } from "../gcp-support.js";
@@ -32,6 +33,7 @@ export const gcpProvider: CloudProvider = {
     checkGcpUnattachedDisks,
     checkGcpUnusedIps,
     checkGcpOldSnapshotsAndImages,
+    checkGcpCud,
     checkGcpSqlHaOrBackup,
     checkGcpSqlGkeSupport,
     checkGcpExpiringCerts,

@@ -132,3 +132,15 @@ export function gcpSnapshotImageMonthlySavings(sizeGb: number): NamedSavingsRang
     basis: GCP_SNAPSHOT_IMAGE_SAVINGS_BASIS,
   });
 }
+
+export const GCP_CUD_SAVINGS_BASIS =
+  "Unused committed-use spend as a min/max range once utilization exists";
+
+export function unusedCudSavings(unusedAmount: number, currency: string): NamedSavingsRange {
+  return savingsRange({
+    min: unusedAmount * 0.8,
+    max: unusedAmount * 1.2,
+    currency,
+    basis: GCP_CUD_SAVINGS_BASIS,
+  });
+}

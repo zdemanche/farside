@@ -1,0 +1,21 @@
+{
+  "note": "Fake GCP committed-use discount rows for E6-S6-T2. Not a live billing export.",
+  "projectId": "farside-test",
+  "billingAccountId": "billing-farside-test",
+  "commitments": [
+    {
+      "commitmentName": "cud-low",
+      "utilizationPercent": 40,
+      "committedAmount": 100,
+      "usedAmount": 40,
+      "currency": "USD"
+    },
+    {
+      "commitmentName": "cud-used",
+      "utilizationPercent": 95,
+      "committedAmount": 80,
+      "usedAmount": 76,
+      "currency": "USD"
+    }
+  ]
+}
