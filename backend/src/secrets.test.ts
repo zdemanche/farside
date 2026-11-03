@@ -98,6 +98,36 @@ describe("no-secrets guard", () => {
       "underscore-prefixed Entra value",
       { note: "_bc8Q~aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
     ],
+    ["tags nested object password", { tags: { a: { password: "hunter2" } } }],
+    ["tags array apiKey", { tags: [{ apiKey: "x" }] }],
+    ["sasKey key", { sasKey: "x" }],
+    ["sasUri key", { sasUri: "x" }],
+    ["accountSas key", { accountSas: "x" }],
+    ["blobSas key", { blobSas: "x" }],
+    [
+      "dash-prefixed JWT",
+      { note: "x-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
+    ],
+    [
+      "dot-prefixed JWT",
+      { note: "x.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
+    ],
+    [
+      "underscore-prefixed JWT",
+      { note: "x_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
+    ],
+    [
+      "dash-prefixed Entra",
+      { note: "key-abc8Q~aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    ],
+    [
+      "dot-prefixed Entra",
+      { note: "key.abc8Q~aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    ],
+    [
+      "key_-prefixed Entra",
+      { note: "key_abc8Q~aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    ],
     ["JWT value", { note: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" }],
   ])("rejects %s", (_name, payload) => {
     expect(() => assertNoSecrets(payload)).toThrow(SecretLeakError);
@@ -119,9 +149,12 @@ describe("no-secrets guard", () => {
     expect(secretPaths(payload)).toEqual([]);
   });
 
-  it("evaluates a long eyJ run quickly", () => {
-    const started = performance.now();
-    secretPaths({ note: "eyJ".repeat(100_000) });
-    expect(performance.now() - started).toBeLessThan(200);
-  });
+  it.each([["eyJ".repeat(100_000)], ["eyJ-".repeat(50_000)]])(
+    "evaluates a long eyJ run quickly",
+    (note) => {
+      const started = performance.now();
+      secretPaths({ note });
+      expect(performance.now() - started).toBeLessThan(200);
+    },
+  );
 });

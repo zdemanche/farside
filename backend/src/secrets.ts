@@ -13,18 +13,33 @@ const SECRET_VALUE = new RegExp(
   [
     "client_secret",
     "azure[_-]?client[_-]?secret",
-    "(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{20,4096}\\.[A-Za-z0-9_-]{10,4096}",
     "-----BEGIN [A-Z ]*PRIVATE KEY-----",
     "ya29\\.[A-Za-z0-9_-]{20,}",
     "\\bAKIA[0-9A-Z]{16}\\b",
     "[?&]sig=[A-Za-z0-9%+/=]{20,}",
-    "(?<![A-Za-z0-9_.~-])[A-Za-z0-9_.~-]{3}\\dQ~[A-Za-z0-9_.~-]{31,}",
+    "(?<![A-Za-z0-9])[A-Za-z0-9_.~-]{3}\\dQ~[A-Za-z0-9_.~-]{31,256}",
   ].join("|"),
   "i",
 );
 
-const SAS_KEYS = new Set(["sas", "sastoken", "sasurl", "sassignature"]);
+const SAS_KEY = /^sas(token|url|uri|key|signature)|sas$/;
 const NON_SECRET_NUMBER_SUFFIXES = ["count", "total", "days", "hours", "limit"];
+
+const JWT_START = /(?<![A-Za-z0-9])eyJ/;
+
+function hasJwt(value: string): boolean {
+  const segments = value
+    .split(/[^A-Za-z0-9_.-]+/)
+    .flatMap((token) => token.split("."));
+  return segments.some((segment, index) => {
+    const start = segment.search(JWT_START);
+    return (
+      start >= 0 &&
+      segment.length - start >= 23 &&
+      (segments[index + 1]?.length ?? 0) >= 10
+    );
+  });
+}
 
 function isSecretKey(key: string, child: unknown): boolean {
   if (child == null || typeof child === "boolean") {
@@ -39,7 +54,7 @@ function isSecretKey(key: string, child: unknown): boolean {
   }
   return (
     SECRET_KEY_PARTS.some((part) => normalized.includes(part)) ||
-    SAS_KEYS.has(normalized)
+    SAS_KEY.test(normalized)
   );
 }
 
@@ -60,7 +75,7 @@ function walk(
     return;
   }
   if (typeof value === "string") {
-    if (SECRET_VALUE.test(value)) {
+    if (SECRET_VALUE.test(value) || hasJwt(value)) {
       hits.push(path);
     }
     return;
@@ -69,17 +84,15 @@ function walk(
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach((item, index) =>
-      walk(item, `${path}[${index}]`, hits, inTags),
-    );
+    value.forEach((item, index) => walk(item, `${path}[${index}]`, hits));
     return;
   }
   for (const [key, child] of Object.entries(value)) {
     const childPath = path ? `${path}.${key}` : key;
-    if (!inTags && isSecretKey(key, child)) {
+    if (!(inTags && typeof child === "string") && isSecretKey(key, child)) {
       hits.push(childPath);
     }
-    walk(child, childPath, hits, inTags || key.toLowerCase() === "tags");
+    walk(child, childPath, hits, key.toLowerCase() === "tags");
   }
 }
 
