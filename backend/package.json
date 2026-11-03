@@ -13,7 +13,8 @@
   "dependencies": {
     "@aws-sdk/client-ssm": "^3.1161.0",
     "@farside/scan-contracts": "*",
-    "fastify": "^5.12.8"
+    "fastify": "^5.12.8",
+    "pino": "^10.4.0"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

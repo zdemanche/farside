@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import { pino } from "pino";
 import { systemClock, type Clock } from "./clock.js";
 import { guardHarvester, isDemoOrg } from "./demo.js";
 import { audit, auditRetention, loggerFromEnv, pinoOptions, type LogSink } from "./observability.js";
@@ -23,15 +23,24 @@ export type TickDeps = {
   pollMs?: number;
 };
 
-async function settle(store: MemoryStore, started: Array<{ orgId: string; jobId: string }>, deps: TickDeps) {
+type StartedScan = { orgId: string; jobId: string };
+
+function isPending(store: MemoryStore, { orgId, jobId }: StartedScan): boolean {
+  const status = store.getJob(orgId, jobId)?.status;
+  return status === "queued" || status === "running";
+}
+
+async function settle(started: StartedScan[], deps: TickDeps) {
   const deadline = Date.now() + (deps.settleMs ?? SETTLE_MS);
-  const pending = () =>
-    started.some(({ orgId, jobId }) => {
-      const status = store.getJob(orgId, jobId)?.status;
-      return status === "queued" || status === "running";
-    });
-  while (pending() && Date.now() < deadline) {
+  while (started.some((scan) => isPending(deps.store, scan)) && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, deps.pollMs ?? POLL_MS));
+  }
+  const abandoned = started.filter((scan) => isPending(deps.store, scan));
+  for (const orgId of new Set(abandoned.map((scan) => scan.orgId))) {
+    audit(deps.log, "schedule.settle_abandoned", {
+      orgId,
+      scanIds: abandoned.filter((scan) => scan.orgId === orgId).map((scan) => scan.jobId),
+    });
   }
 }
 
@@ -40,7 +49,7 @@ export async function runScheduledTick(deps: TickDeps): Promise<TickSummary> {
   const retired = runRetentionSweep(store, clock);
   auditRetention(log, retired);
   const summary: TickSummary = { orgs: [], retired: retired.length };
-  const started: Array<{ orgId: string; jobId: string }> = [];
+  const started: StartedScan[] = [];
   for (const orgId of store.orgIds().filter((id) => !isDemoOrg(id))) {
     try {
       const tick = scheduler.tick(orgId, clock());
@@ -53,19 +62,21 @@ export async function runScheduledTick(deps: TickDeps): Promise<TickSummary> {
         attention: tick.attention,
       });
       summary.orgs.push({ orgId, action: tick.action });
-      if (tick.scan && tick.scanStarted) {
-        started.push({ orgId, jobId: tick.scan.id });
+      for (const { scan, started: isStarted } of tick.scans) {
+        if (isStarted) {
+          started.push({ orgId, jobId: scan.id });
+        }
       }
     } catch (error) {
       log.error({ err: error, orgId }, "schedule tick failed");
     }
   }
-  await settle(store, started, deps);
+  await settle(started, deps);
   return summary;
 }
 
 const store = new MemoryStore(systemClock);
-const log = Fastify({ logger: pinoOptions(loggerFromEnv()) }).log;
+const log = pino(pinoOptions(loggerFromEnv()) || {});
 const runner = new ScanRunner(store, guardHarvester(unconfiguredHarvester()), {}, systemClock, log);
 const scheduler = new ScanScheduler(store, runner, systemClock);
 

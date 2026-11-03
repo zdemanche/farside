@@ -1,4 +1,5 @@
-# Fastify API. Multi-stage: compile in Node 22 slim, run as the
+# Fastify API. Multi-stage: bundle in Node 22 slim, run the single
+# self-contained bundle as the
 # non-root `node` user. Slim (not distroless) so HEALTHCHECK can
 # use Node's built-in fetch against GET /health.
 FROM node:22-bookworm-slim AS build
@@ -14,6 +15,7 @@ RUN npm ci
 COPY tsconfig.base.json ./
 COPY contracts contracts
 COPY backend backend
+COPY docs docs
 RUN npm run build -w @farside/scan-contracts && npm run build -w @farside/backend
 
 FROM node:22-bookworm-slim AS runtime
@@ -22,20 +24,8 @@ ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=8080
 
-COPY package.json package-lock.json ./
-COPY contracts/package.json contracts/
 COPY backend/package.json backend/
-COPY console/package.json console/
-COPY infra/package.json infra/
-RUN npm ci --omit=dev && npm cache clean --force
-
-COPY --from=build /app/contracts/dist contracts/dist
-COPY --from=build /app/backend/dist backend/dist
-COPY docs docs
-
-# Workspace exports resolve `import` to TypeScript source (for Vite).
-# Point Node at the compiled package so `node backend/dist/index.js` loads.
-RUN node --input-type=module -e "import { readFileSync, writeFileSync } from 'node:fs'; const pkg = JSON.parse(readFileSync('contracts/package.json', 'utf8')); pkg.exports['.'] = { types: './dist/index.d.ts', import: './dist/index.js', default: './dist/index.js' }; writeFileSync('contracts/package.json', JSON.stringify(pkg, null, 2) + String.fromCharCode(10));"
+COPY --from=build /app/backend/dist/index.js backend/dist/index.js
 
 USER node
 EXPOSE 8080

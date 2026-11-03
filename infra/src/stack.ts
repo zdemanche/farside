@@ -1,6 +1,6 @@
 import * as aws from "@pulumi/aws";
 import * as pulumi from "@pulumi/pulumi";
-import { SCHEDULE_RATE, assertAuthenticatedEdge, type DeployPlan } from "./plan.js";
+import { CDN_BEHAVIORS, SCHEDULE_RATE, assertAuthenticatedEdge, type DeployPlan } from "./plan.js";
 import { PRODUCT_KEY } from "./product.js";
 
 export type StackInputs = {
@@ -88,6 +88,7 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     tags,
   });
   const ssmKey = aws.kms.getKeyOutput({ keyId: "alias/aws/ssm" });
+  const region = aws.getRegionOutput().region;
 
   const apiLogs = new aws.cloudwatch.LogGroup(`${apiName}-logs`, {
     name: `/aws/lambda/${apiName}`,
@@ -108,12 +109,17 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
   });
   new aws.iam.RolePolicy(`${apiName}-operator-token`, {
     role: apiRole.id,
-    policy: pulumi.all([tokenParameter.arn, ssmKey.arn]).apply(([parameterArn, keyArn]) =>
+    policy: pulumi.all([tokenParameter.arn, ssmKey.arn, region]).apply(([parameterArn, keyArn, regionName]) =>
       JSON.stringify({
         Version: "2012-10-17",
         Statement: [
           { Effect: "Allow", Action: "ssm:GetParameter", Resource: parameterArn },
-          { Effect: "Allow", Action: "kms:Decrypt", Resource: keyArn },
+          {
+            Effect: "Allow",
+            Action: "kms:Decrypt",
+            Resource: keyArn,
+            Condition: { StringEquals: { "kms:ViaService": `ssm.${regionName}.amazonaws.com` } },
+          },
         ],
       }),
     ),
@@ -157,7 +163,11 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     name: `${tickName}-schedule`,
     scheduleExpression: SCHEDULE_RATE,
     flexibleTimeWindow: { mode: "OFF" },
-    target: { arn: tick.arn, roleArn: schedulerRole.arn },
+    target: {
+      arn: tick.arn,
+      roleArn: schedulerRole.arn,
+      retryPolicy: { maximumRetryAttempts: 0, maximumEventAgeInSeconds: 300 },
+    },
   });
 
   const consoleBucket = new aws.s3.Bucket(`${prefix}-console`, {
@@ -191,7 +201,7 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
       },
     ],
     defaultCacheBehavior: {
-      targetOriginId: "console",
+      targetOriginId: CDN_BEHAVIORS.find((behavior) => behavior.pathPattern === "*")?.origin ?? "console",
       viewerProtocolPolicy: "redirect-to-https",
       allowedMethods: ["GET", "HEAD"],
       cachedMethods: ["GET", "HEAD"],

@@ -1,4 +1,3 @@
-import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { buildApp } from "./app.js";
 import { loggerFromEnv } from "./observability.js";
 
@@ -25,12 +24,13 @@ export type ProxyResult = {
 };
 
 const METHODS = new Set<HttpMethod>(["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]);
-const SESSION_HEADERS = ["x-farside-org", "x-farside-actor", "x-farside-operator"];
+const SESSION_HEADER_PREFIX = "x-farside-";
 const TEXT_TYPE = /^(text\/|application\/(json|problem\+json|javascript|xml)|.*\+(json|xml))/i;
 
 type ParameterReader = (name: string) => Promise<string | undefined>;
 
 const readSsmParameter: ParameterReader = async (name) => {
+  const { GetParameterCommand, SSMClient } = await import("@aws-sdk/client-ssm");
   const result = await new SSMClient({}).send(new GetParameterCommand({ Name: name, WithDecryption: true }));
   return result.Parameter?.Value;
 };
@@ -86,7 +86,7 @@ function headersOf(event: ProxyEvent): Record<string, string> {
   const headers: Record<string, string> = {};
   for (const [key, value] of Object.entries(event.headers ?? {})) {
     const name = key.toLowerCase();
-    if (value !== undefined && (trustEdge || !SESSION_HEADERS.includes(name))) {
+    if (value !== undefined && (trustEdge || !name.startsWith(SESSION_HEADER_PREFIX))) {
       headers[name] = value;
     }
   }

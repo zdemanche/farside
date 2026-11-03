@@ -68,6 +68,7 @@ describe("scheduled tick", () => {
         record: null,
         scan: null,
         scanStarted: false,
+        scans: [],
         schedule: store.org(orgId).schedule,
       };
     });
@@ -90,5 +91,33 @@ describe("scheduled tick", () => {
     });
     expect(summary.orgs.map((entry) => entry.orgId)).toEqual(["org-a"]);
     expect(store.org("org-a").scans[0]?.status).toBe("running");
+    const abandoned = log.info.mock.calls.filter(([fields]) => fields.event === "schedule.settle_abandoned");
+    expect(abandoned).toHaveLength(1);
+    expect(abandoned[0]?.[0]).toMatchObject({ orgId: "org-a", scanIds: [store.org("org-a").scans[0]?.id] });
+    expect(JSON.stringify(abandoned[0]?.[0])).not.toContain("main");
+  });
+
+  it("waits for the queued scan of a second subscription", async () => {
+    const store = seeded(["org-a"], NOW);
+    store.org("org-a").connections.push({
+      id: "conn-second",
+      tenantId: "tenant",
+      subscriptionId: "second",
+      roles: [],
+      createdAt: NOW,
+      healthy: true,
+    });
+    const log = fakeLog();
+    const runner = new ScanRunner(store, defaultHarvester(clock), {}, clock, log);
+    await runScheduledTick({
+      store,
+      scheduler: new ScanScheduler(store, runner, clock),
+      clock,
+      log,
+      pollMs: 5,
+    });
+    const scans = store.org("org-a").scans;
+    expect(scans.map((scan) => scan.subscriptionId).sort()).toEqual(["main", "second"]);
+    expect(scans.map((scan) => scan.status)).toEqual(["succeeded", "succeeded"]);
   });
 });

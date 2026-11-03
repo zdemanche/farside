@@ -7,7 +7,6 @@ const SHARED = {
   platform: "node",
   target: "node22",
   format: "esm",
-  sourcemap: true,
   banner: {
     js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
   },
@@ -21,6 +20,7 @@ export async function bundle(outdir) {
     entryPoints: [`${root}src/lambda.ts`, `${root}src/scheduled.ts`],
     outdir,
     outExtension: { ".js": ".mjs" },
+    external: ["@aws-sdk/*"],
   });
 }
 

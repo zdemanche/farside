@@ -6,7 +6,6 @@ export type FunctionUrlAuthType = "AWS_IAM" | "NONE";
 export type EdgeBehavior = {
   pathPattern: string;
   origin: "console" | "api";
-  signedToOrigin: boolean;
 };
 
 export type ViewerAuthenticator = "edge-function" | "waf" | "signed-cookies";
@@ -46,6 +45,8 @@ export class PublicApiError extends Error {
   }
 }
 
+export const CDN_BEHAVIORS: EdgeBehavior[] = [{ pathPattern: "*", origin: "console" }];
+
 export const SCHEDULE_RATE = "rate(15 minutes)";
 
 export function planDevStack(input: FarsideTagInput & { accountId: string }): DeployPlan {
@@ -67,7 +68,7 @@ export function planDevStack(input: FarsideTagInput & { accountId: string }): De
       name: `${prefix}-cdn`,
       kind: "cloudfront",
       tags,
-      behaviors: [{ pathPattern: "*", origin: "console", signedToOrigin: true }],
+      behaviors: CDN_BEHAVIORS,
     },
   ];
 

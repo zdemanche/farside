@@ -1,13 +1,24 @@
 import { spawn, execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, it } from "vitest";
 
 const BACKEND = fileURLToPath(new URL("..", import.meta.url));
-const PORT = "18089";
 let dir = "";
+
+async function freePort(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address() as { port: number };
+      server.close(() => resolve(String(port)));
+    });
+  });
+}
 
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), "farside-bundle-"));
@@ -18,6 +29,7 @@ beforeAll(() => {
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 it("serves /health from a directory without docs/", async () => {
+  const PORT = await freePort();
   const child = spawn("node", [join(dir, "index.js")], {
     cwd: dir,
     env: { ...process.env, PORT, HOST: "127.0.0.1", FARSIDE_LOG_LEVEL: "silent" },

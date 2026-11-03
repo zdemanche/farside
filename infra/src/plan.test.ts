@@ -49,7 +49,7 @@ describe("dev deploy plan", () => {
               ...resource,
               behaviors: [
                 ...(resource.behaviors ?? []),
-                { pathPattern: "/v1/*", origin: "api" as const, signedToOrigin: true },
+                { pathPattern: "/v1/*", origin: "api" as const },
               ],
             }
           : resource,

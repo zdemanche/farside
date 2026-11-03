@@ -51,6 +51,9 @@ describe("deployStack", () => {
           if (args.token === "aws:iam/getPolicyDocument:getPolicyDocument") {
             return { json: "{}" };
           }
+          if (args.token === "aws:index/getRegion:getRegion") {
+            return { region: "us-east-2", name: "us-east-2" };
+          }
           if (args.token === "aws:kms/getKey:getKey") {
             return { arn: "arn:aws:kms:us-east-2:123456789012:key/ssm-mock" };
           }
@@ -119,6 +122,9 @@ describe("deployStack", () => {
     const schedules = ofType("aws:scheduler/schedule:Schedule");
     expect(schedules).toHaveLength(1);
     expect(schedules[0]?.inputs.scheduleExpression).toBe("rate(15 minutes)");
+    expect(schedules[0]?.inputs.target).toMatchObject({
+      retryPolicy: { maximumRetryAttempts: 0, maximumEventAgeInSeconds: 300 },
+    });
   });
 
   it("matches the planned resource names and tags every taggable resource", () => {
@@ -152,7 +158,12 @@ describe("deployStack", () => {
         Action: "ssm:GetParameter",
         Resource: "arn:aws:mock:us-east-2:123456789012:farside-moonaan-dev-operator-token",
       },
-      { Effect: "Allow", Action: "kms:Decrypt", Resource: "arn:aws:kms:us-east-2:123456789012:key/ssm-mock" },
+      {
+        Effect: "Allow",
+        Action: "kms:Decrypt",
+        Resource: "arn:aws:kms:us-east-2:123456789012:key/ssm-mock",
+        Condition: { StringEquals: { "kms:ViaService": "ssm.us-east-2.amazonaws.com" } },
+      },
     ]);
   });
 

@@ -103,6 +103,16 @@ describe("lambda handler", () => {
     expect((await handler(request)).statusCode).toBe(200);
   });
 
+  it("strips session headers by prefix in any case", async () => {
+    const request = {
+      rawPath: "/v1/orgs/org-a/coverage",
+      headers: { "X-Farside-Org": "org-a", "X-Farside-Actor": "actor-a", "x-farside-role": "owner" },
+    };
+    expect((await handler(request)).statusCode).toBe(401);
+    vi.stubEnv("FARSIDE_TRUST_EDGE_HEADERS", "1");
+    expect((await handler(request)).statusCode).toBe(200);
+  });
+
   it("returns 404 for an unknown route", async () => {
     const result = await handler({ rawPath: "/nope" });
     expect(result.statusCode).toBe(404);
