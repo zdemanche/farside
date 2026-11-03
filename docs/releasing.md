@@ -1,6 +1,6 @@
 # Releasing
 
-Farside is one product in one repo. One version, one `CHANGELOG.md`, one GitHub Release, one `v*` tag.
+Farside is one product in one repo. One version, one `CHANGELOG.md`, one GitHub Release, one `v*` tag. The Claude Code plugin lives in `plugin/` of this repo and uses that same version.
 
 ## How a release happens
 
