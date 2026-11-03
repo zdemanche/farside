@@ -3,6 +3,3 @@ export const inventoryHref = (resource: string): string =>
 
 export const scanHref = (id: string): string =>
   `#scans/${encodeURIComponent(id)}`;
-
-export const issueHref = (id: string): string =>
-  `#issues/${encodeURIComponent(id)}`;

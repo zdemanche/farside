@@ -39,6 +39,14 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
   const scheduleId = useId();
   const intervalId = useId();
   const retryId = useId();
+  const fieldIds: Record<string, string> = {
+    owner: ownerId,
+    prodKey: prodKeyId,
+    prodValue: prodValueId,
+    retention: retentionId,
+    interval: intervalId,
+    retryLimit: retryId,
+  };
   const [owner, setOwner] = useState(initial.ownerTagKey);
   const [prodKey, setProdKey] = useState(initial.productionTagKey);
   const [prodValue, setProdValue] = useState(initial.productionTagValue);
@@ -87,11 +95,12 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
     setErrors(found);
     setStatus("");
     setFailure("");
-    if (Object.keys(found).length > 0) {
+    const firstInvalid = Object.keys(found)[0];
+    if (firstInvalid) {
+      document.getElementById(fieldIds[firstInvalid] ?? "")?.focus();
       return;
     }
     setSaving(true);
-    setStatus("");
     try {
       const saved = await source.saveSettings(next);
       const demoPrefix =

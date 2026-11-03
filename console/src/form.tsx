@@ -12,7 +12,7 @@ export function FieldError({
   error: string | undefined;
 }) {
   return error ? (
-    <p className="field-error" id={`${id}-error`} role="alert">
+    <p className="field-error" id={`${id}-error`}>
       {error}
     </p>
   ) : null;

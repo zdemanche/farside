@@ -89,6 +89,16 @@ describe("console shell", () => {
     },
   );
 
+  it("focuses the not-found heading when navigating to an unknown detail path", async () => {
+    window.location.hash = "#estate";
+    render(<App demo />);
+    await screen.findByRole("heading", { name: "Estate" });
+    window.location.hash = "#estate/extra";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    const heading = await screen.findByRole("heading", { name: "Page not found" });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+  });
+
   it("opens Connect from the hash", async () => {
     window.location.hash = "#connect";
     render(<App demo />);

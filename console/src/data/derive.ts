@@ -39,6 +39,7 @@ export function formatEvidence(fields: Fields): string {
     .join(", ");
 }
 
+// ponytail: every Farside savings range is a monthly list price (backend/src/savings.ts), so the period is fixed to month
 export function toMoney(savings?: {
   min: string;
   max: string;

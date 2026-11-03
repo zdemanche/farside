@@ -96,7 +96,21 @@ describe("Issues screen", () => {
         .getByRole("link", { name: "Back to all issues" })
         .getAttribute("href"),
     ).toBe("#issues");
+    await waitFor(() =>
+      expect(document.activeElement?.id).toBe("issue-detail-title"),
+    );
     await expectAxeClean(container);
+  });
+
+  it("says an unknown issue id was not found when the org has no issues", async () => {
+    renderScreen(
+      <Issues hash="issues/nope" />,
+      sourceWith({ issues: async () => [] }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Issue nope was not found" }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/No issues have been recorded/)).toBeNull();
   });
 
   it("shows the short name of a resource URI and keeps the full value as the title", async () => {

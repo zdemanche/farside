@@ -35,6 +35,7 @@ export function Connect() {
     setFailure("");
     setConnected(false);
     if (found.tenantId || found.subscriptionId) {
+      document.getElementById(found.tenantId ? tenantFieldId : subscriptionFieldId)?.focus();
       return;
     }
     setConnecting(true);

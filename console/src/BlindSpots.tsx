@@ -4,6 +4,13 @@ import { LastScan } from "./LastScan";
 import { ScreenState } from "./ScreenState";
 import { TERMS, coverageStateLabel } from "./terms";
 
+function closerLink(closer: string) {
+  if (/\b(grant|role|permission)/i.test(closer)) {
+    return <a href="#connect">Open Connect</a>;
+  }
+  return /\bscan\b/i.test(closer) ? <a href="#scans">Open Scans</a> : null;
+}
+
 export function BlindSpots() {
   const source = useSource();
   const view = useResource((signal) => source.blindSpots(signal), [source]);
@@ -57,7 +64,8 @@ export function BlindSpots() {
                       <td>{coverageStateLabel(spot.state)}</td>
                       <td>{spot.reason}</td>
                       <td>
-                        {spot.closer} <a href="#connect">Open Connect</a>
+                        {spot.closer}{" "}
+                        {closerLink(spot.closer)}
                       </td>
                     </tr>
                   ))}

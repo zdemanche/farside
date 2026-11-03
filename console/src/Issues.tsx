@@ -30,8 +30,12 @@ const DEFAULT_FILTERS: Filters = {
 const NO_FILTERS: Filters = { check: "", status: "", subscription: "" };
 
 function selectedId(hash: string): string {
-  const match = hash.match(/^issues\/(.+)$/);
-  return match?.[1] ?? "";
+  const match = hash.match(/^issues\/(.+)$/)?.[1] ?? "";
+  try {
+    return decodeURIComponent(match);
+  } catch {
+    return match;
+  }
 }
 
 function currentHash(): string {
@@ -178,7 +182,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
               {visible.map((issue) => (
                 <tr key={issue.id}>
                   <th scope="row">
-                    <a href={`#issues/${issue.id}`} title={issue.resourceId}>
+                    <a href={`#issues/${encodeURIComponent(issue.id)}`} title={issue.resourceId}>
                       {shortName(issue.resourceId)}
                     </a>
                   </th>
@@ -268,7 +272,7 @@ export function Issues({ hash = currentHash() }: { hash?: string }) {
         resource={issues}
         partial
         empty={(data) =>
-          data.length === 0
+          data.length === 0 && !selectedId(hash)
             ? "No issues have been recorded. Issues appear after a scan finds a problem on an assessed scope."
             : null
         }

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DataError } from "./data/error";
 import type { ScanRow } from "./data/types";
@@ -86,6 +86,9 @@ describe("Scans screen", () => {
     expect(
       await screen.findByRole("heading", { name: "Scan nope was not found" }),
     ).toBeTruthy();
+    await waitFor(() =>
+      expect(document.activeElement?.id).toBe("scan-detail-title"),
+    );
   });
 
   it("polls a running scan until it finishes", async () => {
@@ -148,6 +151,17 @@ describe("Scans screen", () => {
       "The cloud estate didn't respond in time (Reference err-42)",
     );
     expect(row.textContent).not.toContain("harvest_timeout");
+  });
+
+  it("explains the unconfigured-provider error with a link to Connect", async () => {
+    const scans = vi.fn<() => Promise<ScanRow[]>>().mockResolvedValue([
+      { ...RUNNING, status: "failed", error: "No cloud provider is configured" },
+    ]);
+    renderScreen(<Scans hash="scans" />, sourceWith({ scans }));
+    const row = await screen.findByRole("row", { name: /scan-3/ });
+    expect(row.textContent).toContain("No cloud is connected yet");
+    expect(within(row).getByRole("link", { name: "Connect a cloud" }).getAttribute("href")).toBe("#connect");
+    expect(scanErrorText("scan failed")).toBe("The scan failed");
   });
 
   it("maps known error codes and falls back to the raw value for unknown ones", () => {

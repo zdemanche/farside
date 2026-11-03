@@ -1,11 +1,13 @@
 import type { Money } from "./data/types";
 
-const DATE_TIME = new Intl.DateTimeFormat("en-GB", {
+const LOCALE = "en-GB";
+
+const DATE_TIME = new Intl.DateTimeFormat(LOCALE, {
   dateStyle: "medium",
   timeStyle: "short",
   timeZone: "UTC",
 });
-const DATE = new Intl.DateTimeFormat("en-GB", {
+const DATE = new Intl.DateTimeFormat(LOCALE, {
   dateStyle: "medium",
   timeZone: "UTC",
 });
@@ -35,7 +37,7 @@ export function formatMoney(money: Money | null): string {
     return "no estimate";
   }
   try {
-    const currency = new Intl.NumberFormat("en-US", {
+    const currency = new Intl.NumberFormat(LOCALE, {
       style: "currency",
       currency: money.currency,
       currencyDisplay: "code",

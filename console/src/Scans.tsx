@@ -4,9 +4,10 @@ import { useSource } from "./data/context";
 import type { ScanCoverageSummary, ScanRow, ScanStatus } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { Time } from "./format";
+import { scanHref } from "./links";
 import { ScreenState } from "./ScreenState";
 import { plural } from "./plural";
-import { TERMS, coverageStateLabel, scanErrorText } from "./terms";
+import { NO_CLOUD_ERROR, TERMS, coverageStateLabel, scanErrorText } from "./terms";
 
 const STATUS_TONE: Record<ScanStatus, Tone> = {
   queued: "neutral",
@@ -22,8 +23,12 @@ const isInFlight = (scan: ScanRow) =>
   scan.status === "queued" || scan.status === "running";
 
 function selectedId(hash: string): string {
-  const match = hash.match(/^scans\/(.+)$/);
-  return match?.[1] ?? "";
+  const match = hash.match(/^scans\/(.+)$/)?.[1] ?? "";
+  try {
+    return decodeURIComponent(match);
+  } catch {
+    return match;
+  }
 }
 
 function formatDuration(durationMs: number | null): string {
@@ -44,6 +49,12 @@ function ScanError({ scan }: { scan: ScanRow }) {
   return scan.error ? (
     <>
       {scanErrorText(scan.error)}
+      {scan.error === NO_CLOUD_ERROR ? (
+        <>
+          {" "}
+          <a href="#connect">Connect a cloud</a>
+        </>
+      ) : null}
       {scan.errorId ? ` (Reference ${scan.errorId})` : ""}
     </>
   ) : null;
@@ -241,7 +252,7 @@ export function Scans({
                   {data.map((scan) => (
                     <tr key={scan.id}>
                       <th scope="row">
-                        <a href={`#scans/${scan.id}`}>{scan.id}</a>
+                        <a href={scanHref(scan.id)}>{scan.id}</a>
                       </th>
                       <td>
                         <Time value={scan.startedAt} fallback="not started" />

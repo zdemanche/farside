@@ -149,6 +149,7 @@ describe("Connect screen", () => {
         .getByLabelText("Azure subscription id")
         .hasAttribute("aria-invalid"),
     ).toBe(false);
+    expect(document.activeElement).toBe(tenant);
     expect(connect).not.toHaveBeenCalled();
     expect(document.body.textContent).not.toContain("First scan started");
   });

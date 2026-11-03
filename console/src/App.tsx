@@ -119,11 +119,11 @@ export function App({
       firstHash.current = false;
       return;
     }
-    if (isDetail) {
+    if (Page && isDetail) {
       return;
     }
     document.getElementById("page-title")?.focus();
-  }, [hash, isDetail]);
+  }, [hash, isDetail, Page]);
 
   return (
     <div className="app">

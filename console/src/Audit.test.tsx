@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -44,6 +44,13 @@ describe("console audit behaviours", () => {
       target: { value: "acme" },
     });
     expect(screen.getByRole("row", { name: /Acme storage/ })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Region"), {
+      target: { value: "" },
+    });
+    fireEvent.change(screen.getByLabelText("Owner"), {
+      target: { value: "none" },
+    });
+    expect(screen.queryByRole("row", { name: /Acme storage/ })).toBeNull();
     expect(
       screen.getByRole("search", { name: "Filter inventory" }),
     ).toBeTruthy();
@@ -56,7 +63,31 @@ describe("console audit behaviours", () => {
       screen.getByRole("row", { name: /Unattached managed disk/ }),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Show all resources" }));
+    expect(window.location.hash).toBe("#inventory");
     expect(screen.getByText("4 resources")).toBeTruthy();
+  });
+
+  it("matches a resource URI case-insensitively and a short name only without a slash", async () => {
+    const upper = ACME.resourceUri.toUpperCase();
+    renderScreen(
+      <Inventory hash={`inventory?resource=${encodeURIComponent(upper)}`} />,
+      sourceWith({ inventory: async () => [ACME] }),
+    );
+    expect(await screen.findByText("1 resource")).toBeTruthy();
+    cleanup();
+    renderScreen(
+      <Inventory hash="inventory?resource=storageAccounts%2Facme1" />,
+      sourceWith({ inventory: async () => [ACME] }),
+    );
+    expect(await screen.findByText(/No resources match/)).toBeTruthy();
+  });
+
+  it("links blind-spot closers by what they ask for", async () => {
+    renderScreen(<BlindSpots />);
+    const grant = await screen.findByRole("row", { name: /azure-cost-reservation-use/ });
+    expect(within(grant).getByRole("link", { name: "Open Connect" })).toBeTruthy();
+    const wait = screen.getByRole("row", { name: /azure-cost-spend-by-service/ });
+    expect(within(wait).getByRole("link", { name: "Open Scans" }).getAttribute("href")).toBe("#scans");
   });
 
   it("pluralises counts", () => {

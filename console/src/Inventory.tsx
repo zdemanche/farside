@@ -27,10 +27,13 @@ function resourceParam(hash: string): string {
   return new URLSearchParams(hash.split("?")[1] ?? "").get("resource") ?? "";
 }
 
-const isResource = (record: InventoryRow, resource: string) =>
-  record.resourceUri === resource ||
-  record.resourceUri.endsWith(`/${resource}`) ||
-  record.displayName === resource;
+const isResource = (record: InventoryRow, resource: string) => {
+  const wanted = resource.toLowerCase();
+  const uri = record.resourceUri.toLowerCase();
+  return resource.includes("/")
+    ? uri === wanted
+    : uri.endsWith(`/${wanted}`) || record.displayName.toLowerCase() === wanted;
+};
 
 function matches(resource: InventoryRow, filters: Filters): boolean {
   const { owner, service, subscription, region, resource: wanted } = filters;
@@ -125,9 +128,10 @@ function InventoryBody({
           <button
             className="action action-secondary"
             type="button"
-            onClick={() =>
-              setFilters((current) => ({ ...current, resource: "" }))
-            }
+            onClick={() => {
+              window.history.replaceState(null, "", "#inventory");
+              setFilters((current) => ({ ...current, resource: "" }));
+            }}
           >
             Show all resources
           </button>
