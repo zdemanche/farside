@@ -25,6 +25,8 @@ const ROUTES = [
   { method: "GET" as const, url: "/v1/orgs/org-a/estate" },
   { method: "GET" as const, url: "/v1/orgs/org-a/settings" },
   { method: "PUT" as const, url: "/v1/orgs/org-a/settings" },
+  { method: "GET" as const, url: "/v1/orgs/org-a/schedule" },
+  { method: "POST" as const, url: "/v1/orgs/org-a/schedule/tick" },
   { method: "GET" as const, url: "/v1/orgs/org-a/inventory/browse" },
   { method: "GET" as const, url: "/v1/orgs/org-a/scans" },
   { method: "POST" as const, url: "/v1/orgs/org-a/scans" },
@@ -116,6 +118,7 @@ describe("org scoping", () => {
           subscriptionId: "sub-org-b",
           roles: ["Reader", "Cost Management Reader", "Monitoring Reader", "Reservations Reader"],
           createdAt: "1970-01-01T00:00:00.000Z",
+          healthy: true,
         },
       ],
     });

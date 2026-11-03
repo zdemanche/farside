@@ -36,8 +36,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 19. **E4-S4** — merged (#246).
 20. **E4-S5** — merged (#247). Console page waits on #243.
 21. **E4-S6** — merged (#248). Estate render waits on #243.
-22. **E5-S1** — this change: synthetic demo estate, demo org that blocks provider calls, and a Demo label. Keep the label functional so #243 can restyle it.
-23. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+22. **E5-S1** — merged (#249).
+23. **E5-S2** — this change: recurring scheduler, overlap/retry/missed, Settings interval. Soak week is (c) #167.
+24. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -244,10 +245,10 @@ Sell-ready path uses iac-hub, Identity, billing (D8), and a test tenant.
 | `E5-S1-T1` | #160 | Generate a synthetic estate fixture | (a) this change | Synthetic fixture generator. |
 | `E5-S1-T2` | #161 | Add demo org mode with a visible label | (a) this change | Demo org mode that blocks outbound calls. |
 | `E5-S1-T3` | #162 | Run the end-to-end suite against demo mode | (a) this change | Vitest walk of every existing screen on demo data. |
-| `E5-S2` | #163 | Scheduled scans that run on their own | (a) doable in code now | Scheduler and Settings can be tested with time control. Soak week is (c). |
-| `E5-S2-T1` | #164 | Build the recurring scheduler | (a) doable in code now | Recurring scheduler. |
-| `E5-S2-T2` | #165 | Add overlap skip, retry and missed-run detection | (a) doable in code now | Overlap skip, retry, missed-run. |
-| `E5-S2-T3` | #166 | Add schedule control to Settings | (a) doable in code now | Schedule control in Settings. |
+| `E5-S2` | #163 | Scheduled scans that run on their own | (a) this change | Scheduler + Settings. Soak week is (c) #167. |
+| `E5-S2-T1` | #164 | Build the recurring scheduler | (a) this change | Recurring scheduler. |
+| `E5-S2-T2` | #165 | Add overlap skip, retry and missed-run detection | (a) this change | Overlap skip, retry, missed-run. |
+| `E5-S2-T3` | #166 | Add schedule control to Settings | (a) this change | Schedule control in Settings. |
 | `E5-S2-T4` | #167 | Run a soak test on the test subscription | (c) live Azure / GCP / test tenant | Unattended soak on the test subscription. |
 | `E5-S3` | #168 | Contract and billing for a Farside customer | (a) after this review | D8 adopted; dashmeta billing review is in `docs/reuse-review.md`. Implement in E5-S3. |
 | `E5-S3-T1` | #169 | Settle the billing approach and suspension rule | adopted | D8 + E1-S4 billing review in `docs/reuse-review.md`. Agreement-only sign-off satisfied by owner direction. |
