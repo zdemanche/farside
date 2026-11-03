@@ -80,6 +80,15 @@ function rejectLocked(
   return true;
 }
 
+function secretsRejected(request: FastifyRequest, reply: FastifyReply): FastifyReply | undefined {
+  return request.routeOptions.config.rejectSecrets && rejectSecrets(request.body, reply)
+    ? reply
+    : undefined;
+}
+
+export const secretsGuard: preValidationAsyncHookHandler = async (request, reply) =>
+  secretsRejected(request, reply);
+
 function orgGate(ctx: AppContext): preValidationAsyncHookHandler {
   return async (request, reply) => {
     const orgId = orgIdOf(request);
@@ -110,10 +119,7 @@ function orgGate(ctx: AppContext): preValidationAsyncHookHandler {
     if (rejectLocked(ctx, request, reply, orgId)) {
       return reply;
     }
-    if (config.rejectSecrets && rejectSecrets(request.body, reply)) {
-      return reply;
-    }
-    return undefined;
+    return secretsRejected(request, reply);
   };
 }
 

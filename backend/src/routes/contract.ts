@@ -1,6 +1,6 @@
 import { CardDataError, advanceContract, billingView, parseContract } from "../billing.js";
 import type { OrgParams, RoutePlugin } from "../http/context.js";
-import { operatorGuard } from "../http/hooks.js";
+import { operatorGuard, secretsGuard } from "../http/hooks.js";
 import { problem, sendClean } from "../http/responses.js";
 import { advanceBody, contractBody, orgParams } from "../http/schemas.js";
 import { audit } from "../observability.js";
@@ -9,7 +9,7 @@ type ContractEvent = "failed_payment" | "paid" | "ended";
 
 export const contractRoutes: RoutePlugin = (ctx) => async (app) => {
   const operatorOnly = { operator: true };
-  const preValidation = operatorGuard(ctx);
+  const operatorGate = [operatorGuard(ctx)];
 
   app.get<{ Params: OrgParams }>(
     "/v1/orgs/:orgId/contract",
@@ -27,7 +27,7 @@ export const contractRoutes: RoutePlugin = (ctx) => async (app) => {
     {
       schema: { params: orgParams, body: contractBody },
       config: { ...operatorOnly, rejectSecrets: true, invalidTitle: "Invalid contract" },
-      preValidation,
+      preValidation: [...operatorGate, secretsGuard],
     },
     async (request, reply) => {
       const now = ctx.clock();
@@ -55,7 +55,7 @@ export const contractRoutes: RoutePlugin = (ctx) => async (app) => {
     {
       schema: { params: orgParams, body: advanceBody },
       config: { ...operatorOnly, invalidTitle: "Invalid contract event" },
-      preValidation,
+      preValidation: operatorGate,
     },
     async (request, reply) => {
       const { orgId } = request.params;

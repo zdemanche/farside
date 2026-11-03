@@ -181,6 +181,31 @@ describe("schema validation answers with the problem+json envelope", () => {
     expect(operator.json().title).toBe("Invalid contract");
   });
 
+  it.each([
+    ["clientSecret", { clientSecret: "x" }],
+    ["a PEM value", { note: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----" }],
+  ])("rejects %s on the operator contract route", async (_name, extra) => {
+    const response = await send(
+      "PUT",
+      "/contract",
+      { plan: "farside-standard", startDate: T0, ...extra },
+      { ...ORG, [OPERATOR_HEADER]: OPERATOR_TOKEN },
+    );
+    expect(response.statusCode).toBe(400);
+    expect(response.json().title).toBe("Secret rejected");
+  });
+
+  it("rejects a secret-shaped field on an org route", async () => {
+    const response = await send("PUT", "/settings", {
+      ownerTagKey: "owner",
+      productionTagKey: "env",
+      productionTagValue: "prod",
+      clientSecret: "x",
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().title).toBe("Secret rejected");
+  });
+
   it("validates a demo canned POST before the shortcut", async () => {
     expect((await send("POST", "/scans", { subscriptionId: "../x" }, DEMO)).statusCode).toBe(400);
     expect((await send("POST", "/scans", { subscriptionId: "main" }, DEMO)).statusCode).toBe(200);
