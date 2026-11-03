@@ -101,3 +101,21 @@ export function unusedSavingsPlanSavings(unusedAmount: number): NamedSavingsRang
     basis: SAVINGS_PLAN_SAVINGS_BASIS,
   });
 }
+
+export const GCP_DISK_SAVINGS_BASIS =
+  "Monthly list price of the unused disk type and size, as a range";
+export const GCP_IP_SAVINGS_BASIS =
+  "Monthly list price of a reserved unused external IP, as a range";
+
+export function gcpDiskMonthlySavings(sizeGb: number): NamedSavingsRange {
+  return savingsRange({
+    min: sizeGb * 0.04,
+    max: sizeGb * 0.06,
+    currency: "USD",
+    basis: GCP_DISK_SAVINGS_BASIS,
+  });
+}
+
+export function gcpIpMonthlySavings(): NamedSavingsRange {
+  return savingsRange({ min: 2.5, max: 4, currency: "USD", basis: GCP_IP_SAVINGS_BASIS });
+}

@@ -8,6 +8,7 @@ The GCP control spec lists every launch check from the proposal table as unverif
 |---|---|---|
 | E6-S1-T5 | #193 | `docs/gcp/launch-checks.json` has one entry per proposal GCP check, with role, data source, evidence fields, undetermined causes, and `billingExportRequired` on cost checks. All `liveRunAt` are null. |
 | E6-S2-T3 | #198 | `docs/gcp/ground-truth.json` seeds invented waste cases. Labels map onto `InventoryRecord.tags`; `Settings.ownerTagKey` is the owner label key; `GET /inventory/no-owner` counts `disk-parked`. Cloud Asset harvest and a live project stay leftover. |
+| E6-S3-T1 | #200 | `gcp-waste-unattached-disks` and `gcp-waste-unused-external-ips` fail `disk-parked` / `addr-idle` and pass the in-use lookalikes. Savings are named ranges. Recommender idle findings stay leftover (#202). |
 
 ## Leftovers
 
