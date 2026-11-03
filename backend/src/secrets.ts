@@ -1,8 +1,43 @@
-const SECRET_KEY =
-  /^(client_secret|clientsecret|access_token|refresh_token|id_token|password|secret|api[_-]?key)$/i;
+const SECRET_KEY_PARTS = [
+  "secret",
+  "token",
+  "password",
+  "privatekey",
+  "apikey",
+  "authorization",
+  "connectionstring",
+  "accountkey",
+];
 
-const SECRET_VALUE =
-  /(client_secret|azure[_-]?client[_-]?secret|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,})/i;
+const SECRET_VALUE = new RegExp(
+  [
+    "client_secret",
+    "azure[_-]?client[_-]?secret",
+    "eyJ[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{10,}",
+    "-----BEGIN [A-Z ]*PRIVATE KEY-----",
+    "ya29\\.[A-Za-z0-9_-]{20,}",
+    "\\bAKIA[0-9A-Z]{16}\\b",
+    "[?&]sig=[A-Za-z0-9%+/=]{20,}",
+    "\\b[A-Za-z0-9]{3}\\dQ~[A-Za-z0-9_.~-]{30,}",
+  ].join("|"),
+  "i",
+);
+
+function isSecretKey(key: string, child: unknown): boolean {
+  if (
+    child == null ||
+    typeof child === "number" ||
+    typeof child === "boolean"
+  ) {
+    return false;
+  }
+  const normalized = key.replace(/[-_]/g, "").toLowerCase();
+  return (
+    SECRET_KEY_PARTS.some((part) => normalized.includes(part)) ||
+    normalized.startsWith("sas") ||
+    normalized.endsWith("sas")
+  );
+}
 
 export class SecretLeakError extends Error {
   constructor(path: string) {
@@ -30,7 +65,7 @@ function walk(value: unknown, path: string, hits: string[]): void {
   }
   for (const [key, child] of Object.entries(value)) {
     const childPath = path ? `${path}.${key}` : key;
-    if (SECRET_KEY.test(key)) {
+    if (isSecretKey(key, child)) {
       hits.push(childPath);
     }
     walk(child, childPath, hits);
