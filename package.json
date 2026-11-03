@@ -12,19 +12,21 @@
     "infra"
   ],
   "scripts": {
-    "lint": "npm run lint --workspaces --if-present && npm run lint:azure-spec && npm run lint:reuse-review && npm run lint:azure-estate && npm run lint:operator-runbook && npm run lint:gcp-spec",
+    "lint": "npm run lint --workspaces --if-present && npm run lint:azure-spec && npm run lint:reuse-review && npm run lint:azure-estate && npm run lint:operator-runbook && npm run lint:gcp-spec && npm run lint:gcp-estate",
     "lint:azure-spec": "node scripts/azure-spec/lint.mjs",
     "lint:reuse-review": "node scripts/reuse-review/lint.mjs",
     "lint:azure-estate": "node scripts/azure-estate/lint.mjs",
     "lint:operator-runbook": "node scripts/operator-runbook/lint.mjs",
     "lint:gcp-spec": "node scripts/gcp-spec/lint.mjs",
+    "lint:gcp-estate": "node scripts/gcp-estate/lint.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test:azure-spec && npm run test:reuse-review && npm run test:azure-estate && npm run test:operator-runbook && npm run test:gcp-spec && npm run test --workspaces --if-present",
+    "test": "npm run test:azure-spec && npm run test:reuse-review && npm run test:azure-estate && npm run test:operator-runbook && npm run test:gcp-spec && npm run test:gcp-estate && npm run test --workspaces --if-present",
     "test:azure-spec": "vitest run --config scripts/azure-spec/vitest.config.ts",
     "test:reuse-review": "vitest run --config scripts/reuse-review/vitest.config.ts",
     "test:azure-estate": "vitest run --config scripts/azure-estate/vitest.config.ts",
     "test:operator-runbook": "vitest run --config scripts/operator-runbook/vitest.config.ts",
     "test:gcp-spec": "vitest run --config scripts/gcp-spec/vitest.config.ts",
+    "test:gcp-estate": "vitest run --config scripts/gcp-estate/vitest.config.ts",
     "build": "npm run build --workspaces --if-present"
   },
   "devDependencies": {
