@@ -17,26 +17,31 @@ export function Connect() {
 
   return (
     <>
-      <h1 id="page-title" tabIndex={-1}>
+      <h1 className="page-title" id="page-title" tabIndex={-1}>
         Connect Azure
       </h1>
-      <p>Farside uses federated credentials. It never asks for a client secret.</p>
+      <p className="page-description">
+        Farside uses federated credentials. It never asks for a client secret.
+      </p>
       <h2>Required read-only roles</h2>
-      <ul>
+      <ul className="tag-list">
         {REQUIRED_AZURE_ROLES.map((role) => (
-          <li key={role}>{role}</li>
+          <li className="chip chip-neutral" key={role}>
+            {role}
+          </li>
         ))}
       </ul>
       <h2>Connect steps</h2>
-      <ol>
+      <ol className="panel step-list">
         {CONNECT_STEPS.map((step) => (
           <li key={step}>{step}</li>
         ))}
       </ol>
-      <form onSubmit={onSubmit}>
-        <div>
+      <form className="panel form" onSubmit={onSubmit}>
+        <div className="field">
           <label htmlFor={tenantFieldId}>Azure tenant id</label>
           <input
+            className="input"
             id={tenantFieldId}
             name="tenantId"
             type="text"
@@ -48,9 +53,10 @@ export function Connect() {
             onChange={(event) => setTenantId(event.target.value)}
           />
         </div>
-        <div>
+        <div className="field">
           <label htmlFor={subscriptionFieldId}>Azure subscription id</label>
           <input
+            className="input"
             id={subscriptionFieldId}
             name="subscriptionId"
             type="text"
@@ -62,9 +68,13 @@ export function Connect() {
             onChange={(event) => setSubscriptionId(event.target.value)}
           />
         </div>
-        <button type="submit">Connect subscription</button>
+        <div>
+          <button className="action action-primary" type="submit">
+            Connect subscription
+          </button>
+        </div>
       </form>
-      <p role="status" aria-live="polite">
+      <p className="notice" role="status" aria-live="polite">
         {status}
       </p>
     </>

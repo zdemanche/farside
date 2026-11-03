@@ -1,5 +1,12 @@
 import { useId, useState } from "react";
+import { Chip, coverageTone, type Tone } from "./Chip";
 import { ISSUE_ROWS, type IssueRow, type IssueStatus } from "./issues-data";
+
+const STATUS_TONE: Record<IssueStatus, Tone> = {
+  open: "warn",
+  closed: "good",
+  not_confirmed: "neutral",
+};
 
 function selectedId(hash: string): string {
   const match = hash.match(/^issues\/(.+)$/);
@@ -37,14 +44,22 @@ export function Issues({
 
   return (
     <>
-      <h1 id="page-title" tabIndex={-1}>
+      <h1 className="page-title" id="page-title" tabIndex={-1}>
         Issues
       </h1>
-      <p>Stored issues with proof of coverage. An issue closes only when its scope was covered.</p>
-      <form>
-        <div>
+      <p className="page-description">
+        Stored issues with proof of coverage. An issue closes only when its scope was covered.
+      </p>
+      <form className="panel filters">
+        <div className="field">
           <label htmlFor={checkId}>Check</label>
-          <select id={checkId} name="check" value={check} onChange={(event) => setCheck(event.target.value)}>
+          <select
+            className="input"
+            id={checkId}
+            name="check"
+            value={check}
+            onChange={(event) => setCheck(event.target.value)}
+          >
             <option value="">All checks</option>
             {checks.map((id) => (
               <option key={id} value={id}>
@@ -53,9 +68,10 @@ export function Issues({
             ))}
           </select>
         </div>
-        <div>
+        <div className="field">
           <label htmlFor={statusId}>Status</label>
           <select
+            className="input"
             id={statusId}
             name="status"
             value={status}
@@ -67,9 +83,10 @@ export function Issues({
             <option value="not_confirmed">not confirmed</option>
           </select>
         </div>
-        <div>
+        <div className="field">
           <label htmlFor={subscriptionId}>Subscription</label>
           <select
+            className="input"
             id={subscriptionId}
             name="subscription"
             value={subscription}
@@ -84,36 +101,44 @@ export function Issues({
           </select>
         </div>
       </form>
-      <p role="status" aria-live="polite">
+      <p className="page-meta" role="status" aria-live="polite">
         {visible.length} issues
       </p>
-      <table>
-        <caption>Issue queue</caption>
-        <thead>
-          <tr>
-            <th scope="col">Resource</th>
-            <th scope="col">Check</th>
-            <th scope="col">Status</th>
-            <th scope="col">Coverage</th>
-            <th scope="col">Savings</th>
-          </tr>
-        </thead>
-        <tbody>
-          {visible.map((issue) => (
-            <tr key={issue.id}>
-              <th scope="row">
-                <a href={`#issues/${issue.id}`}>{issue.resourceId}</a>
-              </th>
-              <td>{issue.checkId}</td>
-              <td>{issue.status === "not_confirmed" ? "not confirmed" : issue.status}</td>
-              <td>{issue.coverage}</td>
-              <td>{issue.savings}</td>
+      <div className="table-wrap" tabIndex={0}>
+        <table>
+          <caption>Issue queue</caption>
+          <thead>
+            <tr>
+              <th scope="col">Resource</th>
+              <th scope="col">Check</th>
+              <th scope="col">Status</th>
+              <th scope="col">Coverage</th>
+              <th scope="col">Savings</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {visible.map((issue) => (
+              <tr key={issue.id}>
+                <th scope="row">
+                  <a href={`#issues/${issue.id}`}>{issue.resourceId}</a>
+                </th>
+                <td>{issue.checkId}</td>
+                <td>
+                  <Chip tone={STATUS_TONE[issue.status]}>
+                    {issue.status === "not_confirmed" ? "not confirmed" : issue.status}
+                  </Chip>
+                </td>
+                <td>
+                  <Chip tone={coverageTone(issue.coverage)}>{issue.coverage}</Chip>
+                </td>
+                <td>{issue.savings}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {selected ? (
-        <article aria-labelledby="issue-detail-title">
+        <article className="panel detail" aria-labelledby="issue-detail-title">
           <h2 id="issue-detail-title">{selected.resourceId}</h2>
           <p>Check {selected.checkId}</p>
           <p>Evidence {selected.evidence}</p>
