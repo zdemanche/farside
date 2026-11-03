@@ -3,10 +3,19 @@ import { HEALTH_PATH, PRODUCT_KEY, customerAddress } from "./product.js";
 
 export type FunctionUrlAuthType = "AWS_IAM" | "NONE";
 
+export type EdgeBehavior = {
+  pathPattern: string;
+  origin: "console" | "api";
+  signedToOrigin: boolean;
+};
+
+export type ViewerAuthenticator = "edge-function" | "waf" | "signed-cookies";
+
 export type PlannedResource = {
   name: string;
   kind:
     | "iam-role"
+    | "ssm-parameter"
     | "lambda"
     | "lambda-url"
     | "log-group"
@@ -15,6 +24,8 @@ export type PlannedResource = {
     | "cloudfront";
   tags: FarsideTags;
   authType?: FunctionUrlAuthType;
+  behaviors?: EdgeBehavior[];
+  viewerAuthenticator?: ViewerAuthenticator;
 };
 
 export type DeployPlan = {
@@ -42,6 +53,7 @@ export function planDevStack(input: FarsideTagInput & { accountId: string }): De
   const prefix = `${PRODUCT_KEY}-${input.customerName}`;
   const resources: PlannedResource[] = [
     { name: `${prefix}-api-role`, kind: "iam-role", tags },
+    { name: `${prefix}-operator-token`, kind: "ssm-parameter", tags },
     { name: `${prefix}-api-logs`, kind: "log-group", tags },
     { name: `${prefix}-api`, kind: "lambda", tags },
     { name: `${prefix}-api-url`, kind: "lambda-url", tags, authType: "AWS_IAM" },
@@ -51,7 +63,12 @@ export function planDevStack(input: FarsideTagInput & { accountId: string }): De
     { name: `${prefix}-tick-scheduler-role`, kind: "iam-role", tags },
     { name: `${prefix}-tick-schedule`, kind: "scheduler-schedule", tags },
     { name: `${prefix}-console`, kind: "s3-bucket", tags },
-    { name: `${prefix}-cdn`, kind: "cloudfront", tags },
+    {
+      name: `${prefix}-cdn`,
+      kind: "cloudfront",
+      tags,
+      behaviors: [{ pathPattern: "*", origin: "console", signedToOrigin: true }],
+    },
   ];
 
   const plan: DeployPlan = {
@@ -78,6 +95,17 @@ export function assertAuthenticatedEdge(plan: DeployPlan): void {
   if (open.length > 0) {
     throw new PublicApiError(
       `Function URL ${open.map((resource) => resource.name).join(", ")} serves /v1 without AWS_IAM auth.`,
+    );
+  }
+  const unauthenticated = plan.resources.filter(
+    (resource) =>
+      resource.kind === "cloudfront" &&
+      !resource.viewerAuthenticator &&
+      (resource.behaviors ?? []).some((behavior) => behavior.origin === "api"),
+  );
+  if (unauthenticated.length > 0) {
+    throw new PublicApiError(
+      `CloudFront ${unauthenticated.map((resource) => resource.name).join(", ")} routes API paths to the Function URL without a viewer authenticator.`,
     );
   }
 }

@@ -14,6 +14,7 @@ describe("dev deploy plan", () => {
     expect(plan.healthPath).toBe("/health");
     expect(plan.resources.map((resource) => resource.kind)).toEqual([
       "iam-role",
+      "ssm-parameter",
       "log-group",
       "lambda",
       "lambda-url",
@@ -31,6 +32,37 @@ describe("dev deploy plan", () => {
     const urls = plan.resources.filter((resource) => resource.kind === "lambda-url");
     expect(urls.length).toBeGreaterThan(0);
     expect(urls.every((resource) => resource.authType === "AWS_IAM")).toBe(true);
+  });
+
+  it("serves only the console through CloudFront", () => {
+    const cdn = plan.resources.find((resource) => resource.kind === "cloudfront");
+    expect(cdn?.behaviors?.every((behavior) => behavior.origin === "console")).toBe(true);
+    expect(() => assertAuthenticatedEdge(plan)).not.toThrow();
+  });
+
+  it("rejects a CloudFront behavior that routes /v1 to the Function URL without a viewer authenticator", () => {
+    const routed = {
+      ...plan,
+      resources: plan.resources.map((resource) =>
+        resource.kind === "cloudfront"
+          ? {
+              ...resource,
+              behaviors: [
+                ...(resource.behaviors ?? []),
+                { pathPattern: "/v1/*", origin: "api" as const, signedToOrigin: true },
+              ],
+            }
+          : resource,
+      ),
+    };
+    expect(() => assertAuthenticatedEdge(routed)).toThrow(PublicApiError);
+    const authenticated = {
+      ...routed,
+      resources: routed.resources.map((resource) =>
+        resource.kind === "cloudfront" ? { ...resource, viewerAuthenticator: "edge-function" as const } : resource,
+      ),
+    };
+    expect(() => assertAuthenticatedEdge(authenticated)).not.toThrow();
   });
 
   it("rejects an unauthenticated function URL on a stack serving /v1", () => {

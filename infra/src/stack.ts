@@ -11,8 +11,6 @@ export type StackInputs = {
   logRetentionDays: number;
 };
 
-const CACHING_DISABLED = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad";
-const ALL_VIEWER_EXCEPT_HOST = "b689b0a8-53d0-40ab-baf2-68738e2966ac";
 const CACHING_OPTIMIZED = "658327ea-f89d-4fab-a63d-7e88639e58f6";
 const CLOUDFRONT = "cloudfront.amazonaws.com";
 
@@ -83,22 +81,42 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
   const apiName = `${prefix}-api`;
   const tickName = `${prefix}-tick`;
   const environment = { FARSIDE_LOG_LEVEL: "info" };
+  const tokenParameter = new aws.ssm.Parameter(`${prefix}-operator-token`, {
+    name: `/${PRODUCT_KEY}/${plan.customerName}/operator-token`,
+    type: "SecureString",
+    value: operatorToken,
+    tags,
+  });
+  const ssmKey = aws.kms.getKeyOutput({ keyId: "alias/aws/ssm" });
 
   const apiLogs = new aws.cloudwatch.LogGroup(`${apiName}-logs`, {
     name: `/aws/lambda/${apiName}`,
     retentionInDays: logRetentionDays,
     tags,
   });
+  const apiRole = lambdaRole(apiName, apiLogs.arn, tags);
   const api = lambdaFunction({
     name: apiName,
     bundle: apiBundle,
     file: "lambda.mjs",
     handler: "lambda.handler",
-    role: lambdaRole(apiName, apiLogs.arn, tags),
+    role: apiRole,
     logGroup: apiLogs,
-    environment: { ...environment, FARSIDE_OPERATOR_TOKEN: operatorToken },
+    environment: { ...environment, FARSIDE_OPERATOR_TOKEN_PARAM: tokenParameter.name },
     timeout: 30,
     tags,
+  });
+  new aws.iam.RolePolicy(`${apiName}-operator-token`, {
+    role: apiRole.id,
+    policy: pulumi.all([tokenParameter.arn, ssmKey.arn]).apply(([parameterArn, keyArn]) =>
+      JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          { Effect: "Allow", Action: "ssm:GetParameter", Resource: parameterArn },
+          { Effect: "Allow", Action: "kms:Decrypt", Resource: keyArn },
+        ],
+      }),
+    ),
   });
   const apiUrl = new aws.lambda.FunctionUrl(`${apiName}-url`, {
     functionName: api.name,
@@ -159,20 +177,8 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     signingBehavior: "always",
     signingProtocol: "sigv4",
   });
-  const apiOac = new aws.cloudfront.OriginAccessControl(`${prefix}-api-oac`, {
-    originAccessControlOriginType: "lambda",
-    signingBehavior: "always",
-    signingProtocol: "sigv4",
-  });
 
-  const apiBehavior = {
-    targetOriginId: "api",
-    viewerProtocolPolicy: "https-only",
-    allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
-    cachedMethods: ["GET", "HEAD"],
-    cachePolicyId: CACHING_DISABLED,
-    originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST,
-  };
+  // TODO: #48 route /v1/* here only once a viewer authenticator (Identity) fronts the Function URL; see assertAuthenticatedEdge.
   const cdn = new aws.cloudfront.Distribution(`${prefix}-cdn`, {
     enabled: true,
     defaultRootObject: "index.html",
@@ -183,17 +189,6 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
         domainName: consoleBucket.bucketRegionalDomainName,
         originAccessControlId: bucketOac.id,
       },
-      {
-        originId: "api",
-        domainName: apiUrl.functionUrl.apply((url) => new URL(url).hostname),
-        originAccessControlId: apiOac.id,
-        customOriginConfig: {
-          httpPort: 80,
-          httpsPort: 443,
-          originProtocolPolicy: "https-only",
-          originSslProtocols: ["TLSv1.2"],
-        },
-      },
     ],
     defaultCacheBehavior: {
       targetOriginId: "console",
@@ -203,10 +198,6 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
       cachePolicyId: CACHING_OPTIMIZED,
       compress: true,
     },
-    orderedCacheBehaviors: [
-      { pathPattern: "/v1/*", ...apiBehavior },
-      { pathPattern: plan.healthPath, ...apiBehavior },
-    ],
     restrictions: { geoRestriction: { restrictionType: "none" } },
     viewerCertificate: { cloudfrontDefaultCertificate: true },
     tags,
@@ -229,19 +220,9 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
       }),
     ),
   });
-  for (const action of ["lambda:InvokeFunctionUrl", "lambda:InvokeFunction"]) {
-    new aws.lambda.Permission(`${apiName}-cdn-${action.split(":")[1]}`, {
-      function: api.name,
-      action,
-      principal: CLOUDFRONT,
-      sourceArn: cdn.arn,
-      ...(action === "lambda:InvokeFunctionUrl" ? { functionUrlAuthType: "AWS_IAM" } : {}),
-    });
-  }
-
   return {
     consoleUrl: pulumi.interpolate`https://${cdn.domainName}`,
-    healthUrl: pulumi.interpolate`https://${cdn.domainName}${plan.healthPath}`,
+    apiUrl: apiUrl.functionUrl,
     consoleBucket: consoleBucket.bucket,
     scheduleName: schedule.name,
   };

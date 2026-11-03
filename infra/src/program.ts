@@ -25,6 +25,6 @@ const outputs = aws.getCallerIdentityOutput().accountId.apply((callerAccountId) 
 });
 
 export const consoleUrl = outputs.consoleUrl;
-export const healthUrl = outputs.healthUrl;
+export const apiUrl = outputs.apiUrl;
 export const consoleBucket = outputs.consoleBucket;
 export const scheduleName = outputs.scheduleName;
