@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "story": "E6-S2",
+  "cloud": "gcp",
+  "ownerLabelKey": "owner",
+  "snapshotRetentionDays": 30,
+  "provisioned": false,
+  "provisionedNote": "Physical GCP project and Cloud Asset harvest are leftovers (D7, #196, #197). This file is the repeatable seed. Invented names only. No customer data.",
+  "projects": [
+    {
+      "id": "farside-test",
+      "role": "seeded-waste"
+    }
+  ],
+  "items": [
+    {
+      "id": "disk-parked",
+      "project": "farside-test",
+      "type": "compute.googleapis.com/Disk",
+      "title": "Unattached persistent disk",
+      "region": "us-central1-a",
+      "properties": { "usersCount": 0, "sizeGb": 100 },
+      "labels": {}
+    },
+    {
+      "id": "disk-in-use",
+      "project": "farside-test",
+      "type": "compute.googleapis.com/Disk",
+      "title": "Disk attached to vm-harbor",
+      "region": "us-central1-a",
+      "properties": { "usersCount": 1, "sizeGb": 50 },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "addr-idle",
+      "project": "farside-test",
+      "type": "compute.googleapis.com/Address",
+      "title": "Reserved unused external IP",
+      "region": "us-central1",
+      "properties": { "status": "RESERVED", "usersCount": 0, "address": "203.0.113.10" },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "addr-bound",
+      "project": "farside-test",
+      "type": "compute.googleapis.com/Address",
+      "title": "External IP in use",
+      "region": "us-central1",
+      "properties": { "status": "IN_USE", "usersCount": 1, "address": "203.0.113.11" },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "snap-aged",
+      "project": "farside-test",
+      "type": "compute.googleapis.com/Snapshot",
+      "title": "Snapshot older than retention",
+      "region": "global",
+      "properties": { "ageDays": 90, "sizeGb": 20 },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "snap-fresh",
+      "project": "farside-test",
+      "type": "compute.googleapis.com/Snapshot",
+      "title": "Snapshot inside retention",
+      "region": "global",
+      "properties": { "ageDays": 5, "sizeGb": 20 },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "image-stale",
+      "project": "farside-test",
+      "type": "compute.googleapis.com/Image",
+      "title": "Custom image older than retention",
+      "region": "global",
+      "properties": { "ageDays": 120, "sizeGb": 10 },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "image-current",
+      "project": "farside-test",
+      "type": "compute.googleapis.com/Image",
+      "title": "Custom image inside retention",
+      "region": "global",
+      "properties": { "ageDays": 4, "sizeGb": 10 },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "vm-harbor",
+      "project": "farside-test",
+      "type": "compute.googleapis.com/Instance",
+      "title": "Busy VM used as a live-looking negative",
+      "region": "us-central1-a",
+      "properties": { "status": "RUNNING" },
+      "labels": { "owner": "farside-test" }
+    }
+  ]
+}
