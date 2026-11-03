@@ -32,6 +32,9 @@ const RESOURCE_KEYS = [
   "databaseId",
   "certificateId",
   "gatewayId",
+  "reservationId",
+  "savingsPlanId",
+  "subscriptionId",
   "resourceId",
 ] as const;
 
@@ -59,16 +62,25 @@ export function applyScanToIssues(input: {
   coverage: CoverageEntry[];
   scanId: string;
   observedAt: string;
+  checkIds?: readonly string[];
 }): StoredIssue[] {
+  const limit = input.checkIds ? new Set(input.checkIds) : null;
   const byId = new Map(input.issues.map((issue) => [issue.id, { ...issue }]));
   const seen = new Set<string>();
+  const undetermined = new Map<string, string | undefined>();
 
   for (const finding of input.findings) {
-    if (finding.result !== "fail") {
+    if (limit && !limit.has(finding.checkId)) {
       continue;
     }
     const resourceId = resourceIdFromFinding(finding);
     const id = issueIdentity(finding.checkId, resourceId, finding.scope.id);
+    if (finding.result === "undetermined") {
+      undetermined.set(id, finding.closer);
+    }
+    if (finding.result !== "fail") {
+      continue;
+    }
     seen.add(id);
     const current = byId.get(id);
     const next: StoredIssue = {
@@ -94,8 +106,17 @@ export function applyScanToIssues(input: {
     if (seen.has(issue.id) || issue.status === "closed") {
       continue;
     }
+    if (limit && !limit.has(issue.checkId)) {
+      continue;
+    }
     const coverage = coverageFor(input.coverage, issue.scopeId);
-    if (coverage?.state === "assessed") {
+    if (undetermined.has(issue.id)) {
+      issue.status = "not_confirmed";
+      issue.coverage = "undetermined";
+      issue.notConfirmedReason =
+        undetermined.get(issue.id) ?? "This scan could not determine the result for this resource.";
+      delete issue.closingScanId;
+    } else if (coverage?.state === "assessed") {
       issue.status = "closed";
       issue.coverage = "assessed";
       issue.closingScanId = input.scanId;

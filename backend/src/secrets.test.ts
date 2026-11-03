@@ -3,12 +3,13 @@ import { buildApp } from "./app.js";
 import { SecretLeakError, assertNoSecrets, secretPaths } from "./secrets.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 
 describe("no-secrets guard", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store);
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, TEST_APP_OPTIONS);
 
   afterAll(async () => {
     await app.close();
@@ -128,6 +129,30 @@ describe("no-secrets guard", () => {
       "key_-prefixed Entra",
       { note: "key_abc8Q~aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
     ],
+    [
+      "alphabetic-glued JWT",
+      { note: "tokeneyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
+    ],
+    [
+      "alphanumeric-glued JWT",
+      { note: "abc123eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
+    ],
+    [
+      "dot-prefixed JWT start",
+      { note: "x.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
+    ],
+    [
+      "dash-leading JWT",
+      { note: "-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
+    ],
+    [
+      "underscore-leading JWT",
+      { note: "_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" },
+    ],
+    [
+      "glued match false positive (accepted)",
+      { note: "surveyJavascriptBundleLoader.production" },
+    ],
     ["JWT value", { note: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" }],
   ])("rejects %s", (_name, payload) => {
     expect(() => assertNoSecrets(payload)).toThrow(SecretLeakError);
@@ -149,12 +174,13 @@ describe("no-secrets guard", () => {
     expect(secretPaths(payload)).toEqual([]);
   });
 
-  it.each([["eyJ".repeat(100_000)], ["eyJ-".repeat(50_000)]])(
-    "evaluates a long eyJ run quickly",
-    (note) => {
-      const started = performance.now();
-      secretPaths({ note });
-      expect(performance.now() - started).toBeLessThan(200);
-    },
-  );
+  it.each([
+    ["eyJ".repeat(100_000)],
+    ["eyJ-".repeat(50_000)],
+    ["aeyJ".repeat(50_000)],
+  ])("evaluates a long eyJ run quickly", (note) => {
+    const started = performance.now();
+    secretPaths({ note });
+    expect(performance.now() - started).toBeLessThan(200);
+  });
 });

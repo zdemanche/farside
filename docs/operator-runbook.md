@@ -15,7 +15,7 @@ This is the written path (#174). Live deploy (#175), a cold rehearsal on a test 
 | iac-hub `PRODUCTS` | In-repo sketch only: `infra/iac-hub/products-entry.ts`. Merge is leftover (#26, #175). |
 | Moonaan Identity | Claim and sign-in are leftover. Until then Farside scopes with `x-farside-org` and `x-farside-actor`. |
 | Azure app | Multi-tenant registration in a Moonaan-owned home tenant, federated credentials, **no client secret**. Test subscription in a **different** tenant. See `docs/azure/app-registration.md`. Not created from this workspace. |
-| Contract state | PUT `/v1/orgs/:orgId/contract`. No-contract still allows scans. Paused / retaining / ended block new scans (D8). |
+| Contract state | Operator-token PUT `/v1/orgs/:orgId/contract`. No-contract still allows scans. Paused / retaining / ended block new scans and make the console read-only (D8). |
 
 ## Steps
 
@@ -25,8 +25,7 @@ Operator-run. No card numbers.
 
 ```http
 PUT /v1/orgs/{orgId}/contract
-x-farside-org: {orgId}
-x-farside-actor: {operator}
+x-farside-operator: {operator token}
 ```
 
 ```json
@@ -38,7 +37,9 @@ x-farside-actor: {operator}
 }
 ```
 
-`state` defaults to `active`. Invoice list is always empty — dashmeta had none to reuse.
+`state` is derived, never submitted: `active`, or `warning` when `unpaidAt` is set. Invoice list is always empty — dashmeta had none to reuse.
+
+**Operator token.** Contract writes (`PUT /contract`, `POST /contract/advance`) need the `x-farside-operator` header to equal the `FARSIDE_OPERATOR_TOKEN` environment variable the backend was started with. An org session (`x-farside-org`) gets 403 on both, and so does every request when `FARSIDE_OPERATOR_TOKEN` is unset or empty. The server clock supplies "now"; a `now` or `asOf` in the body is ignored. Set `unpaidAt` on a failed payment: warning runs 7 days, grace 14, then scans pause and the console is read-only. Data is kept 30 more days (day 51 from `unpaidAt`, or 30 days from the end date) and is then offboarded with a deletion record whose trigger is `retention`: on the org's next request, and by an hourly server-side sweep (`runRetentionSweep`; a future scheduled Lambda calls the same function).
 
 #### Check
 
@@ -50,7 +51,7 @@ x-farside-actor: {operator}
 
 - Do not store a corrected contract on top of card data: the PUT is rejected and nothing is written.
 - Wrong plan or date: PUT again with the corrected fields (no PAN keys).
-- If the customer should not scan yet, POST `/v1/orgs/{orgId}/contract/advance` with `{ "event": "ended", "now": "<iso>" }` and wait — do not delete the org here.
+- If the customer should not scan yet, POST `/v1/orgs/{orgId}/contract/advance` (operator token) with `{ "event": "ended" }` and wait — do not delete the org here.
 
 ### 2. Register Farside in iac-hub PRODUCTS {#register-product}
 
@@ -145,7 +146,7 @@ Hub order, `workflow_dispatch` only (never `push` to `main`):
 
 `materializeDevStack` calls `assertDedicatedAccount`. Resources stay a typed sketch until AWS OIDC and Pulumi state are wired; current workflows **skip** apply rather than create in the wrong account.
 
-Every deploy workflow is `workflow_dispatch` only; only `ci.yml` runs on push. A skipped step prints a `::warning::` and a step-summary line saying what was not done. `deploy.yml`, `infra-pulumi_up.yaml` and `infra-pulumi_destroy.yaml` run in the GitHub `dev` / `customer` environments: configure required reviewers on both so a dispatch waits for approval before a job can assume the AWS role (`id-token: write` is granted on those jobs only). Each workflow rejects an `accountId` that is not 12 digits. `accountId` must also be registered to the customer slug in `infra/accounts.json` (merge that change first); the Pulumi guard refuses unregistered, cross-customer and product-dev accounts.
+Every deploy workflow is `workflow_dispatch` only; only `ci.yml` runs on push. A skipped step prints a `::warning::` and a step-summary line saying what was not done. `deploy.yml`, `infra-pulumi_up.yaml` and `infra-pulumi_destroy.yaml` run in the GitHub `dev` / `customer` environments: configure required reviewers on both so a dispatch waits for approval before a job can assume the AWS role (`id-token: write` is granted on those jobs only). Every workflow fails with an `::error::` and a step summary when dispatched from any ref other than `refs/heads/main`, and reads `infra/accounts.json` from `origin/main` rather than the dispatched checkout. Configure both environments with a deployment-branch policy of `main` only, plus required reviewers. The AWS OIDC role trust policy must bind `sub = repo:zdemanche/farside:environment:<name>` (`dev` or `customer`) and `aud = sts.amazonaws.com`; an environment-scoped token carries no ref, so the environment's main-only deployment-branch policy is what enforces the ref. For an IAM-side ref check, customize the repo's OIDC `sub` claim template to include `ref`. Each workflow rejects an `accountId` that is not 12 digits. `accountId` must also be registered to the customer slug in `infra/accounts.json` (merge that change first); the Pulumi guard refuses unregistered, cross-customer and product-dev accounts.
 
 **Leftover:** a real `pulumi up` needs the dedicated account, GitHub OIDC, and Pulumi state (#175).
 
@@ -262,12 +263,12 @@ x-farside-actor: {actor}
 Use this to walk Farside-owned steps without iac-hub or Identity. It does **not** satisfy #176.
 
 ```bash
-npm run dev -w @farside/backend
+FARSIDE_OPERATOR_TOKEN=<token> npm run dev -w @farside/backend
 ```
 
-1. PUT `/v1/orgs/org-a/contract` with the body in step 1 (`x-farside-org: org-a`).
+1. PUT `/v1/orgs/org-a/contract` with the body in step 1 (`x-farside-operator: <token>`).
 2. PUT `/v1/orgs/org-a/connections` with `{ "tenantId": "tenant-a", "subscriptionId": "main" }`.
 3. GET `/v1/orgs/org-a/scans` and wait for `succeeded`.
-4. Optional: POST `/v1/orgs/org-a/contract/advance` `{ "event": "failed_payment", "now": "<iso>" }`, then advance +7d and +14d more to `paused`, then POST `/scans` and expect 409.
+4. Optional: PUT the contract with `unpaidAt` 21 days in the past (operator token), then POST `/scans` with the org session and expect 409.
 
 Org `demo` (`VITE_FARSIDE_DEMO=1` on the console) is a synthetic estate. Do not use it as a sale rehearsal.

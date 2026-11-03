@@ -1147,14 +1147,16 @@ export function runChecks(input: {
   facts: ResourceFacts[];
   checkIds: string[];
   unreadSubscriptions?: string[];
+  scopes?: string[];
   settings?: OrgSettings;
 }): { findings: Finding[]; coverage: CoverageEntry[] } {
   const findings: Finding[] = [];
   const coverage: CoverageEntry[] = [];
   const subscriptions = [
-    ...new Set(
-      input.inventory.resources.map((resource) => scopeKey(resource.resourceUri, input.inventory.cloud)),
-    ),
+    ...new Set([
+      ...input.inventory.resources.map((resource) => scopeKey(resource.resourceUri, input.inventory.cloud)),
+      ...(input.scopes ?? []),
+    ]),
   ].filter(Boolean);
 
   for (const checkId of input.checkIds) {
@@ -1162,15 +1164,22 @@ export function runChecks(input: {
     if (!impl) {
       throw new UnregisteredCheckError(checkId);
     }
-    findings.push(
-      ...impl(input.inventory, input.facts, input.settings ?? DEFAULT_SETTINGS).map(acceptFinding),
+    const produced = impl(input.inventory, input.facts, input.settings ?? DEFAULT_SETTINGS).map(
+      acceptFinding,
     );
+    findings.push(...produced);
     for (const subscriptionOrProject of subscriptions) {
+      const scoped = produced.filter(
+        (finding) => finding.scope.subscriptionOrProject === subscriptionOrProject,
+      );
+      const closer = scoped.find((finding) => finding.result === "undetermined")?.closer;
+      const determinate = scoped.some((finding) => finding.result !== "undetermined");
       coverage.push(
         recordCoverageScope({
           subscriptionOrProject,
           checkId,
-          state: "assessed",
+          state: scoped.length > 0 && !determinate ? "undetermined" : "assessed",
+          ...(scoped.length > 0 && !determinate && closer ? { closer } : {}),
         }),
       );
     }

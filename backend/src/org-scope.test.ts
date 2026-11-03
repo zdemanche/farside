@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { secretPaths } from "./secrets.js";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const MANIFEST = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/ground-truth.json"), "utf8"),
@@ -54,13 +55,16 @@ const ROUTES = [
   { method: "DELETE" as const, url: "/v1/orgs/org-a/connections/conn-1" },
 ];
 
+const OPERATOR_ROUTES = ROUTES.filter((route) => route.url.includes("/contract") && route.method !== "GET");
+const SESSION_ROUTES = ROUTES.filter((route) => !OPERATOR_ROUTES.includes(route));
+
 function headers(orgId: string) {
   return { [ORG_HEADER]: orgId, [ACTOR_HEADER]: `actor-${orgId}` };
 }
 
 describe("org scoping", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store);
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, TEST_APP_OPTIONS);
   const inventory = inventoryFromManifest(MANIFEST);
 
   store.putInventory("org-a", inventory);
@@ -71,7 +75,7 @@ describe("org scoping", () => {
     await app.close();
   });
 
-  it.each(ROUTES)("returns 401 on $method $url without a session", async (route) => {
+  it.each(SESSION_ROUTES)("returns 401 on $method $url without a session", async (route) => {
     const response = await app.inject({ method: route.method, url: route.url });
     expect(response.statusCode).toBe(401);
     expect(response.json()).toMatchObject({ title: "Unauthorized", status: 401 });
@@ -91,6 +95,12 @@ describe("org scoping", () => {
     expect(JSON.stringify(body)).not.toContain("tenant-org-a");
     expect(JSON.stringify(body)).not.toContain("disk-unattached");
     expect(secretPaths(body)).toEqual([]);
+  });
+
+  it.each(OPERATOR_ROUTES)("returns 403 on operator route $method $url without the operator token", async (route) => {
+    const response = await app.inject({ method: route.method, url: route.url });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ title: "Forbidden", status: 403 });
   });
 
   it("lets the owning org read its inventory and keeps the other org empty", async () => {

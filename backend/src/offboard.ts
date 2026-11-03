@@ -10,9 +10,10 @@ export type DeletionRecord = {
   orgId: string;
   deletedAt: string;
   connectionsRemoved: number;
-  scansStopped: boolean;
+  scansStopped: number;
   scheduleCancelled: boolean;
   accountClosureAt: string | null;
+  trigger: "customer" | "retention";
 };
 
 export const GRANTS_TO_REMOVE: GrantToRemove[] = [
