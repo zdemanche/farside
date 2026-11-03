@@ -105,6 +105,59 @@ describe("inventory routes", () => {
     });
   });
 
+  it("keys GCP PUT coverage and browse on the project, not URI index 2", async () => {
+    const gcp = {
+      cloud: "gcp" as const,
+      observedAt: "1970-01-01T00:00:00.000Z",
+      resources: [
+        {
+          resourceUri: "//compute.googleapis.com/projects/p1/zones/us-central1-a/disks/parked",
+          resourceType: "compute.googleapis.com/Disk",
+          region: "us-central1-a",
+          displayName: "parked",
+          tags: {},
+          ownerTag: null,
+        },
+      ],
+    };
+    const put = await app.inject({
+      method: "PUT",
+      url: "/v1/orgs/org-a/inventory",
+      headers: ORG,
+      payload: gcp,
+    });
+    expect(put.statusCode).toBe(200);
+
+    const coverage = await app.inject({
+      method: "GET",
+      url: "/v1/orgs/org-a/coverage?cloud=gcp",
+      headers: ORG,
+    });
+    const entries = coverage.json().entries as Array<{ id: string; checkId: string; subscriptionOrProject: string }>;
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.every((entry) => entry.subscriptionOrProject === "p1")).toBe(true);
+    expect(entries.every((entry) => entry.id.startsWith("p1:gcp-"))).toBe(true);
+    expect(entries.some((entry) => entry.checkId === "gcp-waste-unattached-disks")).toBe(true);
+    expect(entries.some((entry) => entry.id === "compute.googleapis.com:azure-inventory-all-resources")).toBe(
+      false,
+    );
+
+    const browse = await app.inject({
+      method: "GET",
+      url: "/v1/orgs/org-a/inventory/browse?subscription=p1",
+      headers: ORG,
+    });
+    expect(browse.json().total).toBe(1);
+    expect(browse.json().resources[0].resourceUri).toBe(gcp.resources[0].resourceUri);
+
+    const miss = await app.inject({
+      method: "GET",
+      url: "/v1/orgs/org-a/inventory/browse?subscription=compute.googleapis.com",
+      headers: ORG,
+    });
+    expect(miss.json().total).toBe(0);
+  });
+
   it("rejects raw provider payload fields on store", async () => {
     const response = await app.inject({
       method: "PUT",

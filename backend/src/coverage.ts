@@ -33,9 +33,29 @@ export const AZURE_LAUNCH_CHECK_IDS = [
   "azure-lifecycle-expiring-gateway-certs",
 ] as const;
 
+export const GCP_LAUNCH_CHECK_IDS = [
+  "gcp-inventory-all-assets",
+  "gcp-inventory-no-owner-label",
+  "gcp-waste-unattached-disks",
+  "gcp-waste-unused-external-ips",
+  "gcp-waste-old-snapshots-and-images",
+  "gcp-waste-idle-vm-and-disk-recommendations",
+  "gcp-cost-spend-by-service",
+  "gcp-cost-committed-use",
+  "gcp-resilience-sql-ha-or-backup",
+  "gcp-lifecycle-sql-gke-support",
+  "gcp-lifecycle-expiring-certs",
+] as const;
+
+export function launchCheckIds(cloud: Cloud): readonly string[] {
+  return cloud === "gcp" ? GCP_LAUNCH_CHECK_IDS : AZURE_LAUNCH_CHECK_IDS;
+}
+
 const HARVEST_ASSESSED = new Set<string>([
   "azure-inventory-all-resources",
   "azure-inventory-no-owner-tag",
+  "gcp-inventory-all-assets",
+  "gcp-inventory-no-owner-label",
 ]);
 
 export type CoverageState = "assessed" | "unassessed" | "undetermined";

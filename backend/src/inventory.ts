@@ -5,6 +5,7 @@ import {
   type Inventory,
   type InventoryRecord,
 } from "@farside/scan-contracts";
+import { scopeOf } from "./scope.js";
 
 export type GroundTruthItem = {
   id: string;
@@ -116,10 +117,7 @@ export function filterInventory(
     if (filters.service && resource.resourceType !== filters.service) {
       return [];
     }
-    if (
-      filters.subscription &&
-      !resource.resourceUri.includes(`/subscriptions/${filters.subscription}/`)
-    ) {
+    if (filters.subscription && scopeOf(inventory.cloud, resource.resourceUri) !== filters.subscription) {
       return [];
     }
     if (filters.region && resource.region !== filters.region) {

@@ -5,10 +5,10 @@ import {
   type Inventory,
 } from "@farside/scan-contracts";
 import {
-  AZURE_LAUNCH_CHECK_IDS,
   applyCoverageResult,
   blindSpots,
   coverageFromHarvest,
+  launchCheckIds,
   coverageHealth,
   recordCoverageScope,
   toContractCoverage,
@@ -57,6 +57,7 @@ import { buildHeadline } from "./headline.js";
 import { costWasteView } from "./waste.js";
 import { matchesCloud, parseCloudQuery, type Cloud } from "./cloud.js";
 import { applyOwnerTag, browseInventories, groupInventory, noOwnerTotal } from "./inventory.js";
+import { scopeOf } from "./scope.js";
 import { SecretLeakError, assertNoSecrets } from "./secrets.js";
 import { defaultHarvester, ScanRunner, toScanView, toScanViews, type Harvester } from "./scans.js";
 import { ScanScheduler } from "./scheduler.js";
@@ -357,10 +358,10 @@ export function buildApp(
       store.snapshot(request.params.orgId).settings.ownerTagKey,
     );
     const stored = store.putInventory(request.params.orgId, tagged);
-    const subscriptions = [...new Set(stored.resources.map((row) => row.resourceUri.split("/")[2] ?? ""))].filter(
-      Boolean,
-    );
-    store.putCoverage(request.params.orgId, coverageFromHarvest(subscriptions, AZURE_LAUNCH_CHECK_IDS));
+    const scopes = [
+      ...new Set(stored.resources.map((row) => scopeOf(stored.cloud, row.resourceUri))),
+    ].filter(Boolean);
+    store.putCoverage(request.params.orgId, coverageFromHarvest(scopes, launchCheckIds(stored.cloud)));
     return sendClean(reply, 200, stored);
   });
 
