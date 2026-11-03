@@ -100,7 +100,7 @@
       "type": "sqladmin.googleapis.com/Instance",
       "title": "Cloud SQL on an out-of-support version",
       "region": "us-central1",
-      "properties": { "databaseVersion": "MYSQL_5_6" },
+      "properties": { "databaseVersion": "MYSQL_5_6", "availabilityType": "REGIONAL", "backupEnabled": true },
       "labels": { "owner": "farside-test" }
     },
     {
@@ -109,7 +109,25 @@
       "type": "sqladmin.googleapis.com/Instance",
       "title": "Cloud SQL on a version not listed as ended",
       "region": "us-central1",
-      "properties": { "databaseVersion": "MYSQL_8_0" },
+      "properties": { "databaseVersion": "MYSQL_8_0", "availabilityType": "REGIONAL", "backupEnabled": true },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "sql-zonal",
+      "project": "farside-test",
+      "type": "sqladmin.googleapis.com/Instance",
+      "title": "Cloud SQL without regional high availability",
+      "region": "us-central1",
+      "properties": { "databaseVersion": "MYSQL_8_0", "availabilityType": "ZONAL", "backupEnabled": true },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "sql-no-backup",
+      "project": "farside-test",
+      "type": "sqladmin.googleapis.com/Instance",
+      "title": "Cloud SQL without automated backups",
+      "region": "us-central1",
+      "properties": { "databaseVersion": "MYSQL_8_0", "availabilityType": "REGIONAL", "backupEnabled": false },
       "labels": { "owner": "farside-test" }
     },
     {

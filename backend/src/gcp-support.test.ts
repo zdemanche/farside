@@ -53,6 +53,8 @@ describe("gcp sql and gke support check", () => {
     expect(passes.map((finding) => finding.evidence.fields.resourceName).sort()).toEqual([
       "gke-current",
       "sql-current",
+      "sql-no-backup",
+      "sql-zonal",
     ]);
     expect(passes[0]?.evidence.fields.source).toBe("docs/gcp/support-versions.json");
     expect(passes[0]?.evidence.fields.cataloguePublishedAt).toBe("2026-11-03");
