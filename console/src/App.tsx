@@ -4,6 +4,7 @@ import { Connect } from "./Connect";
 import { Estate } from "./Estate";
 import { Inventory } from "./Inventory";
 import { Issues } from "./Issues";
+import { Lifecycle } from "./Lifecycle";
 import { Recovery } from "./Recovery";
 import { Settings } from "./Settings";
 import { EMPTY_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
@@ -45,7 +46,9 @@ export function App() {
                 ? "settings"
                 : hash === "recovery"
                   ? "recovery"
-                  : "empty";
+                  : hash === "lifecycle"
+                    ? "lifecycle"
+                    : "empty";
 
   return (
     <div>
@@ -79,6 +82,8 @@ export function App() {
           <Settings />
         ) : page === "recovery" ? (
           <Recovery />
+        ) : page === "lifecycle" ? (
+          <Lifecycle />
         ) : (
           <>
             <h1 id="page-title" tabIndex={-1}>

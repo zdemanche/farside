@@ -26,8 +26,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 9. **E3-S1** — merged (#235).
 10. **E3-S2** — merged (#236).
 11. **E3-S3** — merged (#237).
-12. **E3-S4** — this change: production backup and zone/geo checks plus Recovery page against fixtures. Live Backup Reader is (c).
-13. **E3+ remaining** — Lifecycle, Issues store, Scans screens against fixtures.
+12. **E3-S4** — merged (#238).
+13. **E3-S5** — this change: retiring SKU catalogue, cert expiry, Lifecycle page against fixtures. Live near-expiry proof is (c).
+14. **E3+ remaining** — Issues store, Scans screens against fixtures.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -163,11 +164,11 @@ Phase 2 findings must be proven live. Engine and UI can be built against fixture
 | `E3-S4-T2` | #103 | Implement zone redundancy and geo-backup check | (a) this change | Zone redundancy / geo-backup from stored settings; live confirmation (c). |
 | `E3-S4-T3` | #104 | Handle unknown production status and missing role | (a) this change | Undetermined paths for unknown production and missing role. |
 | `E3-S4-T4` | #105 | Build the Recovery page | (a) this change | Recovery page. |
-| `E3-S5` | #106 | Retiring SKUs and expiring certificates, with a Lifecycle page | (a) doable in code now | Retirement data and Lifecycle page are in-repo; near-expiry cert proof is (c). |
-| `E3-S5-T1` | #107 | Build the retiring SKU data source | (a) doable in code now | Retiring SKU data with sources. |
-| `E3-S5-T2` | #108 | Implement retiring SKU check | (a) doable in code now | Retiring SKU check. |
-| `E3-S5-T3` | #109 | Implement certificate expiry check | (c) live Azure / GCP / test tenant | Certificate expiry against the seeded near-expiry gateway cert. |
-| `E3-S5-T4` | #110 | Build the Lifecycle page | (a) doable in code now | Lifecycle page. |
+| `E3-S5` | #106 | Retiring SKUs and expiring certificates, with a Lifecycle page | (a) this change | Retirement data and Lifecycle page are in-repo; near-expiry cert proof is (c). |
+| `E3-S5-T1` | #107 | Build the retiring SKU data source | (a) this change | Retiring SKU data with sources. |
+| `E3-S5-T2` | #108 | Implement retiring SKU check | (a) this change | Retiring SKU check. |
+| `E3-S5-T3` | #109 | Implement certificate expiry check | (a) this change | Fixture near-expiry certs. Live proof is (c). |
+| `E3-S5-T4` | #110 | Build the Lifecycle page | (a) this change | Lifecycle page. |
 | `E3-S6` | #111 | Issues queue that closes only when covered | (a) doable in code now | Issue store, close-only-if-covered, Issues screen, health score. No live Azure required for the rule. |
 | `E3-S6-T1` | #112 | Create the issue store and identity rule | (a) doable in code now | Issue identity rule. |
 | `E3-S6-T2` | #113 | Implement close-only-if-covered logic | (a) doable in code now | Close-only-if-covered. |

@@ -6,6 +6,7 @@ import {
 } from "@farside/scan-contracts";
 import { AZURE_LAUNCH_CHECK_IDS, recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import type { ResourceFacts } from "./facts.js";
+import { loadRetiringSkus } from "./retiring.js";
 import type { OrgSettings } from "./settings.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
 import {
@@ -28,6 +29,9 @@ export const IDLE_NAT_GATEWAYS = "azure-waste-idle-nat-gateways";
 export const PROD_VM_BACKUP = "azure-resilience-prod-vms-outside-backup";
 export const PROD_SQL_BACKUP = "azure-resilience-prod-sql-outside-backup";
 export const DB_ZONE_OR_GEO = "azure-resilience-db-zone-or-geo";
+export const RETIRING_SKUS = "azure-lifecycle-retiring-skus";
+export const EXPIRING_APP_CERTS = "azure-lifecycle-expiring-app-service-certs";
+export const EXPIRING_GATEWAY_CERTS = "azure-lifecycle-expiring-gateway-certs";
 
 const MARKER_CLOSER = "Set the production tag or name pattern in Settings";
 
@@ -759,6 +763,174 @@ export function checkDbZoneOrGeo(
     });
 }
 
+export function checkRetiringSkus(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  _settings: OrgSettings = DEFAULT_SETTINGS,
+): Finding[] {
+  const catalogue = loadRetiringSkus();
+  const bySku = new Map(catalogue.entries.map((entry) => [entry.skuName, entry]));
+  const byUri = new Map(facts.map((row) => [row.resourceUri, row]));
+  return inventory.resources.flatMap((resource) => {
+    const row = byUri.get(resource.resourceUri);
+    const skuName =
+      typeof row?.fields.skuName === "string"
+        ? row.fields.skuName
+        : typeof row?.fields.vmSize === "string"
+          ? row.fields.vmSize
+          : null;
+    if (skuName == null) {
+      return [];
+    }
+    const subscriptionOrProject = subscriptionOf(resource.resourceUri);
+    const scope = {
+      id: `${subscriptionOrProject}:${RETIRING_SKUS}`,
+      cloud: "azure" as const,
+      subscriptionOrProject,
+    };
+    const resourceId = resource.resourceUri.split("/").pop() ?? resource.displayName;
+    const listed = bySku.get(skuName);
+    if (listed) {
+      return [
+        acceptFinding({
+          checkId: RETIRING_SKUS,
+          result: "fail",
+          evidence: {
+            fields: {
+              resourceId,
+              skuName,
+              retirementDate: listed.retirementDate,
+              announcementId: listed.announcementId,
+              source: listed.source,
+            },
+          },
+          scope,
+        }),
+      ];
+    }
+    return [
+      acceptFinding({
+        checkId: RETIRING_SKUS,
+        result: "pass",
+        evidence: {
+          fields: {
+            resourceId,
+            skuName,
+            catalogueVersion: catalogue.version,
+            cataloguePublishedAt: catalogue.publishedAt,
+            source: catalogue.source,
+          },
+        },
+        scope,
+      }),
+    ];
+  });
+}
+
+function checkExpiringCerts(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  settings: OrgSettings,
+  spec: {
+    checkId: string;
+    resourceType: string;
+    idField: "certificateId" | "gatewayId";
+    nameField: "hostName" | "certificateName";
+  },
+): Finding[] {
+  const byUri = new Map(facts.map((row) => [row.resourceUri, row]));
+  const threshold = settings.certExpiryFlagDays;
+  return inventory.resources
+    .filter((resource) => resource.resourceType === spec.resourceType)
+    .map((resource) => {
+      const row = byUri.get(resource.resourceUri);
+      const subscriptionOrProject = subscriptionOf(resource.resourceUri);
+      const scope = {
+        id: `${subscriptionOrProject}:${spec.checkId}`,
+        cloud: "azure" as const,
+        subscriptionOrProject,
+      };
+      const rawId = row?.fields[spec.idField];
+      const id = typeof rawId === "string" ? rawId : resource.displayName;
+      const rawName = row?.fields[spec.nameField];
+      const name = typeof rawName === "string" ? rawName : null;
+      const expirationDate =
+        typeof row?.fields.expirationDate === "string" ? row.fields.expirationDate : null;
+      if (!(threshold > 0)) {
+        return acceptFinding({
+          checkId: spec.checkId,
+          result: "undetermined",
+          closer: "Set certificate expiry warning days in Settings",
+          evidence: {
+            fields: { [spec.idField]: id, [spec.nameField]: name, expirationDate, daysRemaining: null },
+          },
+          scope,
+        });
+      }
+      const daysRemaining = row?.fields.daysRemaining;
+      if (typeof daysRemaining !== "number") {
+        return acceptFinding({
+          checkId: spec.checkId,
+          result: "undetermined",
+          closer: "A certificate read that includes expirationDate",
+          evidence: {
+            fields: { [spec.idField]: id, [spec.nameField]: name, expirationDate, daysRemaining: null },
+          },
+          scope,
+        });
+      }
+      if (daysRemaining <= threshold) {
+        return acceptFinding({
+          checkId: spec.checkId,
+          result: "fail",
+          evidence: {
+            fields: {
+              [spec.idField]: id,
+              [spec.nameField]: name,
+              expirationDate,
+              daysRemaining,
+            },
+          },
+          scope,
+        });
+      }
+      return acceptFinding({
+        checkId: spec.checkId,
+        result: "pass",
+        evidence: {
+          fields: { [spec.idField]: id, [spec.nameField]: name, expirationDate, daysRemaining },
+        },
+        scope,
+      });
+    });
+}
+
+export function checkExpiringAppCerts(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  settings: OrgSettings = DEFAULT_SETTINGS,
+): Finding[] {
+  return checkExpiringCerts(inventory, facts, settings, {
+    checkId: EXPIRING_APP_CERTS,
+    resourceType: "Microsoft.Web/certificates",
+    idField: "certificateId",
+    nameField: "hostName",
+  });
+}
+
+export function checkExpiringGatewayCerts(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  settings: OrgSettings = DEFAULT_SETTINGS,
+): Finding[] {
+  return checkExpiringCerts(inventory, facts, settings, {
+    checkId: EXPIRING_GATEWAY_CERTS,
+    resourceType: "Microsoft.Network/applicationGateways",
+    idField: "gatewayId",
+    nameField: "certificateName",
+  });
+}
+
 type CheckFn = (inventory: Inventory, facts: ResourceFacts[], settings: OrgSettings) => Finding[];
 
 export const CHECK_REGISTRY: Record<string, CheckFn> = {
@@ -772,6 +944,9 @@ export const CHECK_REGISTRY: Record<string, CheckFn> = {
   [PROD_VM_BACKUP]: checkProdVmBackup,
   [PROD_SQL_BACKUP]: checkProdSqlBackup,
   [DB_ZONE_OR_GEO]: checkDbZoneOrGeo,
+  [RETIRING_SKUS]: checkRetiringSkus,
+  [EXPIRING_APP_CERTS]: checkExpiringAppCerts,
+  [EXPIRING_GATEWAY_CERTS]: checkExpiringGatewayCerts,
 };
 
 export function runChecks(input: {

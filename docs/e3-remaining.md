@@ -1,6 +1,6 @@
 # E3 remaining work
 
-In-repo check engine, leftover waste checks, idle plan/LB/NAT checks, Recovery gaps, and an Issues list run against ground-truth fixtures. Live Azure proof of those findings stays leftover.
+In-repo check engine, leftover waste checks, idle plan/LB/NAT checks, Recovery gaps, Lifecycle items, and an Issues list run against ground-truth fixtures. Live Azure proof of those findings stays leftover.
 
 ## Done here
 
@@ -23,6 +23,10 @@ In-repo check engine, leftover waste checks, idle plan/LB/NAT checks, Recovery g
 | E3-S4-T2 | #103 | Zone/geo: fail `db-no-zone-geo` with the missing setting, pass `db-zone-geo`. |
 | E3-S4-T3 | #104 | Missing production marker or Backup Reader evidence is `undetermined`. |
 | E3-S4-T4 | #105 | Console `#recovery` lists the gaps with N of M and coverage. |
+| E3-S5-T1 | #107 | In-repo retiring SKU catalogue; every entry has a source. |
+| E3-S5-T2 | #108 | Retiring SKU: fail `vm-retiring-sku` with the catalogue date, pass unlisted SKUs with catalogue version. |
+| E3-S5-T3 | #109 | App Service and gateway certs inside the 60-day window fail with expirationDate. |
+| E3-S5-T4 | #110 | Console `#lifecycle` lists items by date and counts those in 90 days. |
 
 ## Leftovers
 
@@ -36,4 +40,4 @@ Monitoring Reader on the test subscription.
 
 ### Later E3 stories
 
-Busy-gateway negative on the live test estate (#96). Live Backup Reader against vault items (#102). Lifecycle, close-only-if-covered Issues store, Scans screens, and live accuracy (#106–#125).
+Busy-gateway negative on the live test estate (#96). Live Backup Reader against vault items (#102). Live near-expiry cert proof (#106). Close-only-if-covered Issues store, Scans screens, and live accuracy (#111–#125).

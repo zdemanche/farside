@@ -3,6 +3,7 @@ export type OrgSettings = {
   productionTagKey: string;
   productionTagValue: string;
   snapshotRetentionDays: number;
+  certExpiryFlagDays: number;
   updatedAt: string;
 };
 
@@ -11,6 +12,7 @@ export const DEFAULT_SETTINGS: OrgSettings = {
   productionTagKey: "environment",
   productionTagValue: "prod",
   snapshotRetentionDays: 30,
+  certExpiryFlagDays: 60,
   updatedAt: "1970-01-01T00:00:00.000Z",
 };
 
@@ -32,10 +34,15 @@ export function parseSettings(body: unknown): Omit<OrgSettings, "updatedAt"> | n
     typeof record.snapshotRetentionDays === "number" && record.snapshotRetentionDays > 0
       ? record.snapshotRetentionDays
       : DEFAULT_SETTINGS.snapshotRetentionDays;
+  const certExpiryFlagDays =
+    typeof record.certExpiryFlagDays === "number" && record.certExpiryFlagDays > 0
+      ? record.certExpiryFlagDays
+      : DEFAULT_SETTINGS.certExpiryFlagDays;
   return {
     ownerTagKey: record.ownerTagKey,
     productionTagKey: record.productionTagKey,
     productionTagValue: record.productionTagValue,
     snapshotRetentionDays,
+    certExpiryFlagDays,
   };
 }

@@ -145,6 +145,14 @@
       "tags": { "owner": "farside-test", "environment": "prod" }
     },
     {
+      "id": "vm-retiring-sku",
+      "subscription": "main",
+      "type": "Microsoft.Compute/virtualMachines",
+      "title": "VM on a SKU listed in the in-repo retirement catalogue",
+      "properties": { "powerState": "running", "vmSize": "Standard_B1ls", "skuName": "Standard_B1ls" },
+      "tags": { "owner": "farside-test" }
+    },
+    {
       "id": "vm-prod-backed-up",
       "subscription": "main",
       "type": "Microsoft.Compute/virtualMachines",
@@ -189,7 +197,7 @@
       "subscription": "main",
       "type": "Microsoft.Web/certificates",
       "title": "App Service certificate inside the expiry window",
-      "properties": { "daysRemaining": 20 },
+      "properties": { "daysRemaining": 20, "expirationDate": "2026-11-22", "hostName": "app.example.test" },
       "tags": { "owner": "farside-test" }
     },
     {
@@ -197,7 +205,7 @@
       "subscription": "main",
       "type": "Microsoft.Web/certificates",
       "title": "App Service certificate well outside the expiry window",
-      "properties": { "daysRemaining": 400 },
+      "properties": { "daysRemaining": 400, "expirationDate": "2027-12-07", "hostName": "fresh.example.test" },
       "tags": { "owner": "farside-test" }
     },
     {
@@ -205,7 +213,7 @@
       "subscription": "main",
       "type": "Microsoft.Network/applicationGateways",
       "title": "Gateway certificate inside the expiry window",
-      "properties": { "daysRemaining": 20 },
+      "properties": { "daysRemaining": 20, "expirationDate": "2026-11-22", "certificateName": "gateway-expiring" },
       "tags": { "owner": "farside-test" }
     },
     {
@@ -213,7 +221,7 @@
       "subscription": "main",
       "type": "Microsoft.Network/applicationGateways",
       "title": "Gateway certificate well outside the expiry window",
-      "properties": { "daysRemaining": 400 },
+      "properties": { "daysRemaining": 400, "expirationDate": "2027-12-07", "certificateName": "gateway-fresh" },
       "tags": { "owner": "farside-test" }
     },
     {
@@ -351,12 +359,9 @@
     },
     {
       "checkId": "azure-lifecycle-retiring-skus",
-      "positives": [],
-      "negatives": [],
-      "exception": {
-        "status": "unverified",
-        "reason": "A retiring SKU must match a dated Azure retirement announcement. That catalogue is E3-S5-T1; this file does not invent a date or SKU."
-      }
+      "positives": ["vm-retiring-sku"],
+      "negatives": ["vm-deallocated"],
+      "exception": null
     },
     {
       "checkId": "azure-lifecycle-expiring-app-service-certs",

@@ -8,7 +8,10 @@ import {
   EMPTY_PLANS,
   IDLE_LOAD_BALANCERS,
   DB_ZONE_OR_GEO,
+  EXPIRING_APP_CERTS,
+  EXPIRING_GATEWAY_CERTS,
   IDLE_NAT_GATEWAYS,
+  RETIRING_SKUS,
   OLD_SNAPSHOTS,
   PROD_SQL_BACKUP,
   PROD_VM_BACKUP,
@@ -20,7 +23,10 @@ import {
   checkEmptyPlans,
   checkIdleLoadBalancers,
   checkDbZoneOrGeo,
+  checkExpiringAppCerts,
+  checkExpiringGatewayCerts,
   checkIdleNatGateways,
+  checkRetiringSkus,
   checkOldSnapshots,
   checkProdSqlBackup,
   checkProdVmBackup,
@@ -392,6 +398,56 @@ describe("database zone and geo-backup check", () => {
   });
 });
 
+describe("retiring SKU check", () => {
+  it("fails the seeded retiring SKU with the catalogue date and passes a SKU not listed", () => {
+    const findings = checkRetiringSkus(inventory, facts);
+    const fail = findings.find((finding) => finding.result === "fail");
+    const pass = findings.find((finding) => finding.evidence.fields.resourceId === "vm-deallocated");
+    expect(fail?.checkId).toBe(RETIRING_SKUS);
+    expect(fail?.evidence.fields.resourceId).toBe("vm-retiring-sku");
+    expect(fail?.evidence.fields.skuName).toBe("Standard_B1ls");
+    expect(fail?.evidence.fields.retirementDate).toBe("2026-12-31");
+    expect(fail?.evidence.fields.source).toBe("docs/azure/retiring-skus.json");
+    expect(pass?.result).toBe("pass");
+    expect(pass?.evidence.fields.catalogueVersion).toBe(1);
+    expect(pass?.evidence.fields.cataloguePublishedAt).toBe("2026-11-02");
+    expect(validateFinding(fail!)).toEqual([]);
+  });
+});
+
+describe("certificate expiry checks", () => {
+  it("fails seeded certs inside the warning window and passes fresh lookalikes", () => {
+    const apps = checkExpiringAppCerts(inventory, facts, DEFAULT_SETTINGS);
+    const gateways = checkExpiringGatewayCerts(inventory, facts, DEFAULT_SETTINGS);
+    const appFail = apps.find((finding) => finding.result === "fail");
+    const gatewayFail = gateways.find((finding) => finding.result === "fail");
+    expect(appFail?.checkId).toBe(EXPIRING_APP_CERTS);
+    expect(appFail?.evidence.fields.certificateId).toBe("cert-app-expiring");
+    expect(appFail?.evidence.fields.expirationDate).toBe("2026-11-22");
+    expect(appFail?.evidence.fields.daysRemaining).toBe(20);
+    expect(apps.find((finding) => finding.evidence.fields.certificateId === "cert-app-fresh")?.result).toBe(
+      "pass",
+    );
+    expect(gatewayFail?.checkId).toBe(EXPIRING_GATEWAY_CERTS);
+    expect(gatewayFail?.evidence.fields.gatewayId).toBe("cert-gateway-expiring");
+    expect(gatewayFail?.evidence.fields.expirationDate).toBe("2026-11-22");
+    expect(
+      gateways.find((finding) => finding.evidence.fields.gatewayId === "cert-gateway-fresh")?.result,
+    ).toBe("pass");
+    expect(validateFinding(appFail!)).toEqual([]);
+  });
+
+  it("returns undetermined when the certificate cannot be read", () => {
+    const uri = inventory.resources.find((row) => row.displayName.includes("App Service certificate inside"))!
+      .resourceUri;
+    const findings = checkExpiringAppCerts(inventory, [
+      { resourceUri: uri, fields: { certificateId: "cert-app-expiring" } },
+    ]);
+    expect(findings[0]?.result).toBe("undetermined");
+    expect(findings[0]?.closer).toMatch(/expirationDate/);
+  });
+});
+
 describe("unattached disk harvest to API", () => {
   const store = new MemoryStore();
   const app = buildApp(store, { harvester: defaultHarvester() });
@@ -475,6 +531,13 @@ describe("unattached disk harvest to API", () => {
     expect(
       findings.some((finding) => finding.evidence.fields.vmId === "vm-prod-backed-up" && finding.result === "fail"),
     ).toBe(false);
+    const retiring = findings.find((finding) => finding.evidence.fields.resourceId === "vm-retiring-sku");
+    const appCert = findings.find((finding) => finding.evidence.fields.certificateId === "cert-app-expiring");
+    const gatewayCert = findings.find((finding) => finding.evidence.fields.gatewayId === "cert-gateway-expiring");
+    expect(retiring?.result).toBe("fail");
+    expect(retiring?.evidence.fields.retirementDate).toBe("2026-12-31");
+    expect(appCert?.result).toBe("fail");
+    expect(gatewayCert?.result).toBe("fail");
   });
 });
 
