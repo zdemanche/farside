@@ -84,8 +84,9 @@ type Stored<T> = { value: T; version: number };
 type PutOptions = { expected?: number; extra?: Item };
 
 type Persistent = Exclude<AggregateName, "cost" | "commitments" | "inventory">;
+type Loaded = { value: unknown; versions: Map<string, number> };
 type Codec = {
-  load: (orgId: string) => Promise<unknown>;
+  load: (orgId: string) => Promise<Loaded>;
   entries: (value: never) => Map<string, unknown>;
 };
 
@@ -172,7 +173,10 @@ export class DynamoStore implements OrgRepository {
     readonly clock: Clock = systemClock,
   ) {
     const single = <V>(sk: string, empty: () => V): Codec => ({
-      load: async (orgId) => (await this.#getDoc<V>(orgId, sk))?.value ?? empty(),
+      load: async (orgId) => {
+        const stored = await this.#getDoc<V>(orgId, sk);
+        return { value: stored?.value ?? empty(), versions: new Map(stored ? [[sk, stored.version]] : []) };
+      },
       entries: (value: V) => (value === null || value === undefined ? new Map() : new Map([[sk, value]])),
     });
     const keyed = <V>(
@@ -180,10 +184,13 @@ export class DynamoStore implements OrgRepository {
       toPairs: (value: V) => [string, unknown][],
       fromPairs: (pairs: [string, unknown][]) => V,
     ): Codec => ({
-      load: async (orgId) =>
-        fromPairs(
-          [...(await this.#listDocs(orgId, prefix))].map(([sk, { value }]) => [sk.slice(prefix.length), value]),
-        ),
+      load: async (orgId) => {
+        const docs = await this.#listDocs(orgId, prefix);
+        return {
+          value: fromPairs([...docs].map(([sk, { value }]) => [sk.slice(prefix.length), value])),
+          versions: new Map([...docs].map(([sk, { version }]) => [sk, version])),
+        };
+      },
       entries: (value: V) => new Map(toPairs(value).map(([key, item]) => [`${prefix}${key}`, item])),
     });
     const record = <V>(prefix: string) =>
@@ -303,28 +310,38 @@ export class DynamoStore implements OrgRepository {
         ),
       );
     }
+    const names: Record<string, string> = { "#version": "version", "#body": "body", "#gen": "gen", "#parts": "parts" };
+    const values: Record<string, unknown> = {};
+    const sets = gen ? ["#gen = :gen", "#parts = :parts"] : ["#body = :body"];
+    const removes = gen ? ["#body"] : ["#gen", "#parts"];
+    if (gen) {
+      values[":gen"] = gen;
+      values[":parts"] = parts.length;
+    } else {
+      values[":body"] = json;
+    }
+    Object.entries(options.extra ?? {}).forEach(([name, extra], index) => {
+      names[`#x${index}`] = name;
+      values[`:x${index}`] = extra;
+      sets.push(`#x${index} = :x${index}`);
+    });
     const expected = options.expected;
+    if (expected !== undefined && expected !== 0) {
+      values[":expected"] = expected;
+    }
+    values[":one"] = 1;
     try {
       const result = await this.client.send(
-        new PutCommand({
+        new UpdateCommand({
           TableName: this.table,
-          Item: {
-            pk,
-            sk,
-            version: (expected ?? 0) + 1,
-            ...(gen ? { gen, parts: parts.length } : { body: json }),
-            ...options.extra,
-          },
+          Key: { pk, sk },
+          UpdateExpression: `SET ${sets.join(", ")} REMOVE ${removes.join(", ")} ADD #version :one`,
+          ExpressionAttributeNames: names,
+          ExpressionAttributeValues: values,
           ReturnValues: "ALL_OLD",
           ...(expected === undefined
             ? {}
-            : expected === 0
-              ? { ConditionExpression: "attribute_not_exists(pk)" }
-              : {
-                  ConditionExpression: "#version = :expected",
-                  ExpressionAttributeNames: { "#version": "version" },
-                  ExpressionAttributeValues: { ":expected": expected },
-                }),
+            : { ConditionExpression: expected === 0 ? "attribute_not_exists(pk)" : "#version = :expected" }),
         }),
       );
       await this.#dropChunks(pk, sk, result.Attributes as Header | undefined);
@@ -333,6 +350,16 @@ export class DynamoStore implements OrgRepository {
         await this.#dropChunks(pk, sk, { sk, version: 0, gen, parts: parts.length });
       }
       throw error;
+    }
+    if (sk !== SK.deletion) {
+      await this.#abortIfDeleted(orgId, sk);
+    }
+  }
+
+  async #abortIfDeleted(orgId: string, sk: string): Promise<void> {
+    if (await this.deletion(orgId)) {
+      await this.#delDoc(orgId, sk);
+      throw new DeletedOrgError(orgId);
     }
   }
 
@@ -392,17 +419,33 @@ export class DynamoStore implements OrgRepository {
         throw error;
       }
     }
+    await this.#abortIfDeleted(orgId, SK.meta);
     this.#known.add(orgId);
   }
 
   async #load(orgId: string, keys: readonly AggregateName[]): Promise<Partial<OrgState>> {
+    return (await this.#loadVersioned(orgId, keys)).state;
+  }
+
+  async #loadVersioned(
+    orgId: string,
+    keys: readonly AggregateName[],
+  ): Promise<{ state: Partial<OrgState>; versions: Map<string, number> }> {
     const persistent = [...new Set(keys.flatMap((key) => BACKING[key] ?? [key as Persistent]))];
     const [, latest, ...values] = await Promise.all([
       this.#assertLive(orgId),
       keys.includes("inventory") ? this.#latestInventoryCloud(orgId) : undefined,
       ...persistent.map((key) => this.#codecs[key].load(orgId)),
     ]);
-    const loaded: Record<string, unknown> = Object.fromEntries(persistent.map((key, index) => [key, values[index]]));
+    const loaded = Object.fromEntries(
+      persistent.map((key, index) => [key, (values[index] as Loaded).value]),
+    ) as Record<string, unknown>;
+    const versions = new Map<string, number>();
+    for (const value of values) {
+      for (const [sk, version] of (value as Loaded).versions) {
+        versions.set(sk, version);
+      }
+    }
     if (keys.includes("cost")) {
       loaded.cost = combineCosts(Object.values(loaded.costs as Record<string, CostSnapshot>));
     }
@@ -414,7 +457,7 @@ export class DynamoStore implements OrgRepository {
     if (keys.includes("inventory")) {
       loaded.inventory = latest ? ((loaded.inventories as Record<string, Inventory>)[latest as string] ?? null) : null;
     }
-    return loaded as Partial<OrgState>;
+    return { state: loaded as Partial<OrgState>, versions };
   }
 
   async #latestInventoryCloud(orgId: string): Promise<string | undefined> {
@@ -434,32 +477,43 @@ export class DynamoStore implements OrgRepository {
     keys: readonly K[],
     change: (draft: Draft<K>) => void,
   ): Promise<Draft<K>> {
-    const draft = (await this.#load(orgId, keys)) as Draft<K>;
     const persistent = [...new Set(keys.flatMap((key) => BACKING[key] ?? [key as Persistent]))];
-    const serialise = (key: Persistent) =>
-      new Map(
-        [...this.#codecs[key].entries(((draft as unknown as Record<string, unknown>)[key] as never))].map(
-          ([sk, value]) => [sk, JSON.stringify(value)] as const,
+    const entriesOf = (draft: Draft<K>, key: Persistent) =>
+      this.#codecs[key].entries((draft as unknown as Record<string, unknown>)[key] as never);
+    for (let attempt = 0; attempt < MAX_VERSION_RETRIES; attempt += 1) {
+      const loaded = await this.#loadVersioned(orgId, keys);
+      const draft = loaded.state as Draft<K>;
+      const before = new Map(
+        persistent.map(
+          (key) =>
+            [key, new Map([...entriesOf(draft, key)].map(([sk, value]) => [sk, JSON.stringify(value)] as const))] as const,
         ),
       );
-    const before = new Map(persistent.map((key) => [key, serialise(key)] as const));
-    change(draft);
-    await this.#touch(orgId);
-    for (const key of persistent) {
-      const prior = before.get(key) ?? new Map<string, string>();
-      const next = this.#codecs[key].entries(((draft as unknown as Record<string, unknown>)[key] as never));
-      for (const [sk, value] of next) {
-        if (prior.get(sk) !== JSON.stringify(value)) {
-          await this.#putDoc(orgId, sk, value);
+      change(draft);
+      await this.#touch(orgId);
+      try {
+        for (const key of persistent) {
+          const prior = before.get(key) ?? new Map<string, string>();
+          const next = entriesOf(draft, key);
+          for (const [sk, value] of next) {
+            if (prior.get(sk) !== JSON.stringify(value)) {
+              await this.#putDoc(orgId, sk, value, { expected: loaded.versions.get(sk) ?? 0 });
+            }
+          }
+          for (const sk of prior.keys()) {
+            if (!next.has(sk)) {
+              await this.#delDoc(orgId, sk);
+            }
+          }
         }
-      }
-      for (const sk of prior.keys()) {
-        if (!next.has(sk)) {
-          await this.#delDoc(orgId, sk);
+        return draft;
+      } catch (error) {
+        if (!(error instanceof ConditionalCheckFailedException)) {
+          throw error;
         }
       }
     }
-    return draft;
+    throw new Error(`documents for ${orgId} changed concurrently`);
   }
 
   async hasOrg(orgId: string): Promise<boolean> {
@@ -490,6 +544,7 @@ export class DynamoStore implements OrgRepository {
         ReturnValues: "UPDATED_NEW",
       }),
     );
+    await this.#abortIfDeleted(orgId, SK.seq);
     return (result.Attributes as Record<Sequence, number>)[kind];
   }
 
@@ -546,6 +601,15 @@ export class DynamoStore implements OrgRepository {
     return true;
   }
 
+  async purgeSubscription(orgId: string, subscriptionId: string): Promise<void> {
+    const target = subscriptionId.toLowerCase();
+    await this.#mutate(orgId, SUBSCRIPTION_KEYS, (draft) => {
+      if (!draft.connections.some((connection) => connection.subscriptionId.toLowerCase() === target)) {
+        dropSubscription(draft, subscriptionId);
+      }
+    });
+  }
+
   async isConnected(orgId: string, subscriptionId: string): Promise<boolean> {
     const target = subscriptionId.toLowerCase();
     const { connections } = await this.read(orgId, "connections");
@@ -575,6 +639,7 @@ export class DynamoStore implements OrgRepository {
         ExpressionAttributeValues: { ":cloud": inventory.cloud },
       }),
     );
+    await this.#abortIfDeleted(orgId, SK.meta);
     return inventory;
   }
 
@@ -794,6 +859,7 @@ export class DynamoStore implements OrgRepository {
     }
     this.#deleted.set(orgId, record);
     this.#known.delete(orgId);
+    await this.#purge(orgId);
     await this.#purge(orgId);
     return record;
   }

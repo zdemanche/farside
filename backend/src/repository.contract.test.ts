@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { CreateTableCommand, DynamoDBClient, waitUntilTableExists } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { Finding, Inventory } from "@farside/scan-contracts";
 import dynalite from "dynalite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -349,6 +349,31 @@ describe.each(implementations)("OrgRepository contract: $name", ({ create }) => 
     expect(Object.keys(read.costs)).toEqual(["keep"]);
   });
 
+  it("purges a subscription's data only while no connection still uses it", async () => {
+    const store = create();
+    const org = orgName();
+    await store.putConnection(org, { tenantId: "t", subscriptionId: "sub-a" });
+    await store.putFindings(org, [finding("sub-a"), finding("sub-b")]);
+    await store.putIssues(org, [issue("sub-a"), issue("sub-b")]);
+    await store.purgeSubscription(org, "SUB-A");
+    expect((await store.read(org, "findings")).findings).toHaveLength(2);
+    await store.purgeSubscription(org, "sub-b");
+    expect((await store.read(org, "findings", "issues"))).toMatchObject({
+      findings: [{ scope: { subscriptionOrProject: "sub-a" } }],
+    });
+    expect((await store.read(org, "issues")).issues.find((row) => row.subscriptionOrProject === "sub-b")).toMatchObject({
+      status: "closed",
+    });
+  });
+
+  it("keeps every change when different subscriptions' costs are written concurrently", async () => {
+    const store = create();
+    const org = orgName();
+    const subscriptions = Array.from({ length: 6 }, (_, index) => `sub-${index}`);
+    await Promise.all(subscriptions.map((id) => store.putCost(org, cost(id, "USD"))));
+    expect(Object.keys((await store.read(org, "costs")).costs).sort()).toEqual(subscriptions);
+  });
+
   it("hands out unique, monotonic sequence numbers under concurrent increments", async () => {
     const store = create();
     const org = orgName();
@@ -562,6 +587,54 @@ describe("DynamoStore persistence", () => {
     expect(items.map((item) => item.sk)).toEqual(["DELETION"]);
   });
 
+  it("rejects a write that lands after the deletion marker and leaves no item behind", async () => {
+    const org = orgName();
+    let fired = false;
+    const racing = new DynamoStore(
+      interceptingClient(async (command) => {
+        if (!fired && command instanceof UpdateCommand && command.input.Key?.sk === "FINDINGS") {
+          fired = true;
+          await docClient.send(
+            new PutCommand({
+              TableName: TABLE,
+              Item: { pk: `ORG#${org}`, sk: "DELETION", version: 1, body: JSON.stringify({ orgId: org, deletedAt: NOW }) },
+            }),
+          );
+        }
+      }),
+      TABLE,
+      fixedClock,
+    );
+    await expect(racing.putFindings(org, [finding("main")])).rejects.toBeInstanceOf(DeletedOrgError);
+    expect((await rawItems(org)).map((item) => item.sk)).not.toContain("FINDINGS");
+    await expect(racing.nextSequence(org, "scan")).rejects.toBeInstanceOf(DeletedOrgError);
+    await newDynamo().offboard(org, NOW);
+    expect((await rawItems(org)).map((item) => item.sk)).toEqual(["DELETION"]);
+  });
+
+  it("retries a multi-document change whose base document moved underneath it", async () => {
+    const org = orgName();
+    const other = newDynamo();
+    let writes = 0;
+    let fired = false;
+    const store = new DynamoStore(
+      interceptingClient(async (command) => {
+        if (command instanceof UpdateCommand && command.input.Key?.sk === "SETTINGS") {
+          writes += 1;
+          if (!fired) {
+            fired = true;
+            await other.putSettings(org, { ...DEFAULT_SETTINGS, ownerTagKey: "interloper", updatedAt: NOW });
+          }
+        }
+      }),
+      TABLE,
+      fixedClock,
+    );
+    await store.putSettings(org, { ...DEFAULT_SETTINGS, ownerTagKey: "mine", updatedAt: NOW });
+    expect(writes).toBe(2);
+    expect((await other.read(org, "settings")).settings.ownerTagKey).toBe("mine");
+  });
+
   it("removes superseded chunks when a document is rewritten", async () => {
     const store = newDynamo();
     const org = orgName();
@@ -604,6 +677,15 @@ describe("DynamoStore persistence", () => {
     expect(outcomes[1]).toEqual(outcomes[0]);
   });
 });
+
+function interceptingClient(before: (command: unknown) => Promise<void>): DynamoDBDocumentClient {
+  return {
+    send: async (command: unknown) => {
+      await before(command);
+      return docClient.send(command as never);
+    },
+  } as unknown as DynamoDBDocumentClient;
+}
 
 async function rawItems(orgId: string): Promise<{ sk: string; parts?: number }[]> {
   const items: { sk: string; parts?: number }[] = [];

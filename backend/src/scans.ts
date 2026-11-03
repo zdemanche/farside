@@ -490,7 +490,10 @@ export class ScanRunner {
       if (live?.status !== "running") {
         return live ?? (await cancelled());
       }
-      if (connectedAtStart && !(await this.store.isConnected(orgId, current.subscriptionId))) {
+      if (
+        (await this.store.deletion(orgId)) ||
+        (connectedAtStart && !(await this.store.isConnected(orgId, current.subscriptionId)))
+      ) {
         return await cancelled();
       }
       const fresh = await this.store.read(orgId, "inventories", "facts", "findings", "coverage");
@@ -521,6 +524,10 @@ export class ScanRunner {
           observedAt: result.inventory.observedAt,
         }),
       );
+      if (connectedAtStart && !(await this.store.isConnected(orgId, current.subscriptionId))) {
+        await this.store.purgeSubscription(orgId, current.subscriptionId);
+        return await cancelled();
+      }
       const checks = checksFromCoverage(coverage, current.subscriptionId);
       const finishedAt = this.clock();
       const succeeded = await this.store.patchJob(orgId, jobId, {

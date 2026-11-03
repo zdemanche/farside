@@ -82,6 +82,7 @@ export interface OrgRepository {
   patchConnection(orgId: string, connectionId: string, patch: { healthy: boolean }): Promise<Connection | null>;
   deleteConnection(orgId: string, connectionId: string): Promise<boolean>;
   isConnected(orgId: string, subscriptionId: string): Promise<boolean>;
+  purgeSubscription(orgId: string, subscriptionId: string): Promise<void>;
 
   putInventory(orgId: string, inventory: Inventory): Promise<Inventory>;
   putCoverage(orgId: string, coverage: CoverageEntry[]): Promise<CoverageEntry[]>;

@@ -319,6 +319,14 @@ export class MemoryStore implements OrgRepository {
     return connection;
   }
 
+  async purgeSubscription(orgId: string, subscriptionId: string): Promise<void> {
+    const org = this.org(orgId);
+    const target = subscriptionId.toLowerCase();
+    if (!org.connections.some((connection) => connection.subscriptionId.toLowerCase() === target)) {
+      dropSubscription(org, subscriptionId);
+    }
+  }
+
   async deleteConnection(orgId: string, connectionId: string): Promise<boolean> {
     const org = this.org(orgId);
     const next = org.connections.filter((connection) => connection.id !== connectionId);

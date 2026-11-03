@@ -803,6 +803,26 @@ describe("disconnect during a scan", () => {
     expect(await store.runningScan(ORG, "sub-a")).toBeUndefined();
   });
 
+  it("removes what a scan merged when its subscription is disconnected between the merge writes", async () => {
+    const store = new MemoryStore(fixedClock);
+    const connection = await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
+    const putFindings = store.putFindings.bind(store);
+    vi.spyOn(store, "putFindings").mockImplementationOnce(async (orgId, findings) => {
+      const stored = await putFindings(orgId, findings);
+      await store.deleteConnection(orgId, connection.id);
+      return stored;
+    });
+    const runner = new ScanRunner(store, harvesterFor(TWO_SUBSCRIPTIONS), {}, fixedClock);
+    const { done } = await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    expect((await done).status).toBe("cancelled");
+    const org = store.snapshot(ORG);
+    expect(org.inventories.azure?.resources ?? []).toEqual([]);
+    expect(org.facts).toEqual([]);
+    expect(org.findings).toEqual([]);
+    expect(org.coverage).toEqual([]);
+    expect(org.issues.every((issue) => issue.status === "closed")).toBe(true);
+  });
+
   it("removes its abort listener once the harvest settles", async () => {
     const store = new MemoryStore(fixedClock);
     const track = store.trackScan.bind(store);
