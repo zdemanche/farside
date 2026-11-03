@@ -1,8 +1,8 @@
+import { ORG_ID_PATTERN } from "../session.js";
 import { CLOUDS } from "@farside/scan-contracts";
 import { allProviders } from "../providers/index.js";
 
 export const ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$";
-const ORG_ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$";
 const ISO_INSTANT_PATTERN = "^\\d{4}-\\d{2}-\\d{2}(T[\\d:.]+(Z|[+-]\\d{2}:\\d{2})?)?$";
 const DECIMAL_PATTERN = "^-?\\d+(\\.\\d+)?$";
 export const MAX_RECIPIENTS = 20;

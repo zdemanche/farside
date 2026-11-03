@@ -72,16 +72,16 @@ describe("benchmark: reads do not copy the org", BENCH_OPTIONS, () => {
     const store = new MemoryStore();
     const app = buildApp(store);
     const inventory = bigInventory(50_000);
-    store.putInventory(ORG, inventory);
-    store.putFacts(
+    await store.putInventory(ORG, inventory);
+    await store.putFacts(
       ORG,
       inventory.resources.map((resource) => ({
         resourceUri: resource.resourceUri,
         fields: { sizeGb: 32 },
       })),
     );
-    store.putConnection(ORG, { tenantId: "tenant-1", subscriptionId: "sub-1" });
-    const scan = store.putJob(job());
+    await store.putConnection(ORG, { tenantId: "tenant-1", subscriptionId: "sub-1" });
+    const scan = await store.putJob(job());
     const get = (url: string) =>
       app.inject({ method: "GET", url: `/v1/orgs/${ORG}${url}`, headers: HEADERS });
     await get("/connections");
@@ -213,13 +213,13 @@ describe("benchmark: history stays bounded", BENCH_OPTIONS, () => {
       clock,
     );
     const scheduler = new ScanScheduler(store, runner, clock);
-    store.putConnection(ORG, { tenantId: "tenant-1", subscriptionId: "sub-1" });
-    store.putSettings(ORG, { ...store.view(ORG).settings, scanScheduleEnabled: true });
-    scheduler.applySettings(ORG, OBSERVED_AT);
+    await store.putConnection(ORG, { tenantId: "tenant-1", subscriptionId: "sub-1" });
+    await store.putSettings(ORG, { ...store.view(ORG).settings, scanScheduleEnabled: true });
+    await scheduler.applySettings(ORG, OBSERVED_AT);
 
     const duration = await elapsedMs(async () => {
       for (let tick = 0; tick < 1_000; tick += 1) {
-        scheduler.tick(
+        await scheduler.tick(
           ORG,
           new Date(Date.parse(OBSERVED_AT) + (tick + 1) * 86_400_000).toISOString(),
         );
@@ -239,21 +239,21 @@ describe("benchmark: history stays bounded", BENCH_OPTIONS, () => {
 });
 
 describe("scan retention", () => {
-  it("prunes the oldest settled scans but keeps in-flight scans and the current scan", () => {
+  it("prunes the oldest settled scans but keeps in-flight scans and the current scan", async () => {
     const store = new MemoryStore();
-    const running = store.putJob(
+    const running = await store.putJob(
       job({ status: "running", complete: false, subscriptionId: "sub-running" }),
     );
-    const current = store.putJob(job());
+    const current = await store.putJob(job());
     for (let index = 0; index < MAX_SCANS_PER_ORG + 50; index += 1) {
-      store.putJob(job({ status: "failed", complete: false }));
+      await store.putJob(job({ status: "failed", complete: false }));
     }
     const ids = store.view(ORG).scans.map((scan) => scan.id);
     expect(ids).toHaveLength(MAX_SCANS_PER_ORG);
     expect(ids).toContain(running.id);
     expect(ids).toContain(current.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(store.putJob(job()).id).toBe(`scan-${MAX_SCANS_PER_ORG + 53}`);
+    expect((await store.putJob(job())).id).toBe(`scan-${MAX_SCANS_PER_ORG + 53}`);
   });
 });
 
@@ -262,7 +262,7 @@ describe("GET /scans paging", () => {
     const store = new MemoryStore();
     const app = buildApp(store);
     for (let index = 0; index < count; index += 1) {
-      store.putJob(job());
+      await store.putJob(job());
     }
     const list = async (query = "") => {
       const response = await app.inject({
@@ -302,9 +302,9 @@ describe("GET /scans paging", () => {
   it("includes the current scan when the page window would hide it", async () => {
     const store = new MemoryStore();
     const app = buildApp(store);
-    store.putJob(job());
+    await store.putJob(job());
     for (let index = 0; index < 60; index += 1) {
-      store.putJob(job({ status: "failed", complete: false }));
+      await store.putJob(job({ status: "failed", complete: false }));
     }
     const response = await app.inject({ method: "GET", url: `/v1/orgs/${ORG}/scans`, headers: HEADERS });
     const scans = response.json().scans as { id: string; current: boolean }[];
@@ -327,7 +327,7 @@ describe("egress guard", () => {
     const store = new MemoryStore();
     const app = buildApp(store);
     const inventory = bigInventory(50_000);
-    store.putInventory(ORG, inventory);
+    await store.putInventory(ORG, inventory);
     expect(isVerified(store.view(ORG).inventory)).toBe(true);
     expect(isVerified(structuredClone(inventory))).toBe(false);
     const get = (url: string) => app.inject({ method: "GET", url: `/v1/orgs/${ORG}${url}`, headers: HEADERS });
@@ -360,15 +360,15 @@ describe("connection ids", () => {
   it("never reuses an id after a delete", async () => {
     const store = new MemoryStore();
     const app = buildApp(store);
-    const first = store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-1" });
-    const second = store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-2" });
+    const first = await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-1" });
+    const second = await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-2" });
     const response = await app.inject({
       method: "DELETE",
       url: `/v1/orgs/${ORG}/connections/${first.id}`,
       headers: HEADERS,
     });
     expect(response.statusCode).toBe(204);
-    const third = store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-3" });
+    const third = await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-3" });
     expect(new Set([first.id, second.id, third.id]).size).toBe(3);
     expect(store.view(ORG).connections.map((connection) => connection.id)).toEqual([second.id, third.id]);
     await app.close();

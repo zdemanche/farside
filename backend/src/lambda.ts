@@ -1,5 +1,8 @@
 import { buildApp } from "./app.js";
-import { loggerFromEnv } from "./observability.js";
+import { systemClock } from "./clock.js";
+import { pino } from "pino";
+import { loggerFromEnv, pinoOptions } from "./observability.js";
+import { storeFromEnv } from "./store-from-env.js";
 
 type HttpMethod = "DELETE" | "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
 
@@ -51,7 +54,7 @@ export async function resolveOperatorToken(
 }
 
 async function start() {
-  const app = buildApp(undefined, {
+  const app = buildApp(await storeFromEnv(process.env, systemClock, pino(pinoOptions(loggerFromEnv()) || {})), {
     operatorToken: await resolveOperatorToken(),
     logger: loggerFromEnv(),
   });

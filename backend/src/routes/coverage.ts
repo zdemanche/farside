@@ -25,7 +25,7 @@ export const coverageRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const org = ctx.store.view(request.params.orgId);
+      const org = await ctx.store.read(request.params.orgId, "coverage", "findings");
       const coverage = cloudFilter(org.coverage, cloud, (entry) => entry.cloud);
       const findings = cloudFilter(org.findings, cloud, (finding) => finding.scope.cloud);
       return sendClean(reply, 200, {
@@ -52,8 +52,8 @@ export const coverageRoutes: RoutePlugin = (ctx) => async (app) => {
         ...(causeId === undefined ? {} : { causeId }),
         ...(closer === undefined ? {} : { closer }),
       };
-      const next = applyCoverageResult(ctx.store.view(request.params.orgId).coverage, result);
-      ctx.store.putCoverage(request.params.orgId, next);
+      const { coverage } = await ctx.store.read(request.params.orgId, "coverage");
+      await ctx.store.putCoverage(request.params.orgId, applyCoverageResult(coverage, result));
       return sendClean(reply, 200, recordCoverageScope(result));
     },
   );
@@ -64,7 +64,7 @@ export const coverageRoutes: RoutePlugin = (ctx) => async (app) => {
     async (request, reply) => {
       const cloud = cloudOf(request.query);
       const findings = cloudFilter(
-        ctx.store.view(request.params.orgId).findings,
+        (await ctx.store.read(request.params.orgId, "findings")).findings,
         cloud,
         (finding) => finding.scope.cloud,
       );
@@ -78,7 +78,7 @@ export const coverageRoutes: RoutePlugin = (ctx) => async (app) => {
     async (request, reply) => {
       const cloud = cloudOf(request.query);
       const issues = cloudFilter(
-        ctx.store.view(request.params.orgId).issues,
+        (await ctx.store.read(request.params.orgId, "issues")).issues,
         cloud,
         (issue) => issue.cloud,
       );

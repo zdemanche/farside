@@ -39,7 +39,7 @@ describe("scan job runner", () => {
   it("succeeds in the background and stores inventory and coverage", async () => {
     const store = new MemoryStore(fixedClock);
     const runner = new ScanRunner(store, fixtureHarvester(inventory));
-    const { job, started, done } = runner.start({
+    const { job, started, done } = await runner.start({
       orgId: "org-a",
       subscriptionId: "main",
       actor: "system",
@@ -56,7 +56,7 @@ describe("scan job runner", () => {
 
   it("keeps harvest-driven findings and coverage when harvest clients are not wired", async () => {
     const store = new MemoryStore(fixedClock);
-    store.putFindings("org-a", [
+    await store.putFindings("org-a", [
       {
         checkId: NO_BUDGETS,
         result: "fail",
@@ -85,7 +85,7 @@ describe("scan job runner", () => {
         },
       },
     ]);
-    store.putCoverage("org-a", [
+    await store.putCoverage("org-a", [
       recordCoverageScope({
         subscriptionOrProject: "main",
         checkId: SPEND_BY_SERVICE,
@@ -103,7 +103,7 @@ describe("scan job runner", () => {
       }),
     ]);
     const runner = new ScanRunner(store, fixtureHarvester(inventory));
-    const { done } = runner.start({ orgId: "org-a", subscriptionId: "main", actor: "system" });
+    const { done } = await runner.start({ orgId: "org-a", subscriptionId: "main", actor: "system" });
     await done;
     const org = store.snapshot("org-a");
     expect(org.findings.filter((finding) => finding.checkId === NO_BUDGETS)).toHaveLength(1);
@@ -122,7 +122,7 @@ describe("scan job runner", () => {
         ]);
       },
     });
-    const { done } = runner.start({ orgId: "org-a", subscriptionId: "main", actor: "system" });
+    const { done } = await runner.start({ orgId: "org-a", subscriptionId: "main", actor: "system" });
     const finished = await done;
     expect(finished.status).toBe("failed");
     expect(finished.complete).toBe(false);
@@ -142,8 +142,8 @@ describe("scan job runner", () => {
       release = resolve;
     });
     const runner = new ScanRunner(store, { harvest: () => gate });
-    const { done } = runner.start({ orgId: "org-a", subscriptionId: "main", actor: "user" });
-    const stopped = store.offboard("org-a", "2026-01-01T00:00:00.000Z");
+    const { done } = await runner.start({ orgId: "org-a", subscriptionId: "main", actor: "user" });
+    const stopped = await store.offboard("org-a", "2026-01-01T00:00:00.000Z");
     release({ inventory, coverage: [], coveredScopes: [], facts: [] });
     const finished = await done;
     await new Promise((resolve) => setImmediate(resolve));
@@ -151,7 +151,7 @@ describe("scan job runner", () => {
     expect(stopped.scansStopped).toBe(1);
     expect(finished.status).toBe("cancelled");
     expect(unhandled).toEqual([]);
-    expect(store.hasOrg("org-a")).toBe(false);
+    expect(await store.hasOrg("org-a")).toBe(false);
   });
 
   it("runs only one scan at a time per subscription", async () => {
@@ -161,8 +161,8 @@ describe("scan job runner", () => {
       release = resolve;
     });
     const runner = new ScanRunner(store, { harvest: () => gate });
-    const first = runner.start({ orgId: "org-a", subscriptionId: "main", actor: "user" });
-    const second = runner.start({ orgId: "org-a", subscriptionId: "main", actor: "user" });
+    const first = await runner.start({ orgId: "org-a", subscriptionId: "main", actor: "user" });
+    const second = await runner.start({ orgId: "org-a", subscriptionId: "main", actor: "user" });
     expect(first.started).toBe(true);
     expect(second.started).toBe(false);
     expect(second.job.id).toBe(first.job.id);
@@ -225,7 +225,7 @@ describe("scan on connect", () => {
 describe("scan history API", () => {
   it("returns coverage, per-check outcomes and marks only the latest complete success current", async () => {
     const store = new MemoryStore(fixedClock);
-    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     const app = buildApp(store, {
       ...TEST_APP_OPTIONS,
       ...FIXTURE_CLIENTS,
@@ -263,7 +263,7 @@ describe("scan history API", () => {
 
   it("keeps a failed scan off current and shows the failure reason", async () => {
     const store = new MemoryStore(fixedClock);
-    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     const app = buildApp(store, {
       ...TEST_APP_OPTIONS,
       harvester: {
@@ -304,7 +304,7 @@ describe("scan history API", () => {
     const gate = new Promise<HarvestResult>((resolve) => {
       release = resolve;
     });
-    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: { harvest: () => gate } });
     const started = await app.inject({
       method: "POST",
@@ -338,7 +338,7 @@ describe("scan history API", () => {
 describe("scan merge with harvests", () => {
   it("keeps budget and reservation findings and spend coverage after POST then scan", async () => {
     const store = new MemoryStore(fixedClock);
-    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     const app = buildApp(store, {
       ...TEST_APP_OPTIONS,
       ...FIXTURE_CLIENTS,
@@ -415,8 +415,8 @@ describe("scan merge across subscriptions", () => {
   it("keeps other subscriptions' findings and coverage, and marks an empty subscription assessed", async () => {
     let harvested: Inventory = inventory;
     const store = new MemoryStore(fixedClock);
-    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
-    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "dev" });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "dev" });
     const app = buildApp(store, {
       ...TEST_APP_OPTIONS,
       harvester: {
@@ -496,7 +496,7 @@ describe("untrusted client clock", () => {
 describe("server clock", () => {
   it("stamps a default-app scan with wall time and a real duration", async () => {
     const store = new MemoryStore();
-    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     const app = buildApp(store, { harvester: fixtureHarvester(inventory) });
     const before = Date.now();
     await app.inject({

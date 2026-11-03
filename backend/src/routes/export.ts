@@ -28,7 +28,7 @@ export const exportRoutes: RoutePlugin = (ctx) => async (app) => {
     async (request, reply) => {
       const cloud = cloudOf(request.query);
       const issues = cloudFilter(
-        ctx.store.view(request.params.orgId).issues,
+        (await ctx.store.read(request.params.orgId, "issues")).issues,
         cloud,
         (issue) => issue.cloud,
       );
@@ -46,7 +46,7 @@ export const exportRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const org = ctx.store.view(request.params.orgId);
+      const org = await ctx.store.read(request.params.orgId, "inventories", "inventory");
       const inventory = cloud ? (inventoriesFor(org, cloud)[0] ?? null) : org.inventory;
       attachment(reply, "inventory");
       return sendClean(
@@ -71,7 +71,7 @@ export const exportRoutes: RoutePlugin = (ctx) => async (app) => {
         200,
         exportCost(
           request.params.orgId,
-          asMutable<CostSnapshot | null>(ctx.store.view(request.params.orgId).cost),
+          asMutable<CostSnapshot | null>((await ctx.store.read(request.params.orgId, "cost")).cost),
           ctx.clientTime(request.query.asOf),
         ),
       );

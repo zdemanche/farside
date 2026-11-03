@@ -6,6 +6,9 @@ export type Session = {
   actorId: string;
 };
 
+export const ORG_ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$";
+const ORG_ID = new RegExp(ORG_ID_PATTERN);
+
 export const ORG_HEADER = "x-farside-org";
 export const ACTOR_HEADER = "x-farside-actor";
 export const OPERATOR_HEADER = "x-farside-operator";
@@ -14,7 +17,7 @@ export const OPERATOR_HEADER = "x-farside-operator";
 export function sessionFromHeaders(request: FastifyRequest): Session | null {
   const orgHeader = request.headers[ORG_HEADER];
   const orgId = Array.isArray(orgHeader) ? orgHeader[0] : orgHeader;
-  if (typeof orgId !== "string" || orgId.length === 0) {
+  if (typeof orgId !== "string" || !ORG_ID.test(orgId)) {
     return null;
   }
   const actorHeader = request.headers[ACTOR_HEADER];

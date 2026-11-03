@@ -1,6 +1,12 @@
 import * as aws from "@pulumi/aws";
 import * as pulumi from "@pulumi/pulumi";
-import { CDN_BEHAVIORS, SCHEDULE_RATE, assertAuthenticatedEdge, type DeployPlan } from "./plan.js";
+import {
+  CDN_BEHAVIORS,
+  SCHEDULE_RATE,
+  assertAuthenticatedEdge,
+  storeDeletionProtection,
+  type DeployPlan,
+} from "./plan.js";
 import { PRODUCT_KEY } from "./product.js";
 
 export type StackInputs = {
@@ -13,6 +19,16 @@ export type StackInputs = {
 
 const CACHING_OPTIMIZED = "658327ea-f89d-4fab-a63d-7e88639e58f6";
 const CLOUDFRONT = "cloudfront.amazonaws.com";
+const ORG_INDEX = "gsi1";
+const BLOB_PREFIX = "ORG#";
+const TABLE_ACTIONS = [
+  "dynamodb:GetItem",
+  "dynamodb:PutItem",
+  "dynamodb:UpdateItem",
+  "dynamodb:DeleteItem",
+  "dynamodb:BatchWriteItem",
+  "dynamodb:Query",
+];
 
 function assumeRole(service: string, sourceAccount?: string) {
   return aws.iam.getPolicyDocumentOutput({
@@ -48,6 +64,41 @@ function lambdaRole(name: string, logGroupArn: pulumi.Input<string>, tags: Deplo
   return role;
 }
 
+function grantTable(name: string, role: aws.iam.Role, tableArn: pulumi.Input<string>) {
+  new aws.iam.RolePolicy(`${name}-store`, {
+    role: role.id,
+    policy: pulumi.output(tableArn).apply((arn) =>
+      JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          { Effect: "Allow", Action: TABLE_ACTIONS, Resource: arn },
+          { Effect: "Allow", Action: "dynamodb:Query", Resource: `${arn}/index/${ORG_INDEX}` },
+        ],
+      }),
+    ),
+  });
+}
+
+function grantBlobs(name: string, role: aws.iam.Role, bucketArn: pulumi.Input<string>) {
+  new aws.iam.RolePolicy(`${name}-blobs`, {
+    role: role.id,
+    policy: pulumi.output(bucketArn).apply((arn) =>
+      JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+            Resource: `${arn}/${BLOB_PREFIX}*`,
+          },
+          // Unconditional ListBucket: dedicated Farside bucket, all objects under ORG#; the role already has Get/Delete on ORG#*, so listing exposes nothing new; an s3:prefix condition makes missing keys return 403 and breaks blob re-read (#278)
+          { Effect: "Allow", Action: "s3:ListBucket", Resource: arn },
+        ],
+      }),
+    ),
+  });
+}
+
 function lambdaFunction(input: {
   name: string;
   bundle: string;
@@ -80,7 +131,67 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
   const prefix = `${PRODUCT_KEY}-${plan.customerName}`;
   const apiName = `${prefix}-api`;
   const tickName = `${prefix}-tick`;
-  const environment = { FARSIDE_LOG_LEVEL: "info" };
+  const store = new aws.dynamodb.Table(`${prefix}-store`, {
+    name: `${prefix}-store`,
+    billingMode: "PAY_PER_REQUEST",
+    hashKey: "pk",
+    rangeKey: "sk",
+    attributes: [
+      { name: "pk", type: "S" },
+      { name: "sk", type: "S" },
+      { name: "gsi1pk", type: "S" },
+      { name: "gsi1sk", type: "S" },
+    ],
+    globalSecondaryIndexes: [
+      { name: ORG_INDEX, hashKey: "gsi1pk", rangeKey: "gsi1sk", projectionType: "KEYS_ONLY" },
+    ],
+    pointInTimeRecovery: { enabled: true },
+    deletionProtectionEnabled: storeDeletionProtection(tags.environment),
+    tags,
+  });
+  const blobs = new aws.s3.Bucket(`${prefix}-store-blobs`, {
+    bucket: `${prefix}-store-blobs-${plan.accountId}`,
+    forceDestroy: false,
+    tags,
+  });
+  new aws.s3.BucketPublicAccessBlock(`${prefix}-store-blobs-public-access`, {
+    bucket: blobs.id,
+    blockPublicAcls: true,
+    blockPublicPolicy: true,
+    ignorePublicAcls: true,
+    restrictPublicBuckets: true,
+  });
+  new aws.s3.BucketServerSideEncryptionConfiguration(`${prefix}-store-blobs-encryption`, {
+    bucket: blobs.id,
+    rules: [{ applyServerSideEncryptionByDefault: { sseAlgorithm: "AES256" } }],
+  });
+  new aws.s3.BucketPolicy(`${prefix}-store-blobs-policy`, {
+    bucket: blobs.id,
+    policy: blobs.arn.apply((arn) =>
+      JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Deny",
+            Principal: "*",
+            Action: "s3:*",
+            Resource: [arn, `${arn}/*`],
+            Condition: { Bool: { "aws:SecureTransport": "false" } },
+          },
+        ],
+      }),
+    ),
+  });
+  new aws.s3.BucketLifecycleConfiguration(`${prefix}-store-blobs-lifecycle`, {
+    bucket: blobs.id,
+    rules: [{ id: "abort-incomplete-multipart", status: "Enabled", abortIncompleteMultipartUpload: { daysAfterInitiation: 1 } }],
+  });
+  const environment = {
+    FARSIDE_LOG_LEVEL: "info",
+    FARSIDE_STORE: "dynamo",
+    FARSIDE_TABLE_NAME: store.name,
+    FARSIDE_BLOB_BUCKET: blobs.bucket,
+  };
   const tokenParameter = new aws.ssm.Parameter(`${prefix}-operator-token`, {
     name: `/${PRODUCT_KEY}/${plan.customerName}/operator-token`,
     type: "SecureString",
@@ -96,6 +207,8 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     tags,
   });
   const apiRole = lambdaRole(apiName, apiLogs.arn, tags);
+  grantTable(apiName, apiRole, store.arn);
+  grantBlobs(apiName, apiRole, blobs.arn);
   const api = lambdaFunction({
     name: apiName,
     bundle: apiBundle,
@@ -134,12 +247,15 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     retentionInDays: logRetentionDays,
     tags,
   });
+  const tickRole = lambdaRole(tickName, tickLogs.arn, tags);
+  grantTable(tickName, tickRole, store.arn);
+  grantBlobs(tickName, tickRole, blobs.arn);
   const tick = lambdaFunction({
     name: tickName,
     bundle: tickBundle,
     file: "scheduled.mjs",
     handler: "scheduled.handler",
-    role: lambdaRole(tickName, tickLogs.arn, tags),
+    role: tickRole,
     logGroup: tickLogs,
     environment: { ...environment, FARSIDE_EMIT_EMF: "1" },
     timeout: 300,
@@ -235,5 +351,6 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     apiUrl: apiUrl.functionUrl,
     consoleBucket: consoleBucket.bucket,
     scheduleName: schedule.name,
+    tableName: store.name,
   };
 }

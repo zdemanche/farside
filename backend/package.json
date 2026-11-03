@@ -7,16 +7,20 @@
     "build": "tsc -p tsconfig.json && node bundle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run --exclude src/performance.test.ts && vitest run src/performance.test.ts",
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1161.0",
+    "@aws-sdk/client-s3": "^3.1161.0",
     "@aws-sdk/client-ssm": "^3.1161.0",
+    "@aws-sdk/lib-dynamodb": "^3.1161.0",
     "@farside/scan-contracts": "*",
     "fastify": "^5.12.8",
     "pino": "^10.4.0"
   },
   "devDependencies": {
+    "dynalite": "^4.0.0",
     "esbuild": "^0.28.2",
     "tsx": "^4.20.6"
   }

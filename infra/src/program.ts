@@ -36,3 +36,4 @@ export const consoleUrl = outputs.consoleUrl;
 export const apiUrl = outputs.apiUrl;
 export const consoleBucket = outputs.consoleBucket;
 export const scheduleName = outputs.scheduleName;
+export const tableName = outputs.tableName;

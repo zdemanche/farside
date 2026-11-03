@@ -64,7 +64,7 @@ async function settled(store: MemoryStore): Promise<void> {
 describe("canonical subscription ids", () => {
   it("keeps one cost entry when a route harvest uses another casing than the scan", async () => {
     const store = new MemoryStore(fixedClock);
-    store.putConnection(ORG, { tenantId: "t", subscriptionId: "main" });
+    await store.putConnection(ORG, { tenantId: "t", subscriptionId: "main" });
     const costClient = fixtureCostClient();
     const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester, costClient });
     const harvested = await app.inject({
@@ -111,8 +111,8 @@ describe("commitments per subscription", () => {
   it("keeps the first subscription's reservation findings and issues after scanning the second", async () => {
     const store = new MemoryStore(fixedClock);
     const runner = new ScanRunner(store, harvester, { commitmentClient: lowUseCommitments }, fixedClock);
-    await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" }).done;
-    await runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "user" }).done;
+    await (await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" })).done;
+    await (await runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "user" })).done;
     const org = store.snapshot(ORG);
     const owners = org.findings
       .filter((finding) => finding.checkId === RESERVATION_USE && finding.result === "fail")
@@ -130,12 +130,12 @@ describe("commitments per subscription", () => {
 describe("disconnecting a subscription", () => {
   it("drops its findings and coverage and closes its issues with a reason", async () => {
     const store = new MemoryStore(fixedClock);
-    const connection = store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
-    store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-b" });
+    const connection = await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
+    await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-b" });
     const runner = new ScanRunner(store, harvester, {}, fixedClock);
-    await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" }).done;
-    await runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "user" }).done;
-    expect(store.deleteConnection(ORG, connection.id)).toBe(true);
+    await (await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" })).done;
+    await (await runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "user" })).done;
+    expect(await store.deleteConnection(ORG, connection.id)).toBe(true);
     const org = store.snapshot(ORG);
     expect(org.findings.some((finding) => finding.scope.subscriptionOrProject === "sub-a")).toBe(false);
     expect(org.coverage.some((entry) => entry.subscriptionOrProject === "sub-a")).toBe(false);
@@ -156,11 +156,11 @@ describe("disconnecting a subscription", () => {
 
   it("keeps the data while another connection shares the subscription id in another casing", async () => {
     const store = new MemoryStore(fixedClock);
-    const first = store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
-    store.putConnection(ORG, { tenantId: "t2", subscriptionId: "SUB-A" });
+    const first = await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
+    await store.putConnection(ORG, { tenantId: "t2", subscriptionId: "SUB-A" });
     const runner = new ScanRunner(store, harvester, {}, fixedClock);
-    await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" }).done;
-    store.deleteConnection(ORG, first.id);
+    await (await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" })).done;
+    await store.deleteConnection(ORG, first.id);
     expect(store.snapshot(ORG).inventories.azure?.resources).toHaveLength(1);
   });
 });
@@ -177,9 +177,9 @@ describe("offboarding with queued scans", () => {
       debug: () => undefined,
     };
     const runner = new ScanRunner(store, hung, {}, fixedClock, log as never);
-    const first = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "system" });
-    const second = runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "system" });
-    const record = store.offboard(ORG, FIXED_NOW);
+    const first = await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "system" });
+    const second = await runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "system" });
+    const record = await store.offboard(ORG, FIXED_NOW);
     expect(record.scansStopped).toBe(2);
     expect((await first.done).status).toBe("cancelled");
     expect((await second.done).status).toBe("cancelled");

@@ -7,7 +7,7 @@ import { recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import { applyScanToIssues, type StoredIssue } from "./issues.js";
 import { diskMonthlySavings } from "./savings.js";
 import type { Harvester, ScanJob } from "./scans.js";
-import type { MemoryStore } from "./store.js";
+import type { OrgRepository } from "./repository.js";
 
 export const DEMO_ORG_ID = "demo";
 export const DEMO_LABEL = "Demo";
@@ -300,19 +300,32 @@ export function generateDemoEstate(): {
   return estate;
 }
 
-export function seedDemoOrg(store: MemoryStore): void {
-  if (store.org(DEMO_ORG_ID).inventory) {
+const seeding = new WeakMap<OrgRepository, Promise<void>>();
+
+async function seed(store: OrgRepository): Promise<void> {
+  if (await store.seeded(DEMO_ORG_ID)) {
     return;
   }
   const estate = generateDemoEstate();
-  store.putInventory(DEMO_ORG_ID, estate.inventory);
-  store.putCoverage(DEMO_ORG_ID, estate.coverage);
-  store.putFindings(DEMO_ORG_ID, estate.findings);
-  store.putIssues(DEMO_ORG_ID, estate.issues);
-  store.putCost(DEMO_ORG_ID, estate.cost);
-  store.putCommitments(DEMO_ORG_ID, estate.commitments);
-  store.putBudgets(DEMO_ORG_ID, estate.budgets);
-  store.putAlerts(DEMO_ORG_ID, estate.alerts);
-  store.putConnection(DEMO_ORG_ID, { tenantId: DEMO_TENANT, subscriptionId: DEMO_SUBSCRIPTION, cloud: "azure" });
-  store.putJob(estate.scan);
+  await store.putInventory(DEMO_ORG_ID, estate.inventory);
+  await store.putCoverage(DEMO_ORG_ID, estate.coverage);
+  await store.putFindings(DEMO_ORG_ID, estate.findings);
+  await store.putIssues(DEMO_ORG_ID, estate.issues);
+  await store.putCost(DEMO_ORG_ID, estate.cost);
+  await store.putCommitments(DEMO_ORG_ID, estate.commitments);
+  await store.putBudgets(DEMO_ORG_ID, estate.budgets);
+  await store.putAlerts(DEMO_ORG_ID, estate.alerts);
+  await store.putConnection(
+    DEMO_ORG_ID,
+    { tenantId: DEMO_TENANT, subscriptionId: DEMO_SUBSCRIPTION, cloud: "azure" },
+    "conn-1",
+  );
+  await store.putJob(estate.scan, "scan-1");
+  await store.markSeeded(DEMO_ORG_ID);
+}
+
+export function seedDemoOrg(store: OrgRepository): Promise<void> {
+  const pending = seeding.get(store) ?? seed(store).finally(() => seeding.delete(store));
+  seeding.set(store, pending);
+  return pending;
 }

@@ -24,7 +24,7 @@ export const inventoryRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const org = ctx.store.view(request.params.orgId);
+      const org = await ctx.store.read(request.params.orgId, "inventories", "inventory");
       const inventory = cloud ? inventoriesFor(org, cloud)[0] : org.inventory;
       return inventory ? sendStored(reply, 200, inventory) : problem(reply, 404, "Not found");
     },
@@ -35,7 +35,10 @@ export const inventoryRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const inventories = inventoriesFor(ctx.store.view(request.params.orgId), cloud);
+      const inventories = inventoriesFor(
+        await ctx.store.read(request.params.orgId, "inventories", "inventory"),
+        cloud,
+      );
       if (inventories.length === 0) {
         return problem(reply, 404, "Not found");
       }
@@ -58,7 +61,10 @@ export const inventoryRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams, querystring: browseQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const inventories = inventoriesFor(ctx.store.view(request.params.orgId), cloud);
+      const inventories = inventoriesFor(
+        await ctx.store.read(request.params.orgId, "inventories", "inventory"),
+        cloud,
+      );
       if (inventories.length === 0) {
         return problem(reply, 404, "Not found");
       }
@@ -93,14 +99,14 @@ export const inventoryRoutes: RoutePlugin = (ctx) => async (app) => {
       const { orgId } = request.params;
       const tagged = applyOwnerTag(
         projectInventory(request.body as Inventory),
-        ctx.store.view(orgId).settings.ownerTagKey,
+        (await ctx.store.read(orgId, "settings")).settings.ownerTagKey,
       );
-      const stored = ctx.store.putInventory(orgId, tagged);
+      const stored = await ctx.store.putInventory(orgId, tagged);
       const scopes = [
         ...new Set(stored.resources.map((row) => scopeOf(stored.cloud, row.resourceUri))),
       ].filter(Boolean);
       const provider = providerFor(stored.cloud);
-      ctx.store.putCoverage(
+      await ctx.store.putCoverage(
         orgId,
         coverageFromHarvest(scopes, provider.launchCheckIds, provider.harvestAssessedCheckIds),
       );

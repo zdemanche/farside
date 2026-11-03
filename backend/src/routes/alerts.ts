@@ -15,7 +15,7 @@ export const alertRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/alerts",
     { schema: { params: orgParams } },
     async (request, reply) => {
-      const alerts = ctx.store.view(request.params.orgId).alerts;
+      const { alerts } = await ctx.store.read(request.params.orgId, "alerts");
       return alerts ? sendClean(reply, 200, alerts) : problem(reply, 404, "Not found");
     },
   );
@@ -27,7 +27,7 @@ export const alertRoutes: RoutePlugin = (ctx) => async (app) => {
       config: {
         rejectSecrets: true,
         invalidTitle: "Invalid alerts",
-        demo: (store, orgId) => ({ status: 200, body: store.view(orgId).alerts }),
+        demo: async (store, orgId) => ({ status: 200, body: (await store.read(orgId, "alerts")).alerts }),
       },
     },
     async (request, reply) => {
@@ -45,7 +45,7 @@ export const alertRoutes: RoutePlugin = (ctx) => async (app) => {
         recipients: body.recipients ?? [],
         previous: body.previous ?? [],
       });
-      ctx.store.putAlerts(request.params.orgId, analysis);
+      await ctx.store.putAlerts(request.params.orgId, analysis);
       return sendClean(reply, 200, analysis);
     },
   );

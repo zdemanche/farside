@@ -3,7 +3,7 @@ import { matchesCloud } from "./cloud.js";
 import type { CoverageEntry } from "./coverage.js";
 import { coverageHealth } from "./coverage.js";
 import { noOwnerTotal } from "./inventory.js";
-import type { OrgView } from "./store.js";
+import type { OrgView } from "./repository.js";
 
 export type EstateOverview = {
   empty: boolean;
@@ -21,7 +21,7 @@ export function coverageCounts(entries: CoverageEntry[]): EstateOverview["covera
   };
 }
 
-export function inventoriesFor(org: OrgView, cloud?: Cloud) {
+export function inventoriesFor(org: Pick<OrgView, "inventories" | "inventory">, cloud?: Cloud) {
   const stored = CLOUDS.flatMap((name) => {
     const inventory = org.inventories[name];
     return inventory ? [inventory] : [];
@@ -30,7 +30,10 @@ export function inventoriesFor(org: OrgView, cloud?: Cloud) {
   return pool.filter((inventory) => matchesCloud(inventory.cloud, cloud));
 }
 
-export function estateOverview(org: OrgView, cloud?: Cloud): EstateOverview {
+export function estateOverview(
+  org: Pick<OrgView, "inventories" | "inventory" | "coverage" | "findings">,
+  cloud?: Cloud,
+): EstateOverview {
   const inventories = inventoriesFor(org, cloud);
   const coverage = org.coverage.filter((entry) => matchesCloud(entry.cloud, cloud));
   const findings = org.findings.filter((finding) => matchesCloud(finding.scope.cloud, cloud));

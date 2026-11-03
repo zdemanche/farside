@@ -167,7 +167,7 @@ describe("audit lines", () => {
     const store = new MemoryStore(() => later);
     const { app, lines } = build({ clock: () => later }, store);
     const start = "2026-01-01T00:00:00.000Z";
-    store.putContract(
+    await store.putContract(
       "org-paused",
       parseContract({ plan: "p", startDate: start, unpaidAt: start }, start),
     );
@@ -197,7 +197,7 @@ describe("audit lines", () => {
     let now = "2026-10-01T00:00:00.000Z";
     const store = new MemoryStore(() => now);
     const { app, lines } = build({ clock: () => now }, store);
-    store.putContract(
+    await store.putContract(
       "org-a",
       parseContract({ plan: "p", startDate: now, unpaidAt: now }, now),
     );
@@ -275,7 +275,7 @@ describe("error handling", () => {
         },
       },
     });
-    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/scans",
@@ -306,7 +306,7 @@ describe("error handling", () => {
 
   it("logs scan start and finish with duration and check counts", async () => {
     const { app, store, lines } = build({ harvester: fixtureHarvester(inventoryFromManifest(MANIFEST)) });
-    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/scans",
@@ -349,7 +349,7 @@ describe("error handling", () => {
         },
       },
     });
-    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/scans",
@@ -368,14 +368,14 @@ describe("error handling", () => {
       fail = reject;
     });
     const { app, store, lines } = build({ harvester: { harvest: () => gate } });
-    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/scans",
       headers: ORG,
       payload: { subscriptionId: "main" },
     });
-    store.offboard("org-a");
+    await store.offboard("org-a");
     fail(new Error(SECRET_MESSAGE));
     await vi.waitFor(() => expect(events(lines, "scan.cancelled")).toHaveLength(1));
     expect(events(lines, "scan.cancelled")[0]).toMatchObject({ orgId: "org-a", scanId: "scan-1" });

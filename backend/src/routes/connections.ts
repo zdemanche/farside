@@ -12,7 +12,7 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/connections",
     { schema: { params: orgParams } },
     async (request, reply) =>
-      sendStored(reply, 200, { connections: ctx.store.view(request.params.orgId).connections }),
+      sendStored(reply, 200, await ctx.store.read(request.params.orgId, "connections")),
   );
 
   app.put<{ Params: OrgParams; Body: ConnectionInput }>(
@@ -24,14 +24,14 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
     async (request, reply) => {
       const { orgId } = request.params;
       const { tenantId, subscriptionId, cloud, asOf } = request.body;
-      const connection = ctx.store.putConnection(orgId, {
+      const connection = await ctx.store.putConnection(orgId, {
         tenantId,
         subscriptionId,
         ...(cloud ? { cloud } : {}),
       });
       audit(request.log, "connection.connect");
-      ctx.scheduler.applySettings(orgId, ctx.clientTime(asOf));
-      if (!canScan(ctx.store.view(orgId).contract, ctx.clock())) {
+      await ctx.scheduler.applySettings(orgId, ctx.clientTime(asOf));
+      if (!canScan((await ctx.store.read(orgId, "contract")).contract, ctx.clock())) {
         return sendClean(reply, 201, {
           ...connection,
           scan: null,
@@ -39,7 +39,7 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
           attention: "scans paused",
         });
       }
-      const scan = ctx.runner.start({ orgId, subscriptionId, actor: "user" });
+      const scan = await ctx.runner.start({ orgId, subscriptionId, actor: "user" });
       return sendClean(reply, 201, { ...connection, scan: scan.job, scanStarted: scan.started });
     },
   );
@@ -48,7 +48,7 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/connections/:connectionId",
     { schema: { params: connectionParams } },
     async (request, reply) => {
-      if (!ctx.store.deleteConnection(request.params.orgId, request.params.connectionId)) {
+      if (!(await ctx.store.deleteConnection(request.params.orgId, request.params.connectionId))) {
         return problem(reply, 404, "Not found");
       }
       audit(request.log, "connection.disconnect");

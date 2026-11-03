@@ -233,9 +233,9 @@ describe("headline route", () => {
   });
 
   it("returns the headline with every figure not supported until a live run exists", async () => {
-    store.putCost("org-a", cost);
-    store.putFindings("org-a", [diskFail]);
-    store.putCoverage("org-a", assessed);
+    await store.putCost("org-a", cost);
+    await store.putFindings("org-a", [diskFail]);
+    await store.putCoverage("org-a", assessed);
     const response = await app.inject({
       method: "GET",
       url: "/v1/orgs/org-a/headline",

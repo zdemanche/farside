@@ -37,6 +37,26 @@ jobs:
       - run: npm run test
       - run: npm run build
 
+  repository-dynamodb-local:
+    name: repository contract on DynamoDB Local
+    runs-on: ubuntu-latest
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local:2.5.2
+        ports:
+          - 8000:8000
+    env:
+      DYNAMO_ENDPOINT: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run src/repository.contract.test.ts
+        working-directory: backend
+
   e2e:
     name: console browser tests and formatting
     needs: lint-types-tests

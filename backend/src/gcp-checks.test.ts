@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { RAW_PROVIDER_KEYS, validateFinding } from "@farside/scan-contracts";
 import { buildApp } from "./app.js";
 import { registeredCheckIds, runChecks, UnregisteredCheckError } from "./checks.js";
@@ -160,8 +160,11 @@ describe("gcp old snapshots and images", () => {
 
 describe("gcp waste scan", () => {
   const store = new MemoryStore(fixedClock);
-  store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "farside-test" });
   const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: fixtureHarvester(inventory, facts) });
+
+  beforeAll(async () => {
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "farside-test" });
+  });
 
   afterAll(async () => {
     await app.close();

@@ -105,13 +105,21 @@ describe("deployStack", () => {
   });
 
   it("keeps the console bucket private", () => {
-    expect(ofType("aws:s3/bucket:Bucket")).toHaveLength(1);
-    expect(ofType("aws:s3/bucketPublicAccessBlock:BucketPublicAccessBlock")[0]?.inputs).toMatchObject({
-      blockPublicAcls: true,
-      blockPublicPolicy: true,
-      ignorePublicAcls: true,
-      restrictPublicBuckets: true,
-    });
+    const buckets = ofType("aws:s3/bucket:Bucket");
+    expect(buckets.map((bucket) => bucket.name).sort()).toEqual([
+      "farside-moonaan-dev-console",
+      "farside-moonaan-dev-store-blobs",
+    ]);
+    const blocks = ofType("aws:s3/bucketPublicAccessBlock:BucketPublicAccessBlock");
+    expect(blocks).toHaveLength(2);
+    for (const block of blocks) {
+      expect(block.inputs).toMatchObject({
+        blockPublicAcls: true,
+        blockPublicPolicy: true,
+        ignorePublicAcls: true,
+        restrictPublicBuckets: true,
+      });
+    }
     expect(ofType("aws:cloudfront/distribution:Distribution")).toHaveLength(1);
   });
 
@@ -139,6 +147,87 @@ describe("deployStack", () => {
         expect(resource.inputs.tags, resource.name).toMatchObject({ product: "farside", managedBy: "pulumi" });
       }
     }
+  });
+
+  it("creates one on-demand store table with PITR, a keys-only org index and no CMK", () => {
+    const tables = ofType("aws:dynamodb/table:Table");
+    expect(tables).toHaveLength(1);
+    expect(tables[0]?.inputs).toMatchObject({
+      name: "farside-moonaan-dev-store",
+      billingMode: "PAY_PER_REQUEST",
+      hashKey: "pk",
+      rangeKey: "sk",
+      pointInTimeRecovery: { enabled: true },
+      deletionProtectionEnabled: false,
+      globalSecondaryIndexes: [{ name: "gsi1", hashKey: "gsi1pk", rangeKey: "gsi1sk", projectionType: "KEYS_ONLY" }],
+      tags: { product: "farside", managedBy: "pulumi" },
+    });
+    expect(tables[0]?.inputs.serverSideEncryption).toBeUndefined();
+    expect(tables[0]?.inputs.readCapacity).toBeUndefined();
+  });
+
+  it("points both lambdas at the store and grants them only that table and its org index", async () => {
+    for (const fn of ofType("aws:lambda/function:Function")) {
+      const variables = (fn.inputs.environment as { variables: Record<string, string> }).variables;
+      expect(variables.FARSIDE_STORE, fn.name).toBe("dynamo");
+      expect(variables.FARSIDE_TABLE_NAME, fn.name).toBe("farside-moonaan-dev-store");
+    }
+    const grants = ofType("aws:iam/rolePolicy:RolePolicy").filter((policy) => policy.name.endsWith("-store"));
+    expect(grants.map((grant) => grant.name).sort()).toEqual(["farside-moonaan-dev-api-store", "farside-moonaan-dev-tick-store"]);
+    const table = "arn:aws:mock:us-east-2:123456789012:farside-moonaan-dev-store";
+    for (const grant of grants) {
+      const policy = JSON.parse(await resolved(pulumi.output(grant.inputs.policy as pulumi.Input<string>)));
+      expect(policy.Statement).toEqual([
+        {
+          Effect: "Allow",
+          Action: [
+            "dynamodb:GetItem",
+            "dynamodb:PutItem",
+            "dynamodb:UpdateItem",
+            "dynamodb:DeleteItem",
+            "dynamodb:BatchWriteItem",
+            "dynamodb:Query",
+          ],
+          Resource: table,
+        },
+        { Effect: "Allow", Action: "dynamodb:Query", Resource: `${table}/index/gsi1` },
+      ]);
+    }
+  });
+
+  it("keeps oversized documents in a private, encrypted blob bucket only the two lambdas can reach", async () => {
+    expect(ofType("aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration")[0]?.inputs).toMatchObject({
+      rules: [{ applyServerSideEncryptionByDefault: { sseAlgorithm: "AES256" } }],
+    });
+    expect(ofType("aws:s3/bucketLifecycleConfiguration:BucketLifecycleConfiguration")[0]?.inputs).toMatchObject({
+      rules: [{ status: "Enabled", abortIncompleteMultipartUpload: { daysAfterInitiation: 1 } }],
+    });
+    expect(ofType("aws:s3/bucketVersioning:BucketVersioning")).toEqual([]);
+    for (const fn of ofType("aws:lambda/function:Function")) {
+      const variables = (fn.inputs.environment as { variables: Record<string, string> }).variables;
+      expect(variables.FARSIDE_BLOB_BUCKET, fn.name).toBe(`farside-moonaan-dev-store-blobs-123456789012`);
+    }
+    const grants = ofType("aws:iam/rolePolicy:RolePolicy").filter((policy) => policy.name.endsWith("-blobs"));
+    expect(grants.map((grant) => grant.name).sort()).toEqual(["farside-moonaan-dev-api-blobs", "farside-moonaan-dev-tick-blobs"]);
+    const bucket = "arn:aws:mock:us-east-2:123456789012:farside-moonaan-dev-store-blobs";
+    for (const grant of grants) {
+      const policy = JSON.parse(await resolved(pulumi.output(grant.inputs.policy as pulumi.Input<string>)));
+      expect(policy.Statement).toEqual([
+        { Effect: "Allow", Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], Resource: `${bucket}/ORG#*` },
+        { Effect: "Allow", Action: "s3:ListBucket", Resource: bucket },
+      ]);
+    }
+    const [tls] = ofType("aws:s3/bucketPolicy:BucketPolicy").filter((policy) => policy.name.endsWith("store-blobs-policy"));
+    const denied = JSON.parse(await resolved(pulumi.output(tls?.inputs.policy as pulumi.Input<string>)));
+    expect(denied.Statement).toEqual([
+      {
+        Effect: "Deny",
+        Principal: "*",
+        Action: "s3:*",
+        Resource: [bucket, `${bucket}/*`],
+        Condition: { Bool: { "aws:SecureTransport": "false" } },
+      },
+    ]);
   });
 
   it("keeps the operator token out of the Lambda environment", async () => {
@@ -177,5 +266,6 @@ describe("deployStack", () => {
       }),
     ]);
     expect(await resolved(outputs.apiUrl)).toBe("https://abc.lambda-url.us-east-2.on.aws/");
+    expect(await resolved(outputs.tableName)).toBe("farside-moonaan-dev-store");
   });
 });

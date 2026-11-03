@@ -15,6 +15,7 @@ export type PlannedResource = {
   kind:
     | "iam-role"
     | "ssm-parameter"
+    | "dynamodb-table"
     | "lambda"
     | "lambda-url"
     | "log-group"
@@ -49,12 +50,18 @@ export const CDN_BEHAVIORS: EdgeBehavior[] = [{ pathPattern: "*", origin: "conso
 
 export const SCHEDULE_RATE = "rate(15 minutes)";
 
+export function storeDeletionProtection(environment: FarsideTags["environment"]): boolean {
+  return environment !== "dev";
+}
+
 export function planDevStack(input: FarsideTagInput & { accountId: string }): DeployPlan {
   const tags = moonaanTags(input);
   const prefix = `${PRODUCT_KEY}-${input.customerName}`;
   const resources: PlannedResource[] = [
     { name: `${prefix}-api-role`, kind: "iam-role", tags },
     { name: `${prefix}-operator-token`, kind: "ssm-parameter", tags },
+    { name: `${prefix}-store`, kind: "dynamodb-table", tags },
+    { name: `${prefix}-store-blobs`, kind: "s3-bucket", tags },
     { name: `${prefix}-api-logs`, kind: "log-group", tags },
     { name: `${prefix}-api`, kind: "lambda", tags },
     { name: `${prefix}-api-url`, kind: "lambda-url", tags, authType: "AWS_IAM" },

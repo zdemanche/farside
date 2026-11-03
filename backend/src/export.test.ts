@@ -109,8 +109,8 @@ describe("export routes", () => {
   });
 
   it("exports the owning org only and refuses a cross-org session", async () => {
-    store.putInventory("org-a", inventoryFromManifest(MANIFEST));
-    store.putIssues("org-a", [
+    await store.putInventory("org-a", inventoryFromManifest(MANIFEST));
+    await store.putIssues("org-a", [
       {
         id: "issue-1",
         checkId: fail.checkId,
@@ -125,7 +125,7 @@ describe("export routes", () => {
         lastConfirmed: T0,
       },
     ]);
-    store.putCost("org-a", {
+    await store.putCost("org-a", {
       subscriptionId: "main",
       billingScope: "/subscriptions/main",
       currency: "USD",
@@ -149,7 +149,7 @@ describe("export routes", () => {
       months: [],
       monthOnMonth: [],
     });
-    store.putInventory("org-b", {
+    await store.putInventory("org-b", {
       cloud: "azure",
       observedAt: T0,
       resources: [],

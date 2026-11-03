@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
@@ -67,9 +67,12 @@ describe("org scoping", () => {
   const app = buildApp(store, TEST_APP_OPTIONS);
   const inventory = inventoryFromManifest(MANIFEST);
 
-  store.putInventory("org-a", inventory);
-  store.putConnection("org-a", { tenantId: "tenant-org-a", subscriptionId: "sub-org-a" });
-  store.putConnection("org-b", { tenantId: "tenant-org-b", subscriptionId: "sub-org-b" });
+
+  beforeAll(async () => {
+    await store.putInventory("org-a", inventory);
+    await store.putConnection("org-a", { tenantId: "tenant-org-a", subscriptionId: "sub-org-a" });
+    await store.putConnection("org-b", { tenantId: "tenant-org-b", subscriptionId: "sub-org-b" });
+  });
 
   afterAll(async () => {
     await app.close();

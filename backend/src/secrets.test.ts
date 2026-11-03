@@ -15,14 +15,14 @@ describe("no-secrets guard", () => {
     await app.close();
   });
 
-  it("fails the build when a stored record contains a client_secret", () => {
-    expect(() =>
+  it("fails the build when a stored record contains a client_secret", async () => {
+    await expect(
       store.putConnection("org-a", {
         tenantId: "t",
         subscriptionId: "s",
         client_secret: "not-a-real-secret",
       } as { tenantId: string; subscriptionId: string }),
-    ).toThrow(SecretLeakError);
+    ).rejects.toThrow(SecretLeakError);
   });
 
   it("fails when a log line contains a token pattern", () => {

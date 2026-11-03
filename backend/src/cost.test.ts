@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
 import {
   CURRENCY_CLOSER,
@@ -198,8 +198,11 @@ describe("cost harvest", () => {
 
 describe("cost routes", () => {
   const store = new MemoryStore(fixedClock);
-  store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
   const app = buildApp(store, { ...TEST_APP_OPTIONS, costClient: fixtureCostClient() });
+
+  beforeAll(async () => {
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+  });
 
   afterAll(async () => {
     await app.close();
@@ -244,8 +247,11 @@ describe("cost routes", () => {
 
 describe("missing cost role on the API", () => {
   const store = new MemoryStore(fixedClock);
-  store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
   const app = buildApp(store, { ...TEST_APP_OPTIONS, costClient: missingCostRoleClient() });
+
+  beforeAll(async () => {
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+  });
 
   afterAll(async () => {
     await app.close();
@@ -275,7 +281,7 @@ describe("billing scope is built server-side", () => {
 
   it("ignores a body billingScope on POST /cost and queries the connected subscription", async () => {
     const store = new MemoryStore(fixedClock);
-    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "Main" });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "Main" });
     const seen: string[] = [];
     const costClient = {
       query: async (input: { billingScope: string }) => {
@@ -297,7 +303,7 @@ describe("billing scope is built server-side", () => {
 
   it("ignores a body billingScope on POST /commitments", async () => {
     const store = new MemoryStore(fixedClock);
-    store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
     const seen: string[] = [];
     const commitmentClient = {
       list: async (input: { billingScope: string }) => {
