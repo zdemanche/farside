@@ -47,12 +47,19 @@ export type AlertDigest = {
   reason: "no_mail_path" | "no_recipients" | "no_new_alerts";
 };
 
+export type HistoryGate = {
+  historyDays: number;
+  daysNeeded: number;
+  closer: string;
+};
+
 export type AlertAnalysis = {
   asOf: string;
+  historyDays: number;
   floorBurst: FloorBurstPoint[];
   alerts: SpendAlert[];
   digest: AlertDigest;
-  undetermined: { daysNeeded: number } | null;
+  undetermined: HistoryGate | null;
 };
 
 type ReplayFile = {
@@ -94,6 +101,14 @@ function percentile(values: number[], p: number): number {
 
 function datesOnOrBefore(rows: DailyCost[], asOf: string): string[] {
   return [...new Set(rows.filter((row) => row.date <= asOf).map((row) => row.date))].sort();
+}
+
+export function historyDays(rows: DailyCost[], asOf: string): number {
+  return datesOnOrBefore(rows, asOf).filter((date) => date < asOf).length;
+}
+
+export function historyCloser(daysNeeded: number): string {
+  return `${daysNeeded} more completed export day${daysNeeded === 1 ? "" : "s"}`;
 }
 
 function orgTotal(rows: DailyCost[], date: string): string {
@@ -156,11 +171,17 @@ export function evaluateAlerts(
   rows: DailyCost[],
   asOf: string,
   previous: SpendAlert[] = [],
-): { alerts: SpendAlert[]; undetermined: { daysNeeded: number } | null } {
+): { alerts: SpendAlert[]; undetermined: HistoryGate | null; historyDays: number } {
   const dates = datesOnOrBefore(rows, asOf);
   const priorDates = dates.filter((date) => date < asOf);
-  if (priorDates.length < WINDOW_DAYS) {
-    return { alerts: [], undetermined: { daysNeeded: WINDOW_DAYS - priorDates.length } };
+  const available = priorDates.length;
+  if (available < WINDOW_DAYS) {
+    const daysNeeded = WINDOW_DAYS - available;
+    return {
+      alerts: [],
+      historyDays: available,
+      undetermined: { historyDays: available, daysNeeded, closer: historyCloser(daysNeeded) },
+    };
   }
   const currency = rows[0]?.currency ?? "USD";
   const orgPrior = priorAmounts(dates, asOf, (date) => toNumber(orgTotal(rows, date)));
@@ -211,7 +232,7 @@ export function evaluateAlerts(
       }
     }
   }
-  return { alerts, undetermined: null };
+  return { alerts, undetermined: null, historyDays: available };
 }
 
 export function buildDigest(
@@ -249,6 +270,7 @@ export function analyzeAlerts(input: {
   const evaluated = evaluateAlerts(rows, asOf, input.previous ?? []);
   return {
     asOf,
+    historyDays: evaluated.historyDays,
     floorBurst: floorBurst(rows, asOf),
     alerts: evaluated.alerts,
     digest: buildDigest(asOf, evaluated.alerts, input.recipients ?? []),
