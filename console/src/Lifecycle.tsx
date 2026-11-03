@@ -1,6 +1,7 @@
 import { useOverview, useSource } from "./data/context";
 import { useResource } from "./data/use-resource";
 import { ScreenState, gapsMessage } from "./ScreenState";
+import { TERMS } from "./terms";
 
 export function Lifecycle() {
   const source = useSource();
@@ -18,7 +19,10 @@ export function Lifecycle() {
         partial
         empty={(data) =>
           data.rows.length === 0
-            ? gapsMessage(overview, "Nothing is losing support or expiring on the scopes that were assessed.")
+            ? gapsMessage(
+                overview,
+                `Nothing is losing support or expiring on the scopes that were ${TERMS.assessed}.`,
+              )
             : null
         }
       >

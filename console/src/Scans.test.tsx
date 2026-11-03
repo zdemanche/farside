@@ -36,7 +36,7 @@ describe("Scans screen", () => {
     expect(current.textContent).toContain("2026-10-14T12:00:00.000Z");
     expect(current.textContent).toContain("1.2 s");
     expect(current.textContent).toContain("succeeded current");
-    expect(current.textContent).toContain("15 assessed, 4 unassessed, 1 undetermined");
+    expect(current.textContent).toContain("15 assessed, 4 not assessed, 1 undetermined");
     const failed = screen.getByRole("row", { name: /scan-2/ });
     expect(failed.textContent).toContain("failed");
     expect(failed.textContent).toContain("Resource Graph call failed");
@@ -57,7 +57,7 @@ describe("Scans screen", () => {
       /undetermined/,
     );
     expect(screen.getByRole("row", { name: /azure-cost-spend-by-service/ }).textContent).toMatch(
-      /unassessed/,
+      /not assessed/,
     );
     expect(screen.getByText(/Azure throttled the API call/)).toBeTruthy();
     await expectAxeClean(container);

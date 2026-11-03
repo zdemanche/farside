@@ -4,6 +4,7 @@ import { useSource } from "./data/context";
 import type { ScanCoverageSummary, ScanRow, ScanStatus } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { ScreenState } from "./ScreenState";
+import { TERMS, coverageStateLabel } from "./terms";
 
 const STATUS_TONE: Record<ScanStatus, Tone> = {
   queued: "neutral",
@@ -33,7 +34,7 @@ function formatDuration(durationMs: number | null): string {
 }
 
 function formatCoverage(summary: ScanCoverageSummary): string {
-  return `${summary.assessed} assessed, ${summary.unassessed} unassessed, ${summary.undetermined} undetermined`;
+  return `${summary.assessed} ${TERMS.assessed}, ${summary.unassessed} ${TERMS.notAssessed}, ${summary.undetermined} ${TERMS.undetermined}`;
 }
 
 function ScanDetail({ id }: { id: string }) {
@@ -76,7 +77,7 @@ function ScanDetail({ id }: { id: string }) {
                   <tr key={check.checkId}>
                     <th scope="row">{check.checkId}</th>
                     <td>
-                      <Chip tone={coverageTone(check.state)}>{check.state}</Chip>
+                      <Chip tone={coverageTone(check.state)}>{coverageStateLabel(check.state)}</Chip>
                     </td>
                     <td>
                       {check.reason ?? ""}
@@ -131,7 +132,8 @@ export function Scans({
         Scans
       </h1>
       <p className="page-description">
-        Each scan, when it ran, and what it covered. A failed scan is never the current one.
+        Each scan, when it ran, and which scopes were assessed. A failed scan is never the current
+        one.
       </p>
       <ScreenState
         label="scan history"

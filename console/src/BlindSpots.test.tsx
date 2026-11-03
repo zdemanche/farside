@@ -22,9 +22,13 @@ describe("Blind spots screen", () => {
     const table = screen.getByRole("table", { name: "What Farside could not check" });
     expect(table.textContent).toContain("azure-cost-spend-by-service");
     expect(table.textContent).toContain("Azure throttled the API call");
+    expect(screen.getByRole("columnheader", { name: "State" })).toBeTruthy();
     const undetermined = screen.getByRole("row", { name: /azure-cost-reservation-use/ });
+    expect(undetermined.textContent).toMatch(/undetermined/);
     expect(undetermined.textContent).toMatch(/missing a required Azure role/);
     expect(undetermined.textContent).toMatch(/Grant Reservations Reader/);
+    const unassessed = screen.getByRole("row", { name: /azure-cost-spend-by-service/ });
+    expect(unassessed.textContent).toMatch(/not assessed/);
   });
 
   it("has no axe violations and labels every row", async () => {
