@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { App } from "./App";
 import { EMPTY_STATE, NOT_CONNECTED_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
@@ -71,12 +71,16 @@ describe("console shell", () => {
     expect(within(nav).getByRole("link", { name: "Scans" }).getAttribute("aria-current")).toBe(
       "page",
     );
-    expect(document.activeElement?.id).toBe("page-title");
+    await waitFor(() => {
+      expect(document.activeElement?.id).toBe("page-title");
+    });
 
     window.location.hash = "#issues/disk-unattached";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     expect(await screen.findByRole("heading", { name: "disk-unattached" })).toBeTruthy();
     expect(document.title).toBe("Issues - Farside");
-    expect(document.activeElement?.id).toBe("issue-detail-title");
+    await waitFor(() => {
+      expect(document.activeElement?.id).toBe("issue-detail-title");
+    });
   });
 });
