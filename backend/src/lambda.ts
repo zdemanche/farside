@@ -11,7 +11,7 @@ type ProxyResult = {
   body: string;
 };
 
-const app = buildApp();
+const app = buildApp(undefined, { operatorToken: process.env.FARSIDE_OPERATOR_TOKEN || undefined });
 const ready = app.ready();
 
 export async function handler(event: ProxyEvent): Promise<ProxyResult> {

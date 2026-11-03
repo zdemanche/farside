@@ -37,9 +37,16 @@ import {
   type CostQueryClient,
 } from "./cost.js";
 import type { Clock } from "./clock.js";
-import { CardDataError, advanceContract, billingView, canScan, parseContract } from "./billing.js";
+import {
+  CardDataError,
+  advanceContract,
+  billingView,
+  canScan,
+  isReadOnly,
+  parseContract,
+} from "./billing.js";
 import { deletionView } from "./offboard.js";
-import { demoDescriptor, isDemoOrg, seedDemoOrg } from "./demo.js";
+import { demoDescriptor, guardHarvester, guardProviderClient, isDemoOrg, seedDemoOrg } from "./demo.js";
 import { exportCost, exportFilename, exportInventory, exportIssues } from "./export.js";
 import { estateOverview, inventoriesFor } from "./estate.js";
 import { buildHeadline } from "./headline.js";
@@ -50,13 +57,24 @@ import { SecretLeakError, assertNoSecrets } from "./secrets.js";
 import { defaultHarvester, ScanRunner, toScanView, toScanViews, type Harvester } from "./scans.js";
 import { ScanScheduler } from "./scheduler.js";
 import { parseSettings } from "./settings.js";
-import { assertOrgAccess, sessionFromHeaders, type Session } from "./session.js";
+import { assertOrgAccess, isOperator, sessionFromHeaders, type Session } from "./session.js";
 import { MemoryStore } from "./store.js";
 
 export const SERVICE_NAME = "farside";
 
 type OrgParams = { orgId: string };
 type ConnectionParams = { orgId: string; connectionId: string };
+
+const ORG_ROUTE_PREFIX = "/v1/orgs/:orgId";
+const NON_MUTATING_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const DEMO_CANNED_POSTS = new Set([
+  "POST /scans",
+  "POST /cost",
+  "POST /commitments",
+  "POST /budgets",
+  "POST /alerts",
+]);
+const READ_ONLY_EXEMPT = new Set(["POST /offboard", "POST /schedule/tick"]);
 
 function problem(
   reply: FastifyReply,
@@ -155,6 +173,7 @@ export function buildApp(
     budgetClient?: BudgetClient;
     clock?: Clock;
     trustClientClock?: boolean;
+    operatorToken?: string | undefined;
   } = {},
 ) {
   const clock = options.clock ?? store.clock;
@@ -163,7 +182,7 @@ export function buildApp(
     trustClientClock && typeof candidate === "string" ? candidate : clock();
   const runner = new ScanRunner(
     store,
-    options.harvester ?? defaultHarvester(clock),
+    guardHarvester(options.harvester ?? defaultHarvester(clock)),
     {
       costClient: options.costClient ?? defaultCostClient(),
       commitmentClient: options.commitmentClient ?? defaultCommitmentClient(),
@@ -173,6 +192,45 @@ export function buildApp(
   );
   const scheduler = new ScanScheduler(store, runner, clock);
   const app = Fastify({ logger: false });
+
+  const operatorOnly = { config: { operator: true } };
+  const operatorGuard = async (request: FastifyRequest<{ Params: OrgParams }>, reply: FastifyReply) => {
+    if (!isOperator(request, options.operatorToken) || isDemoOrg(request.params.orgId)) {
+      return problem(reply, 403, "Forbidden");
+    }
+    const deletion = store.deletion(request.params.orgId);
+    if (deletion) {
+      return problem(reply, 410, "Gone", { deletedAt: deletion.deletedAt });
+    }
+    return undefined;
+  };
+
+  app.addHook("preHandler", async (request, reply) => {
+    const orgId = (request.params as Partial<OrgParams> | undefined)?.orgId;
+    const config = request.routeOptions.config as { operator?: boolean };
+    if (!orgId || config.operator) {
+      return undefined;
+    }
+    const session = sessionFromHeaders(request);
+    if (!session || assertOrgAccess(session, orgId) !== "ok" || store.deletion(orgId)) {
+      return undefined;
+    }
+    store.sweepRetention(clock(), orgId);
+    if (store.deletion(orgId) || NON_MUTATING_METHODS.has(request.method)) {
+      return undefined;
+    }
+    const route = `${request.method} ${request.routeOptions.url?.replace(ORG_ROUTE_PREFIX, "") ?? ""}`;
+    if (isDemoOrg(orgId)) {
+      return DEMO_CANNED_POSTS.has(route) ? undefined : problem(reply, 403, "Demo is read-only");
+    }
+    if (READ_ONLY_EXEMPT.has(route) || !isReadOnly(store.snapshot(orgId).contract, clock())) {
+      return undefined;
+    }
+    return problem(reply, 409, "Console read-only", {
+      error: "console_read_only",
+      attention: "scans paused",
+    });
+  });
 
   app.get("/health", async () => ({
     status: "ok" as const,
@@ -250,7 +308,7 @@ export function buildApp(
         ? (request.body as Record<string, unknown>).asOf
         : undefined;
     scheduler.applySettings(request.params.orgId, clientTime(asOf));
-    if (!canScan(store.snapshot(request.params.orgId).contract)) {
+    if (!canScan(store.snapshot(request.params.orgId).contract, clock())) {
       return sendClean(reply, 201, {
         ...connection,
         scan: null,
@@ -405,7 +463,7 @@ export function buildApp(
       }
       return sendClean(reply, 200, { scan: toScanView(job, true), scanStarted: false });
     }
-    if (!canScan(store.snapshot(request.params.orgId).contract)) {
+    if (!canScan(store.snapshot(request.params.orgId).contract, clock())) {
       return problem(reply, 409, "Scans paused", { attention: "scans paused" });
     }
     const scan = runner.start({ orgId: request.params.orgId, subscriptionId, actor });
@@ -571,7 +629,7 @@ export function buildApp(
       });
     }
     const harvested = await harvestCost({
-      client: options.costClient ?? defaultCostClient(),
+      client: guardProviderClient(request.params.orgId, options.costClient ?? defaultCostClient()),
       subscriptionId,
       billingScope,
       agreementType,
@@ -631,7 +689,7 @@ export function buildApp(
       });
     }
     const harvested = await harvestCommitments({
-      client: options.commitmentClient ?? defaultCommitmentClient(),
+      client: guardProviderClient(request.params.orgId, options.commitmentClient ?? defaultCommitmentClient()),
       subscriptionId,
       billingScope,
     });
@@ -683,7 +741,7 @@ export function buildApp(
       });
     }
     const harvested = await harvestBudgets({
-      client: options.budgetClient ?? defaultBudgetClient(),
+      client: guardProviderClient(request.params.orgId, options.budgetClient ?? defaultBudgetClient()),
       lastConfirmed: clock(),
     });
     store.putCoverage(
@@ -809,7 +867,7 @@ export function buildApp(
     }
     const body = (request.body as Record<string, unknown> | null) ?? {};
     const now = clientTime(body.now);
-    if (!canScan(store.snapshot(request.params.orgId).contract)) {
+    if (!canScan(store.snapshot(request.params.orgId).contract, clock())) {
       return sendClean(reply, 200, {
         action: "blocked",
         attention: "scans paused",
@@ -838,57 +896,54 @@ export function buildApp(
     if (!contract) {
       return problem(reply, 404, "Not found");
     }
-    return sendClean(reply, 200, billingView(contract));
+    return sendClean(reply, 200, billingView(contract, clock()));
   });
 
-  app.put<{ Params: OrgParams }>("/v1/orgs/:orgId/contract", async (request, reply) => {
-    if (!requireOrg(request, reply, store)) {
-      return reply;
-    }
-    if (rejectSecrets(request.body, reply)) {
-      return reply;
-    }
-    const body = (request.body as Record<string, unknown> | null) ?? {};
-    const now = clientTime(body.asOf);
-    try {
-      const parsed = parseContract(request.body, now);
-      if (!parsed) {
-        return problem(reply, 400, "Invalid contract", {
-          errors: [{ path: "body", message: "plan and startDate are required" }],
-        });
+  app.put<{ Params: OrgParams }>(
+    "/v1/orgs/:orgId/contract",
+    { ...operatorOnly, preHandler: operatorGuard },
+    async (request, reply) => {
+      if (rejectSecrets(request.body, reply)) {
+        return reply;
       }
-      store.putContract(request.params.orgId, parsed);
-      return sendClean(reply, 200, billingView(parsed));
-    } catch (error) {
-      if (error instanceof CardDataError) {
-        return problem(reply, 400, "Card data rejected");
+      const now = clock();
+      try {
+        const parsed = parseContract(request.body, now);
+        if (!parsed) {
+          return problem(reply, 400, "Invalid contract", {
+            errors: [{ path: "body", message: "plan and an ISO startDate are required" }],
+          });
+        }
+        store.putContract(request.params.orgId, parsed);
+        return sendClean(reply, 200, billingView(parsed, now));
+      } catch (error) {
+        if (error instanceof CardDataError) {
+          return problem(reply, 400, "Card data rejected");
+        }
+        throw error;
       }
-      throw error;
-    }
-  });
+    },
+  );
 
-  app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/contract/advance", async (request, reply) => {
-    if (!requireOrg(request, reply, store)) {
-      return reply;
-    }
-    const current = store.snapshot(request.params.orgId).contract;
-    if (!current) {
-      return problem(reply, 404, "Not found");
-    }
-    const body = (request.body as Record<string, unknown> | null) ?? {};
-    const now = trustClientClock
-      ? typeof body.now === "string"
-        ? body.now
-        : current.stateChangedAt
-      : clock();
-    const event =
-      body.event === "failed_payment" || body.event === "paid" || body.event === "ended"
-        ? body.event
-        : undefined;
-    const next = advanceContract(current, event ? { now, event } : { now });
-    store.putContract(request.params.orgId, next);
-    return sendClean(reply, 200, billingView(next));
-  });
+  app.post<{ Params: OrgParams }>(
+    "/v1/orgs/:orgId/contract/advance",
+    { ...operatorOnly, preHandler: operatorGuard },
+    async (request, reply) => {
+      const current = store.snapshot(request.params.orgId).contract;
+      if (!current) {
+        return problem(reply, 404, "Not found");
+      }
+      const body = (request.body as Record<string, unknown> | null) ?? {};
+      const now = clock();
+      const event =
+        body.event === "failed_payment" || body.event === "paid" || body.event === "ended"
+          ? body.event
+          : undefined;
+      const next = advanceContract(current, event ? { now, event } : { now });
+      store.putContract(request.params.orgId, next);
+      return sendClean(reply, 200, billingView(next, now));
+    },
+  );
 
   app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/offboard", async (request, reply) => {
     if (!requireOrg(request, reply, store, { allowDeleted: true })) {

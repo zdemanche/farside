@@ -6,7 +6,7 @@ import type { CostSnapshot } from "./cost.js";
 import { recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import { applyScanToIssues, type StoredIssue } from "./issues.js";
 import { diskMonthlySavings } from "./savings.js";
-import type { ScanJob } from "./scans.js";
+import type { Harvester, ScanJob } from "./scans.js";
 import type { MemoryStore } from "./store.js";
 
 export const DEMO_ORG_ID = "demo";
@@ -22,6 +22,23 @@ export class ProviderCallBlockedError extends Error {
     super("demo mode blocks provider calls");
     this.name = "ProviderCallBlockedError";
   }
+}
+
+export function guardProviderClient<T extends object>(orgId: string, client: T): T {
+  if (!isDemoOrg(orgId)) {
+    return client;
+  }
+  return new Proxy(client, {
+    get: () => () => {
+      throw new ProviderCallBlockedError();
+    },
+  });
+}
+
+export function guardHarvester(harvester: Harvester): Harvester {
+  return {
+    harvest: (input) => guardProviderClient(input.orgId, harvester).harvest(input),
+  };
 }
 
 export function isDemoOrg(orgId: string): boolean {

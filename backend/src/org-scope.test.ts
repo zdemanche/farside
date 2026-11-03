@@ -55,6 +55,9 @@ const ROUTES = [
   { method: "DELETE" as const, url: "/v1/orgs/org-a/connections/conn-1" },
 ];
 
+const OPERATOR_ROUTES = ROUTES.filter((route) => route.url.includes("/contract") && route.method !== "GET");
+const SESSION_ROUTES = ROUTES.filter((route) => !OPERATOR_ROUTES.includes(route));
+
 function headers(orgId: string) {
   return { [ORG_HEADER]: orgId, [ACTOR_HEADER]: `actor-${orgId}` };
 }
@@ -72,7 +75,7 @@ describe("org scoping", () => {
     await app.close();
   });
 
-  it.each(ROUTES)("returns 401 on $method $url without a session", async (route) => {
+  it.each(SESSION_ROUTES)("returns 401 on $method $url without a session", async (route) => {
     const response = await app.inject({ method: route.method, url: route.url });
     expect(response.statusCode).toBe(401);
     expect(response.json()).toMatchObject({ title: "Unauthorized", status: 401 });
@@ -92,6 +95,12 @@ describe("org scoping", () => {
     expect(JSON.stringify(body)).not.toContain("tenant-org-a");
     expect(JSON.stringify(body)).not.toContain("disk-unattached");
     expect(secretPaths(body)).toEqual([]);
+  });
+
+  it.each(OPERATOR_ROUTES)("returns 403 on operator route $method $url without the operator token", async (route) => {
+    const response = await app.inject({ method: route.method, url: route.url });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ title: "Forbidden", status: 403 });
   });
 
   it("lets the owning org read its inventory and keeps the other org empty", async () => {
