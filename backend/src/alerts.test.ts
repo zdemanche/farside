@@ -57,10 +57,17 @@ describe("relative alert rules", () => {
 
   it("is undetermined, never summed, when rows mix currencies", () => {
     const mixed = FIXTURE.rows.map((row, index) => (index === 0 ? { ...row, currency: "EUR" } : row));
-    const analysis = analyzeAlerts({ rows: mixed });
+    const analysis = analyzeAlerts({ rows: mixed, asOf: FIXTURE.asOf });
     expect(analysis.alerts).toEqual([]);
     expect(analysis.floorBurst).toEqual([]);
     expect(analysis.undetermined).toMatchObject({ reason: "mixed_currency", closer: CURRENCY_CLOSER });
+  });
+
+  it("reports mixed_currency even with fewer than 14 days of history", () => {
+    const short = FIXTURE.rows.filter((row) => row.date <= "2026-10-10");
+    const mixed = short.map((row, index) => (index === 0 ? { ...row, currency: "EUR" } : row));
+    const { undetermined } = evaluateAlerts(mixed, "2026-10-10");
+    expect(undetermined).toMatchObject({ reason: "mixed_currency", closer: CURRENCY_CLOSER });
   });
 
   it("counts GCP export days and stays undetermined on an empty first day", () => {
