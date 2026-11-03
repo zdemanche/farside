@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { Finding } from "@farside/scan-contracts";
 import { acceptFinding } from "./checks.js";
 import { applyCoverageResult, recordCoverageScope, type CoverageEntry } from "./coverage.js";
@@ -11,6 +8,7 @@ import {
   unusedSavingsPlanSavings,
 } from "./savings.js";
 import { rejectUnconfigured } from "./providers.js";
+import docAzureCommitments from "../../docs/azure/commitments.json" with { type: "json" };
 
 export const RESERVATION_USE = "azure-cost-reservation-use";
 export const SAVINGS_PLAN_USE = "azure-cost-savings-plan-use";
@@ -74,9 +72,7 @@ type CommitmentsFile = {
   savingsPlans: SavingsPlanRecord[];
 };
 
-const FIXTURE = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/commitments.json"), "utf8"),
-) as CommitmentsFile;
+const FIXTURE = docAzureCommitments as CommitmentsFile;
 
 export function fixtureCommitmentClient(
   data: CommitmentsFile = FIXTURE,

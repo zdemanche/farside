@@ -4,17 +4,20 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node bundle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@aws-sdk/client-ssm": "^3.1161.0",
     "@farside/scan-contracts": "*",
-    "fastify": "^5.12.8"
+    "fastify": "^5.12.8",
+    "pino": "^10.4.0"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "tsx": "^4.20.6"
   }
 }

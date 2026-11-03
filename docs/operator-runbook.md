@@ -144,7 +144,13 @@ Hub order, `workflow_dispatch` only (never `push` to `main`):
 2. `infra-pulumi_up.yaml` — `organization/farside/{customerName}` in the dedicated account. Inputs: `customerName`, `accountId`, `run_identifier`. Optional: `initialAdmins`, `firstOwnerEmail`, `adoptingProducts`.
 3. `ui-deploy.yml` — console.
 
-`materializeDevStack` calls `assertDedicatedAccount`. Resources stay a typed sketch until AWS OIDC and Pulumi state are wired; current workflows **skip** apply rather than create in the wrong account.
+`materializeDevStack` and `deployStack` call `assertDedicatedAccount` before any resource is declared; current workflows **skip** apply rather than create in the wrong account. `infra/src/program.ts` declares the stack: an API Lambda and a scheduled-tick Lambda (Node 22, arm64) from `backend/dist/lambda.mjs` and `scheduled.mjs`, a Function URL with `AWS_IAM` auth, a private console bucket served by CloudFront (S3 origin with origin access control only), 30-day log groups, an SSM SecureString for the operator token, and an EventBridge Scheduler schedule (`rate(15 minutes)`) that invokes the tick Lambda under a role allowed to invoke only that function. Stack config: `farside:customerName`, `farside:accountId`, `farside:environment`, `farside:logRetentionDays` (optional) and the secret `farside:operatorToken` (`pulumi config set --secret farside:operatorToken`). The token is stored as an SSM SecureString; the Lambda env carries only `FARSIDE_OPERATOR_TOKEN_PARAM`, the role may `ssm:GetParameter` that one parameter and `kms:Decrypt` on the `aws/ssm` key, and the handler reads it once per cold start and fails closed if it cannot. `FARSIDE_OPERATOR_TOKEN` is for local `npm run dev` only. `backend` must be built first (`npm run build -w @farside/backend`).
+
+**The API is not publicly routable yet.** CloudFront serves the console only; there is no `/v1/*` or `/health` behavior. The Function URL stays `AWS_IAM`, so only IAM principals that SigV4-sign can call it (operators with `lambda:InvokeFunctionUrl`). Routing the console to the API through an OAC-signing CloudFront behavior would make `x-farside-org` the only gate, which is not authentication. `assertAuthenticatedEdge` fails the plan if any distribution behavior sends API paths to the Function URL without a viewer authenticator (edge function, WAF or signed cookies). Once Identity (#48) exists, add an Identity-verifying edge function, set `viewerAuthenticator` in the plan, then add the `/v1/*` behavior (TODO: #48). Until then check the deploy with a signed request to the Function URL, for example `awscurl --service lambda <apiUrl>health`.
+
+The Lambda adapter also drops `x-farside-org`, `x-farside-actor` and `x-farside-operator` from every request unless `FARSIDE_TRUST_EDGE_HEADERS=1`, so even a signed caller gets 401 on `/v1` today. Set it on a throwaway dev stack only, never one a customer can reach. Signed `PUT`/`POST` calls need an `x-amz-content-sha256` header holding the body's SHA-256.
+
+The tick Lambda calls the scheduler for every org in its store and runs the retention sweep. The store is in memory per container, so the tick sees only orgs created in its own container until persistence lands; scheduled scans therefore do not yet reach orgs created through the API Lambda.
 
 Every deploy workflow is `workflow_dispatch` only; only `ci.yml` runs on push. A skipped step prints a `::warning::` and a step-summary line saying what was not done. `deploy.yml`, `infra-pulumi_up.yaml` and `infra-pulumi_destroy.yaml` run in the GitHub `dev` / `customer` environments: configure required reviewers on both so a dispatch waits for approval before a job can assume the AWS role (`id-token: write` is granted on those jobs only). Every workflow fails with an `::error::` and a step summary when dispatched from any ref other than `refs/heads/main`, and reads `infra/accounts.json` from `origin/main` rather than the dispatched checkout. Configure both environments with a deployment-branch policy of `main` only, plus required reviewers. The AWS OIDC role trust policy must bind `sub = repo:zdemanche/farside:environment:<name>` (`dev` or `customer`) and `aud = sts.amazonaws.com`; an environment-scoped token carries no ref, so the environment's main-only deployment-branch policy is what enforces the ref. For an IAM-side ref check, customize the repo's OIDC `sub` claim template to include `ref`. Each workflow rejects an `accountId` that is not 12 digits. `accountId` must also be registered to the customer slug in `infra/accounts.json` (merge that change first); the Pulumi guard refuses unregistered, cross-customer and product-dev accounts.
 
@@ -154,7 +160,7 @@ Every deploy workflow is `workflow_dispatch` only; only `ci.yml` runs on push. A
 
 - Backend publish built `backend/dist`.
 - Infra plan address is `farside.{customerName}.moonaan.com`. Health path is `/health`.
-- After apply is switched on: `GET https://farside.{customerName}.moonaan.com/health` (or the function URL) returns ok, and the console shell loads at that host.
+- After apply is switched on: the console shell loads at the CloudFront host, and a SigV4-signed `GET` of the function URL `/health` returns ok.
 - `SharedAccountError` did not fire.
 
 #### Rollback
@@ -253,7 +259,8 @@ x-farside-actor: {actor}
 | iac-hub `PRODUCTS` merge and parameterised deploy | #26, #175 | Hub and dedicated account are switch-on-later. |
 | Cold rehearsal, timing, extra manual steps | #176 | Needs a live test tenant and a dedicated account. |
 | Failures found only in that rehearsal | #177 leftover | Notes above cover the known path; new failures get added after #176. |
-| Identity claim | E2-S1 / Identity | Header session is the stand-in. |
+| Identity claim | E2-S1 / Identity | Header session is the stand-in; the Lambda edge strips it (see step 7). |
+| Shared store for API and tick Lambdas | #269 | Both containers hold a private in-memory store. |
 | Org transfer | #23 | `Moonaan/moonaan-farside` is not the working clone yet. |
 | Live Azure proof | E1-S7, E3-S8 | First scan against a real subscription is leftover. |
 | Billing screen / design-system | #171, #243 | Contract is API-only. Do not restyle the console here. |

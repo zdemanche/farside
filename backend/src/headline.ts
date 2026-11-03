@@ -1,12 +1,11 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { CLOUDS, type Cloud, type Finding } from "@farside/scan-contracts";
 import { matchesCloud } from "./cloud.js";
 import type { CostSnapshot } from "./cost.js";
 import { SPEND_BY_SERVICE } from "./cost.js";
 import type { CoverageEntry } from "./coverage.js";
 import { isAssessedFinding, isWasteFinding, wasteTotals } from "./waste.js";
+import docAzureLaunchChecks from "../../docs/azure/launch-checks.json" with { type: "json" };
+import docGcpLaunchChecks from "../../docs/gcp/launch-checks.json" with { type: "json" };
 
 export type RunRecord = { checkId: string; liveRunAt: string };
 
@@ -54,13 +53,9 @@ const LIFECYCLE_IDS: Record<Cloud, string[]> = {
 
 type SpecFile = { checks: Array<{ id: string; liveRunAt: string | null }> };
 
-const AZURE_SPEC = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/launch-checks.json"), "utf8"),
-) as SpecFile;
+const AZURE_SPEC = docAzureLaunchChecks as SpecFile;
 
-const GCP_SPEC = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/gcp/launch-checks.json"), "utf8"),
-) as SpecFile;
+const GCP_SPEC = docGcpLaunchChecks as SpecFile;
 
 export function runRecordsFromSpec(specs: SpecFile[] = [AZURE_SPEC, GCP_SPEC]): RunRecord[] {
   return specs.flatMap((spec) =>

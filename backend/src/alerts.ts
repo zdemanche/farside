@@ -1,6 +1,5 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import docGcpAlertReplay from "../../docs/gcp/alert-replay.json" with { type: "json" };
+import docAzureAlertReplay from "../../docs/azure/alert-replay.json" with { type: "json" };
 
 export const WINDOW_DAYS = 14;
 export const ORG_SPIKE_MULT = 1.25;
@@ -95,13 +94,9 @@ type GcpReplayFile = {
   rows: GcpDailyCost[];
 };
 
-const GCP_REPLAY = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/gcp/alert-replay.json"), "utf8"),
-) as GcpReplayFile;
+const GCP_REPLAY = docGcpAlertReplay as GcpReplayFile;
 
-const REPLAY = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/alert-replay.json"), "utf8"),
-) as ReplayFile;
+const REPLAY = docAzureAlertReplay as ReplayFile;
 
 export function replayFixture(): ReplayFile {
   return REPLAY;

@@ -20,8 +20,9 @@ describe("materializeDevStack", () => {
     });
     expect(outputs.address).toBe("farside.moonaan-dev.moonaan.com");
     expect(outputs.healthPath).toBe("/health");
-    expect(outputs.resourceNames).toContain("farside-moonaan-dev-health");
+    expect(outputs.resourceNames).toContain("farside-moonaan-dev-api");
     expect(outputs.resourceNames).toContain("farside-moonaan-dev-console");
+    expect(outputs.resourceNames).toContain("farside-moonaan-dev-tick-schedule");
     expect(outputs.tags.customer).toBe("moonaan-dev");
   });
 

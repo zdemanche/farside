@@ -1,7 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { Cloud, Finding, Inventory } from "@farside/scan-contracts";
 import {
   applyBudgetCoverage,
@@ -33,6 +30,7 @@ import { PROVIDER_NOT_CONFIGURED, ProviderNotConfiguredError, rejectUnconfigured
 import type { OrgSettings } from "./settings.js";
 import { silentLog, type LogSink } from "./observability.js";
 import type { MemoryStore } from "./store.js";
+import docAzureGroundTruth from "../../docs/azure/ground-truth.json" with { type: "json" };
 
 // "cancelled" is internal-only: never stored or returned by the API
 export type ScanStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -291,9 +289,7 @@ export function fixtureHarvester(
 }
 
 export function defaultHarvester(clock?: Clock): Harvester {
-  const manifest = JSON.parse(
-    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/ground-truth.json"), "utf8"),
-  ) as GroundTruthManifest;
+  const manifest = docAzureGroundTruth as GroundTruthManifest;
   return fixtureHarvester(inventoryFromManifest(manifest), factsFromManifest(manifest), clock);
 }
 

@@ -1,11 +1,9 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { assertValid, validateFinding, type Finding, type Inventory } from "@farside/scan-contracts";
 import type { ResourceFacts } from "./facts.js";
 import { projectOf } from "./gcp-inventory.js";
 import type { OrgSettings } from "./settings.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
+import catalogueFile from "../../docs/gcp/support-versions.json" with { type: "json" };
 
 export const GCP_SQL_GKE_SUPPORT = "gcp-lifecycle-sql-gke-support";
 
@@ -28,13 +26,8 @@ export type SupportCatalogue = {
   entries: SupportVersion[];
 };
 
-const DEFAULT_PATH = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../docs/gcp/support-versions.json",
-);
-
-export function loadSupportVersions(path = DEFAULT_PATH): SupportCatalogue {
-  return JSON.parse(readFileSync(path, "utf8")) as SupportCatalogue;
+export function loadSupportVersions(): SupportCatalogue {
+  return catalogueFile as SupportCatalogue;
 }
 
 export function supportSourceErrors(catalogue: SupportCatalogue): string[] {

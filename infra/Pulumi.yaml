@@ -1,8 +1,10 @@
 name: farside
+main: src/program.ts
 runtime:
   name: nodejs
   options:
-    typescript: true
+    typescript: false
+    nodeargs: "--import tsx"
 description: Farside empty backend and console shell
 backend:
   url: s3://moonaan-pulumi-state/customer-stacks?region=us-east-2
