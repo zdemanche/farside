@@ -29,6 +29,8 @@ import {
   stoppedVmMonthlySavings,
 } from "./savings.js";
 
+export const ALL_RESOURCES = "azure-inventory-all-resources";
+export const NO_OWNER_TAG = "azure-inventory-no-owner-tag";
 export const UNATTACHED_DISKS = "azure-waste-unattached-disks";
 export const OLD_SNAPSHOTS = "azure-waste-old-snapshots";
 export const UNASSOCIATED_IPS = "azure-waste-unassociated-public-ips";
@@ -42,6 +44,18 @@ export const DB_ZONE_OR_GEO = "azure-resilience-db-zone-or-geo";
 export const RETIRING_SKUS = "azure-lifecycle-retiring-skus";
 export const EXPIRING_APP_CERTS = "azure-lifecycle-expiring-app-service-certs";
 export const EXPIRING_GATEWAY_CERTS = "azure-lifecycle-expiring-gateway-certs";
+
+export const ARG_CLOSER = "Grant Reader on that subscription and a successful ARG query";
+export const OWNER_TAG_CLOSER = "Set the owner tag key in Settings";
+export const TAGS_CLOSER = "A Resource Graph row for that type that includes tags";
+
+export const HARVEST_DRIVEN_CHECK_IDS = [
+  "azure-cost-spend-by-service",
+  "azure-cost-month-on-month",
+  "azure-cost-reservation-use",
+  "azure-cost-savings-plan-use",
+  "azure-cost-subscriptions-without-budgets",
+] as const;
 
 const MARKER_CLOSER = "Set the production tag or name pattern in Settings";
 
@@ -73,6 +87,160 @@ export function acceptFinding(finding: Finding): Finding {
 
 function subscriptionOf(resourceUri: string): string {
   return resourceUri.split("/")[2] ?? "";
+}
+
+function countByTypeField(resources: Inventory["resources"]): string {
+  const counts = new Map<string, number>();
+  for (const resource of resources) {
+    counts.set(resource.resourceType, (counts.get(resource.resourceType) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([type, count]) => `${type}:${count}`)
+    .join(",");
+}
+
+export function checkAllResources(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  _settings: OrgSettings = DEFAULT_SETTINGS,
+): Finding[] {
+  const incomplete = new Set(
+    facts
+      .filter((row) => row.fields.argIncomplete === true)
+      .map((row) => subscriptionOf(row.resourceUri))
+      .filter(Boolean),
+  );
+  const bySub = new Map<string, Inventory["resources"]>();
+  for (const resource of inventory.resources) {
+    const subscriptionOrProject = subscriptionOf(resource.resourceUri);
+    if (!subscriptionOrProject) {
+      continue;
+    }
+    const group = bySub.get(subscriptionOrProject) ?? [];
+    group.push(resource);
+    bySub.set(subscriptionOrProject, group);
+  }
+  for (const subscriptionOrProject of incomplete) {
+    if (!bySub.has(subscriptionOrProject)) {
+      bySub.set(subscriptionOrProject, []);
+    }
+  }
+  return [...bySub.entries()].map(([subscriptionOrProject, resources]) => {
+    const scope = {
+      id: `${subscriptionOrProject}:${ALL_RESOURCES}`,
+      cloud: "azure" as const,
+      subscriptionOrProject,
+    };
+    if (incomplete.has(subscriptionOrProject)) {
+      return acceptFinding({
+        checkId: ALL_RESOURCES,
+        result: "undetermined",
+        closer: ARG_CLOSER,
+        evidence: {
+          fields: {
+            subscriptionId: subscriptionOrProject,
+            resourceId: null,
+            type: null,
+            location: null,
+            countByType: null,
+          },
+        },
+        scope,
+      });
+    }
+    const first = resources[0];
+    return acceptFinding({
+      checkId: ALL_RESOURCES,
+      result: "pass",
+      evidence: {
+        fields: {
+          subscriptionId: subscriptionOrProject,
+          resourceId: first?.resourceUri ?? subscriptionOrProject,
+          type: first?.resourceType ?? "all",
+          location: first?.region ?? "eastus",
+          countByType: countByTypeField(resources),
+          resourceCount: resources.length,
+        },
+      },
+      scope,
+    });
+  });
+}
+
+export function checkNoOwnerTag(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  settings: OrgSettings = DEFAULT_SETTINGS,
+): Finding[] {
+  const byUri = new Map(facts.map((row) => [row.resourceUri, row]));
+  if (!(settings.ownerTagKey.length > 0)) {
+    const subscriptions = [
+      ...new Set(inventory.resources.map((resource) => subscriptionOf(resource.resourceUri))),
+    ].filter(Boolean);
+    return subscriptions.map((subscriptionOrProject) =>
+      acceptFinding({
+        checkId: NO_OWNER_TAG,
+        result: "undetermined",
+        closer: OWNER_TAG_CLOSER,
+        evidence: {
+          fields: {
+            resourceId: null,
+            type: null,
+            tagsPresent: null,
+            ownerTagKey: null,
+            ownerTagValue: null,
+          },
+        },
+        scope: {
+          id: `${subscriptionOrProject}:${NO_OWNER_TAG}`,
+          cloud: "azure",
+          subscriptionOrProject,
+        },
+      }),
+    );
+  }
+  return inventory.resources.map((resource) => {
+    const subscriptionOrProject = subscriptionOf(resource.resourceUri);
+    const scope = {
+      id: `${subscriptionOrProject}:${NO_OWNER_TAG}`,
+      cloud: "azure" as const,
+      subscriptionOrProject,
+    };
+    const row = byUri.get(resource.resourceUri);
+    if (row?.fields.tagsPresent === false) {
+      return acceptFinding({
+        checkId: NO_OWNER_TAG,
+        result: "undetermined",
+        closer: TAGS_CLOSER,
+        evidence: {
+          fields: {
+            resourceId: resource.resourceUri,
+            type: resource.resourceType,
+            tagsPresent: false,
+            ownerTagKey: settings.ownerTagKey,
+            ownerTagValue: null,
+          },
+        },
+        scope,
+      });
+    }
+    const owner = resource.ownerTag;
+    return acceptFinding({
+      checkId: NO_OWNER_TAG,
+      result: owner ? "pass" : "fail",
+      evidence: {
+        fields: {
+          resourceId: resource.resourceUri,
+          type: resource.resourceType,
+          tagsPresent: true,
+          ownerTagKey: settings.ownerTagKey,
+          ownerTagValue: owner ?? null,
+        },
+      },
+      scope,
+    });
+  });
 }
 
 export function scopeKey(resourceUri: string, cloud: Inventory["cloud"]): string {
@@ -948,6 +1116,8 @@ export function checkExpiringGatewayCerts(
 type CheckFn = (inventory: Inventory, facts: ResourceFacts[], settings: OrgSettings) => Finding[];
 
 export const CHECK_REGISTRY: Record<string, CheckFn> = {
+  [ALL_RESOURCES]: checkAllResources,
+  [NO_OWNER_TAG]: checkNoOwnerTag,
   [UNATTACHED_DISKS]: checkUnattachedDisks,
   [OLD_SNAPSHOTS]: checkOldSnapshots,
   [UNASSOCIATED_IPS]: checkUnassociatedIps,

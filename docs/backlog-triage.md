@@ -51,8 +51,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 34. **E6-S5-T3** — merged (#298). History-day gating of alerts. Empty-first-day UI is #210 / #243.
 35. **E6-S6-T3** — merged (#299). Floor/burst/alerts replay on a GCP series.
 36. **E6-S7-T1** — merged (#301). Cloud dimension on list APIs. Console leftover.
-37. **E6-S7-T2** — this change: headline per cloud, no cross-currency sums.
-38. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+37. **E6-S7-T2** — merged (#302). Headline per cloud, no cross-currency sums.
+38. **Audit #260** — this change: scan merge so harvest findings/coverage survive; inventory CheckFns; harvests on scheduled scan.
+39. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 

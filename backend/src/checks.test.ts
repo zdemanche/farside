@@ -5,27 +5,36 @@ import { afterAll, describe, expect, it } from "vitest";
 import { RAW_PROVIDER_KEYS, scoreHealth, validateFinding } from "@farside/scan-contracts";
 import { buildApp } from "./app.js";
 import {
+  ALL_RESOURCES,
+  ARG_CLOSER,
+  CHECK_REGISTRY,
   EMPTY_PLANS,
+  HARVEST_DRIVEN_CHECK_IDS,
   IDLE_LOAD_BALANCERS,
   DB_ZONE_OR_GEO,
   EXPIRING_APP_CERTS,
   EXPIRING_GATEWAY_CERTS,
   IDLE_NAT_GATEWAYS,
+  NO_OWNER_TAG,
+  OWNER_TAG_CLOSER,
   RETIRING_SKUS,
   OLD_SNAPSHOTS,
   PROD_SQL_BACKUP,
   PROD_VM_BACKUP,
   STOPPED_VMS,
+  TAGS_CLOSER,
   UNASSOCIATED_IPS,
   UNATTACHED_DISKS,
   UnregisteredCheckError,
   acceptFinding,
+  checkAllResources,
   checkEmptyPlans,
   checkIdleLoadBalancers,
   checkDbZoneOrGeo,
   checkExpiringAppCerts,
   checkExpiringGatewayCerts,
   checkIdleNatGateways,
+  checkNoOwnerTag,
   checkRetiringSkus,
   checkOldSnapshots,
   checkProdSqlBackup,
@@ -35,6 +44,7 @@ import {
   checkUnattachedDisks,
   runChecks,
 } from "./checks.js";
+import { AZURE_LAUNCH_CHECK_IDS } from "./coverage.js";
 import { toContractCoverage } from "./coverage.js";
 import { factsFromManifest } from "./facts.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
@@ -63,8 +73,45 @@ const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 describe("check registry and rules", () => {
   it("refuses an unregistered check", () => {
     expect(() =>
-      runChecks({ inventory, facts, checkIds: ["azure-cost-spend-by-service"] }),
+      runChecks({ inventory, facts, checkIds: ["azure-not-a-registered-check"] }),
     ).toThrow(UnregisteredCheckError);
+  });
+
+  it("registers every Azure launch check as a CheckFn or harvest-driven", () => {
+    const harvestDriven = new Set<string>(HARVEST_DRIVEN_CHECK_IDS);
+    expect(
+      AZURE_LAUNCH_CHECK_IDS.every((checkId) => checkId in CHECK_REGISTRY || harvestDriven.has(checkId)),
+    ).toBe(true);
+  });
+
+  it("emits inventory findings and undetermined paths", () => {
+    const counted = checkAllResources(inventory, facts);
+    expect(counted[0]?.checkId).toBe(ALL_RESOURCES);
+    expect(counted[0]?.result).toBe("pass");
+    expect(counted[0]?.evidence.fields.resourceCount).toBe(inventory.resources.length);
+    expect(String(counted[0]?.evidence.fields.countByType)).toContain("Microsoft.Compute/disks:");
+    const incomplete = checkAllResources(inventory, [
+      {
+        resourceUri: "/subscriptions/main/resourceGroups/farside-seed/providers/Microsoft.Compute/disks/x",
+        fields: { argIncomplete: true },
+      },
+    ]);
+    expect(incomplete[0]).toMatchObject({ result: "undetermined", closer: ARG_CLOSER });
+    const untagged = checkNoOwnerTag(inventory, facts);
+    expect(untagged[0]?.checkId).toBe(NO_OWNER_TAG);
+    expect(untagged.find((finding) => finding.evidence.fields.resourceId?.toString().includes("disk-unattached"))?.result).toBe(
+      "fail",
+    );
+    expect(untagged.filter((finding) => finding.result === "pass").length).toBeGreaterThan(0);
+    const noKey = checkNoOwnerTag(inventory, facts, { ...DEFAULT_SETTINGS, ownerTagKey: "" });
+    expect(noKey[0]).toMatchObject({ result: "undetermined", closer: OWNER_TAG_CLOSER });
+    const noTags = checkNoOwnerTag(inventory, [
+      {
+        resourceUri: inventory.resources[0]?.resourceUri ?? "",
+        fields: { tagsPresent: false },
+      },
+    ]);
+    expect(noTags[0]).toMatchObject({ result: "undetermined", closer: TAGS_CLOSER });
   });
 
   it("rejects findings without evidence and undetermined without a closer", () => {

@@ -1,17 +1,31 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Cloud, Inventory } from "@farside/scan-contracts";
+import type { Cloud, Finding, Inventory } from "@farside/scan-contracts";
+import {
+  applyBudgetCoverage,
+  harvestBudgets,
+  mergeBudgetFindings,
+  type BudgetClient,
+} from "./budgets.js";
+import { registeredCheckIds, runChecks } from "./checks.js";
+import {
+  applyCommitmentCoverage,
+  harvestCommitments,
+  mergeCommitmentFindings,
+  type CommitmentClient,
+} from "./commitments.js";
+import { applyCostCoverage, harvestCost, type CostQueryClient } from "./cost.js";
 import {
   AZURE_LAUNCH_CHECK_IDS,
+  applyCoverageResult,
   coverageFromHarvest,
+  recordCoverageScope,
   type CoverageEntry,
   type CoverageState,
 } from "./coverage.js";
-import { applyCoverageResult } from "./coverage.js";
 import { factsFromManifest, type ResourceFacts } from "./facts.js";
 import { applyOwnerTag, inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
-import { registeredCheckIds, runChecks } from "./checks.js";
 import { applyScanToIssues } from "./issues.js";
 import type { OrgSettings } from "./settings.js";
 import type { MemoryStore } from "./store.js";
@@ -140,6 +154,39 @@ export type Harvester = {
   }) => Promise<HarvestResult>;
 };
 
+export type ScanHarvestClients = {
+  costClient?: CostQueryClient;
+  commitmentClient?: CommitmentClient;
+  budgetClient?: BudgetClient;
+};
+
+export function mergeScanFindings(
+  existing: Finding[],
+  next: Finding[],
+  replaceCheckIds: ReadonlySet<string>,
+  subscriptionId: string,
+): Finding[] {
+  return [
+    ...existing.filter(
+      (finding) =>
+        !(replaceCheckIds.has(finding.checkId) && finding.scope.subscriptionOrProject === subscriptionId),
+    ),
+    ...next,
+  ];
+}
+
+export function mergeScanCoverage(
+  existing: CoverageEntry[],
+  next: CoverageEntry[],
+  replaceCheckIds: ReadonlySet<string>,
+  subscriptionId: string,
+): CoverageEntry[] {
+  const kept = existing.filter(
+    (entry) => !(replaceCheckIds.has(entry.checkId) && entry.subscriptionOrProject === subscriptionId),
+  );
+  return next.reduce((coverage, entry) => applyCoverageResult(coverage, entry), kept);
+}
+
 export class ScanFailedError extends Error {
   constructor(
     message: string,
@@ -177,6 +224,7 @@ export class ScanRunner {
   constructor(
     private readonly store: MemoryStore,
     private readonly harvester: Harvester,
+    private readonly harvestClients: ScanHarvestClients = {},
   ) {}
 
   start(input: { orgId: string; subscriptionId: string; actor: "user" | "system" }): {
@@ -226,29 +274,39 @@ export class ScanRunner {
       this.store.putInventory(orgId, result.inventory);
       this.store.putFacts(orgId, result.facts);
       this.store.patchJob(orgId, jobId, { cloud: result.inventory.cloud });
-      let coverage = result.coverage;
       const checked = runChecks({
         inventory: result.inventory,
         facts: result.facts,
         checkIds: registeredCheckIds(result.inventory.cloud),
         settings,
       });
-      this.store.putFindings(orgId, checked.findings);
-      for (const entry of checked.coverage) {
-        coverage = applyCoverageResult(coverage, {
-          subscriptionOrProject: entry.subscriptionOrProject,
-          checkId: entry.checkId,
-          state: entry.state,
-          ...(entry.causeId ? { causeId: entry.causeId } : {}),
-          ...(entry.closer ? { closer: entry.closer } : {}),
-        });
+      const replaceIds = new Set(registeredCheckIds(result.inventory.cloud));
+      const existing = this.store.snapshot(orgId);
+      let findings = mergeScanFindings(
+        existing.findings,
+        checked.findings,
+        replaceIds,
+        current.subscriptionId,
+      );
+      let coverage = mergeScanCoverage(
+        existing.coverage,
+        checked.coverage,
+        replaceIds,
+        current.subscriptionId,
+      );
+      if (result.inventory.cloud === "azure") {
+        const harvested = await this.runAzureHarvests(orgId, current.subscriptionId, findings, coverage);
+        findings = harvested.findings;
+        coverage = harvested.coverage;
+        coverage = fillUnrunLaunchCoverage(coverage, current.subscriptionId);
       }
+      this.store.putFindings(orgId, findings);
       this.store.putCoverage(orgId, coverage);
       this.store.putIssues(
         orgId,
         applyScanToIssues({
           issues: this.store.snapshot(orgId).issues,
-          findings: checked.findings,
+          findings,
           coverage,
           scanId: jobId,
           observedAt: result.inventory.observedAt,
@@ -282,4 +340,65 @@ export class ScanRunner {
       });
     }
   }
+
+  private async runAzureHarvests(
+    orgId: string,
+    subscriptionId: string,
+    findings: Finding[],
+    coverage: CoverageEntry[],
+  ): Promise<{ findings: Finding[]; coverage: CoverageEntry[] }> {
+    const billingScope = `/subscriptions/${subscriptionId}`;
+    if (this.harvestClients.costClient) {
+      const harvested = await harvestCost({
+        client: this.harvestClients.costClient,
+        subscriptionId,
+        billingScope,
+        agreementType: "payg",
+      });
+      coverage = applyCostCoverage(coverage, harvested.coverage);
+      this.store.putCost(orgId, harvested.ok ? harvested.snapshot : null);
+    }
+    if (this.harvestClients.commitmentClient) {
+      const harvested = await harvestCommitments({
+        client: this.harvestClients.commitmentClient,
+        subscriptionId,
+        billingScope,
+      });
+      coverage = applyCommitmentCoverage(coverage, harvested.coverage);
+      if (harvested.ok) {
+        this.store.putCommitments(orgId, harvested.snapshot);
+        findings = mergeCommitmentFindings(findings, harvested.findings);
+      } else {
+        this.store.putCommitments(orgId, null);
+      }
+    }
+    if (this.harvestClients.budgetClient) {
+      const harvested = await harvestBudgets({
+        client: this.harvestClients.budgetClient,
+      });
+      coverage = applyBudgetCoverage(coverage, harvested.coverage);
+      this.store.putBudgets(orgId, harvested.snapshot);
+      findings = mergeBudgetFindings(findings, harvested.findings);
+    }
+    return { findings, coverage };
+  }
+}
+
+function fillUnrunLaunchCoverage(coverage: CoverageEntry[], subscriptionId: string): CoverageEntry[] {
+  let next = coverage;
+  for (const checkId of AZURE_LAUNCH_CHECK_IDS) {
+    if (next.some((entry) => entry.checkId === checkId && entry.subscriptionOrProject === subscriptionId)) {
+      continue;
+    }
+    next = applyCoverageResult(
+      next,
+      recordCoverageScope({
+        subscriptionOrProject: subscriptionId,
+        checkId,
+        state: "unassessed",
+        causeId: "not_run",
+      }),
+    );
+  }
+  return next;
 }
