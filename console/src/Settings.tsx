@@ -1,4 +1,9 @@
 import { useId, useState, type FormEvent } from "react";
+import { useSource } from "./data/context";
+import { ROLE_WRITE, failureMessage, toDataError } from "./data/error";
+import type { OrgSettings } from "./data/types";
+import { useResource } from "./data/use-resource";
+import { ScreenState } from "./ScreenState";
 
 export const THEME_STORAGE_KEY = "reflow-theme";
 
@@ -22,33 +27,8 @@ function applyTheme(theme: Theme) {
   }
 }
 
-export function Settings({
-  ownerTagKey = "owner",
-  productionTagKey = "environment",
-  productionTagValue = "prod",
-  snapshotRetentionDays = 30,
-  scanScheduleEnabled = true,
-  scanIntervalHours = 24,
-  scanRetryLimit = 3,
-  onSave,
-}: {
-  ownerTagKey?: string;
-  productionTagKey?: string;
-  productionTagValue?: string;
-  snapshotRetentionDays?: number;
-  scanScheduleEnabled?: boolean;
-  scanIntervalHours?: number;
-  scanRetryLimit?: number;
-  onSave?: (next: {
-    ownerTagKey: string;
-    productionTagKey: string;
-    productionTagValue: string;
-    snapshotRetentionDays: number;
-    scanScheduleEnabled: boolean;
-    scanIntervalHours: number;
-    scanRetryLimit: number;
-  }) => void;
-}) {
+function SettingsForm({ initial }: { initial: OrgSettings }) {
+  const source = useSource();
   const ownerId = useId();
   const prodKeyId = useId();
   const prodValueId = useId();
@@ -56,46 +36,46 @@ export function Settings({
   const scheduleId = useId();
   const intervalId = useId();
   const retryId = useId();
-  const themeName = useId();
-  const [owner, setOwner] = useState(ownerTagKey);
-  const [prodKey, setProdKey] = useState(productionTagKey);
-  const [prodValue, setProdValue] = useState(productionTagValue);
-  const [retention, setRetention] = useState(String(snapshotRetentionDays));
-  const [scheduleOn, setScheduleOn] = useState(scanScheduleEnabled);
-  const [interval, setInterval] = useState(String(scanIntervalHours));
-  const [retryLimit, setRetryLimit] = useState(String(scanRetryLimit));
+  const [owner, setOwner] = useState(initial.ownerTagKey);
+  const [prodKey, setProdKey] = useState(initial.productionTagKey);
+  const [prodValue, setProdValue] = useState(initial.productionTagValue);
+  const [retention, setRetention] = useState(String(initial.snapshotRetentionDays));
+  const [scheduleOn, setScheduleOn] = useState(initial.scanScheduleEnabled);
+  const [interval, setInterval] = useState(String(initial.scanIntervalHours));
+  const [retryLimit, setRetryLimit] = useState(String(initial.scanRetryLimit));
   const [status, setStatus] = useState("");
-  const [theme, setTheme] = useState<Theme>(currentTheme);
+  const [failure, setFailure] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const snapshotRetentionDays = Number(retention);
-    const scanIntervalHours = Number(interval);
-    const scanRetryLimit = Number(retryLimit);
-    onSave?.({
+    const next: OrgSettings = {
+      ...initial,
       ownerTagKey: owner,
       productionTagKey: prodKey,
       productionTagValue: prodValue,
-      snapshotRetentionDays,
+      snapshotRetentionDays: Number(retention),
       scanScheduleEnabled: scheduleOn,
-      scanIntervalHours,
-      scanRetryLimit,
-    });
-    setStatus(
-      `Saved owner tag ${owner}, production marker ${prodKey}=${prodValue}, and snapshot retention ${snapshotRetentionDays} days. The next scan will use these conventions. Next run follows the ${scanIntervalHours}-hour schedule.`,
-    );
-  }
-
-  function chooseTheme(next: Theme) {
-    setTheme(next);
-    applyTheme(next);
+      scanIntervalHours: Number(interval),
+      scanRetryLimit: Number(retryLimit),
+    };
+    setSaving(true);
+    setFailure("");
+    setStatus("");
+    try {
+      const saved = await source.saveSettings(next);
+      setStatus(
+        `Saved owner tag ${saved.ownerTagKey}, production marker ${saved.productionTagKey}=${saved.productionTagValue}, and snapshot retention ${saved.snapshotRetentionDays} days. The next scan will use these conventions. Next run follows the ${saved.scanIntervalHours}-hour schedule.`,
+      );
+    } catch (error) {
+      setFailure(failureMessage(toDataError(error), "save settings", ROLE_WRITE));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <>
-      <h1 className="page-title" id="page-title" tabIndex={-1}>
-        Settings
-      </h1>
       <form className="panel form" onSubmit={submit}>
         <div className="field">
           <label htmlFor={ownerId}>Owner tag key</label>
@@ -187,7 +167,7 @@ export function Settings({
           />
         </div>
         <div>
-          <button className="action action-primary" type="submit">
+          <button className="action action-primary" type="submit" disabled={saving}>
             Save settings
           </button>
         </div>
@@ -195,24 +175,58 @@ export function Settings({
       <p className="notice" role="status" aria-live="polite">
         {status}
       </p>
-      <div className="panel">
-        <fieldset className="fieldset">
-          <legend>Appearance</legend>
-          {THEMES.map((option) => (
-            <label className="choice" key={option.value}>
-              <input
-                className="radio"
-                type="radio"
-                name={themeName}
-                value={option.value}
-                checked={theme === option.value}
-                onChange={() => chooseTheme(option.value)}
-              />
-              {option.label}
-            </label>
-          ))}
-        </fieldset>
-      </div>
+      {failure ? (
+        <p className="notice notice-alert" role="alert">
+          {failure}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+function Appearance() {
+  const themeName = useId();
+  const [theme, setTheme] = useState<Theme>(currentTheme);
+
+  function chooseTheme(next: Theme) {
+    setTheme(next);
+    applyTheme(next);
+  }
+
+  return (
+    <div className="panel">
+      <fieldset className="fieldset">
+        <legend>Appearance</legend>
+        {THEMES.map((option) => (
+          <label className="choice" key={option.value}>
+            <input
+              className="radio"
+              type="radio"
+              name={themeName}
+              value={option.value}
+              checked={theme === option.value}
+              onChange={() => chooseTheme(option.value)}
+            />
+            {option.label}
+          </label>
+        ))}
+      </fieldset>
+    </div>
+  );
+}
+
+export function Settings() {
+  const source = useSource();
+  const settings = useResource((signal) => source.settings(signal), [source]);
+  return (
+    <>
+      <h1 className="page-title" id="page-title" tabIndex={-1}>
+        Settings
+      </h1>
+      <ScreenState label="settings" resource={settings}>
+        {(data) => <SettingsForm initial={data} />}
+      </ScreenState>
+      <Appearance />
     </>
   );
 }
