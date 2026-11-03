@@ -66,6 +66,39 @@ describe("waste totals", () => {
     expect(view.waste).toHaveLength(1);
     expect(view.waste[0]?.issueHref).toBe("#issues/disk-unattached");
   });
+
+  it("includes assessed GCP waste ranges in the same totals", () => {
+    const gcpFail: Finding = {
+      checkId: "gcp-waste-unattached-disks",
+      result: "fail",
+      evidence: { fields: { diskId: "disk-parked", usersCount: 0 } },
+      scope: {
+        id: "farside-test:gcp-waste-unattached-disks",
+        cloud: "gcp",
+        subscriptionOrProject: "farside-test",
+      },
+      savings: { min: "4.00", max: "6.00", currency: "USD" },
+    };
+    const assessed = recordCoverageScope({
+      subscriptionOrProject: "farside-test",
+      checkId: "gcp-waste-unattached-disks",
+      state: "assessed",
+    });
+    expect(wasteTotals([gcpFail], [assessed])).toEqual({
+      min: "4.00",
+      max: "6.00",
+      currency: "USD",
+      assessedCount: 1,
+      unassessedScopes: 0,
+    });
+    expect(costWasteView({
+      cost: null,
+      alerts: null,
+      commitments: null,
+      findings: [gcpFail],
+      coverage: [assessed],
+    }).waste[0]?.resourceId).toBe("disk-parked");
+  });
 });
 
 describe("cost-waste route", () => {
