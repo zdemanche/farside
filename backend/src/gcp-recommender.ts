@@ -109,6 +109,7 @@ export function checkGcpIdleRecommendations(
 
   const findings = harvest.recommendations.map((row) => {
     const evidence = {
+      resourceUri: row.resourceName,
       recommendationId: row.recommendationId,
       recommenderId: row.recommenderId,
       resourceName: row.resourceName,

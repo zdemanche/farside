@@ -250,18 +250,18 @@ describe("scan into issue store", () => {
       payload: { tenantId: "tenant-1", subscriptionId: "main" },
     });
     expect(first.statusCode).toBe(201);
-    let issues: Array<{ id: string; status: string; resourceId: string }> = [];
+    let issues: Array<{ id: string; status: string; resourceId: string; checkId: string }> = [];
     for (let attempt = 0; attempt < 30; attempt += 1) {
       const response = await app.inject({ method: "GET", url: "/v1/orgs/org-a/issues", headers });
       issues = response.json().issues;
-      if (issues.some((issue) => issue.resourceId === "disk-unattached")) {
+      if (issues.some((issue) => issue.resourceId.endsWith("/disk-unattached"))) {
         break;
       }
       await new Promise((resolve) => setImmediate(resolve));
     }
     const firstCount = issues.length;
     expect(firstCount).toBeGreaterThan(0);
-    expect(issues.filter((issue) => issue.resourceId === "disk-unattached")).toHaveLength(1);
+    expect(issues.filter((issue) => issue.checkId === "azure-waste-unattached-disks" && issue.resourceId.endsWith("/disk-unattached"))).toHaveLength(1);
     const second = await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/scans",
@@ -277,7 +277,7 @@ describe("scan into issue store", () => {
       }
       await new Promise((resolve) => setImmediate(resolve));
     }
-    expect(issues.filter((issue) => issue.resourceId === "disk-unattached")).toHaveLength(1);
+    expect(issues.filter((issue) => issue.checkId === "azure-waste-unattached-disks" && issue.resourceId.endsWith("/disk-unattached"))).toHaveLength(1);
     expect(issues.length).toBe(firstCount);
   });
 });

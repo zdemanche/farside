@@ -271,6 +271,7 @@ export function checkUnattachedDisks(
         closer: "A disk read that includes diskState and managedBy",
         evidence: {
           fields: {
+            resourceUri: disk.resourceUri,
             diskId: disk.displayName,
             diskState: null,
             skuName: null,
@@ -289,6 +290,7 @@ export function checkUnattachedDisks(
           closer: "A retail or agreement price row for the SKU in that region",
           evidence: {
             fields: {
+              resourceUri: disk.resourceUri,
               diskId: typeof row?.fields.diskId === "string" ? row.fields.diskId : disk.displayName,
               diskState,
               skuName: null,
@@ -305,6 +307,7 @@ export function checkUnattachedDisks(
         result: "fail",
         evidence: {
           fields: {
+            resourceUri: disk.resourceUri,
             diskId: typeof row?.fields.diskId === "string" ? row.fields.diskId : disk.displayName,
             diskState,
             skuName: typeof row?.fields.skuName === "string" ? row.fields.skuName : null,
@@ -322,6 +325,7 @@ export function checkUnattachedDisks(
       result: "pass",
       evidence: {
         fields: {
+          resourceUri: disk.resourceUri,
           diskId: typeof row?.fields.diskId === "string" ? row.fields.diskId : disk.displayName,
           diskState,
           skuName: null,
@@ -356,7 +360,13 @@ export function checkOldSnapshots(
           checkId: OLD_SNAPSHOTS,
           result: "undetermined",
           closer: "Set snapshot retention days in Settings",
-          evidence: { fields: { snapshotId: snapshot.displayName, retentionDays: null } },
+          evidence: {
+            fields: {
+              resourceUri: snapshot.resourceUri,
+              snapshotId: snapshot.displayName,
+              retentionDays: null,
+            },
+          },
           scope,
         });
       }
@@ -368,6 +378,7 @@ export function checkOldSnapshots(
           closer: "A snapshot read that includes timeCreated",
           evidence: {
             fields: {
+              resourceUri: snapshot.resourceUri,
               snapshotId: typeof row?.fields.snapshotId === "string" ? row.fields.snapshotId : snapshot.displayName,
               ageDays: null,
               retentionDays: threshold,
@@ -383,6 +394,7 @@ export function checkOldSnapshots(
           result: "fail",
           evidence: {
             fields: {
+              resourceUri: snapshot.resourceUri,
               snapshotId: typeof row?.fields.snapshotId === "string" ? row.fields.snapshotId : snapshot.displayName,
               ageDays,
               retentionDays: threshold,
@@ -398,6 +410,7 @@ export function checkOldSnapshots(
         result: "pass",
         evidence: {
           fields: {
+            resourceUri: snapshot.resourceUri,
             snapshotId: typeof row?.fields.snapshotId === "string" ? row.fields.snapshotId : snapshot.displayName,
             ageDays,
             retentionDays: threshold,
@@ -431,6 +444,7 @@ export function checkUnassociatedIps(
           closer: "A public IP read that includes ipConfiguration / natGateway / associated resource",
           evidence: {
             fields: {
+              resourceUri: ip.resourceUri,
               publicIpId: ip.displayName,
               associatedTo: null,
             },
@@ -446,6 +460,7 @@ export function checkUnassociatedIps(
           result: "fail",
           evidence: {
             fields: {
+              resourceUri: ip.resourceUri,
               publicIpId: typeof row.fields.publicIpId === "string" ? row.fields.publicIpId : ip.displayName,
               associatedTo: null,
               savingsBasis: savings.basis,
@@ -460,6 +475,7 @@ export function checkUnassociatedIps(
         result: "pass",
         evidence: {
           fields: {
+            resourceUri: ip.resourceUri,
             publicIpId: typeof row.fields.publicIpId === "string" ? row.fields.publicIpId : ip.displayName,
             associatedTo,
           },
@@ -493,6 +509,7 @@ export function checkStoppedVms(
           closer: "A VM instance-view read that includes powerState",
           evidence: {
             fields: {
+              resourceUri: vm.resourceUri,
               vmId: vm.displayName,
               powerState: null,
               vmSize: null,
@@ -509,6 +526,7 @@ export function checkStoppedVms(
           result: "fail",
           evidence: {
             fields: {
+              resourceUri: vm.resourceUri,
               vmId: typeof row?.fields.vmId === "string" ? row.fields.vmId : vm.displayName,
               powerState,
               vmSize: typeof row?.fields.vmSize === "string" ? row.fields.vmSize : null,
@@ -525,6 +543,7 @@ export function checkStoppedVms(
         result: "pass",
         evidence: {
           fields: {
+            resourceUri: vm.resourceUri,
             vmId: typeof row?.fields.vmId === "string" ? row.fields.vmId : vm.displayName,
             powerState,
             vmSize: typeof row?.fields.vmSize === "string" ? row.fields.vmSize : null,
@@ -561,7 +580,15 @@ export function checkEmptyPlans(
           checkId: EMPTY_PLANS,
           result: "undetermined",
           closer: "A plan read that includes numberOfSites, or a complete sites list",
-          evidence: { fields: { planId, skuName, numberOfSites: null, kind } },
+          evidence: {
+            fields: {
+              resourceUri: plan.resourceUri,
+              planId,
+              skuName,
+              numberOfSites: null,
+              kind,
+            },
+          },
           scope,
         });
       }
@@ -572,6 +599,7 @@ export function checkEmptyPlans(
           result: "fail",
           evidence: {
             fields: {
+              resourceUri: plan.resourceUri,
               planId,
               skuName,
               numberOfSites,
@@ -586,7 +614,15 @@ export function checkEmptyPlans(
       return acceptFinding({
         checkId: EMPTY_PLANS,
         result: "pass",
-        evidence: { fields: { planId, skuName, numberOfSites, kind } },
+        evidence: {
+          fields: {
+            resourceUri: plan.resourceUri,
+            planId,
+            skuName,
+            numberOfSites,
+            kind,
+          },
+        },
         scope,
       });
     });
@@ -618,7 +654,13 @@ export function checkIdleLoadBalancers(
           result: "undetermined",
           closer: "A load balancer read that includes backend address pools",
           evidence: {
-            fields: { loadBalancerId, skuName, backendAddressCount: null, metricWindow: null },
+            fields: {
+              resourceUri: lb.resourceUri,
+              loadBalancerId,
+              skuName,
+              backendAddressCount: null,
+              metricWindow: null,
+            },
           },
           scope,
         });
@@ -630,7 +672,13 @@ export function checkIdleLoadBalancers(
           result: "undetermined",
           closer: METRICS_CLOSER,
           evidence: {
-            fields: { loadBalancerId, skuName, backendAddressCount, metricWindow: null },
+            fields: {
+              resourceUri: lb.resourceUri,
+              loadBalancerId,
+              skuName,
+              backendAddressCount,
+              metricWindow: null,
+            },
           },
           scope,
         });
@@ -642,6 +690,7 @@ export function checkIdleLoadBalancers(
           result: "fail",
           evidence: {
             fields: {
+              resourceUri: lb.resourceUri,
               loadBalancerId,
               skuName,
               backendAddressCount,
@@ -658,6 +707,7 @@ export function checkIdleLoadBalancers(
         result: "pass",
         evidence: {
           fields: {
+            resourceUri: lb.resourceUri,
             loadBalancerId,
             skuName,
             backendAddressCount,
@@ -695,7 +745,13 @@ export function checkIdleNatGateways(
           result: "undetermined",
           closer: "A NAT gateway read that includes subnets",
           evidence: {
-            fields: { natGatewayId, attachedSubnetCount: null, skuName, metricWindow: null },
+            fields: {
+              resourceUri: nat.resourceUri,
+              natGatewayId,
+              attachedSubnetCount: null,
+              skuName,
+              metricWindow: null,
+            },
           },
           scope,
         });
@@ -707,7 +763,13 @@ export function checkIdleNatGateways(
           result: "undetermined",
           closer: METRICS_CLOSER,
           evidence: {
-            fields: { natGatewayId, attachedSubnetCount, skuName, metricWindow: null },
+            fields: {
+              resourceUri: nat.resourceUri,
+              natGatewayId,
+              attachedSubnetCount,
+              skuName,
+              metricWindow: null,
+            },
           },
           scope,
         });
@@ -719,6 +781,7 @@ export function checkIdleNatGateways(
           result: "fail",
           evidence: {
             fields: {
+              resourceUri: nat.resourceUri,
               natGatewayId,
               attachedSubnetCount,
               skuName,
@@ -735,6 +798,7 @@ export function checkIdleNatGateways(
         result: "pass",
         evidence: {
           fields: {
+            resourceUri: nat.resourceUri,
             natGatewayId,
             attachedSubnetCount,
             skuName,
@@ -778,7 +842,13 @@ function checkProductionBackup(
         result: "undetermined",
         closer: MARKER_CLOSER,
         evidence: {
-          fields: { [spec.idField]: id, productionMarker: null, vaultId: null, protected: null },
+          fields: {
+            resourceUri: resource.resourceUri,
+            [spec.idField]: id,
+            productionMarker: null,
+            vaultId: null,
+            protected: null,
+          },
         },
         scope: {
           id: `${subscriptionOrProject}:${spec.checkId}`,
@@ -812,7 +882,13 @@ function checkProductionBackup(
         result: "undetermined",
         closer: spec.roleCloser,
         evidence: {
-          fields: { [spec.idField]: id, productionMarker: marker, vaultId, protected: null },
+          fields: {
+            resourceUri: resource.resourceUri,
+            [spec.idField]: id,
+            productionMarker: marker,
+            vaultId,
+            protected: null,
+          },
         },
         scope,
       });
@@ -823,6 +899,7 @@ function checkProductionBackup(
         result: "fail",
         evidence: {
           fields: {
+            resourceUri: resource.resourceUri,
             [spec.idField]: id,
             productionMarker: marker,
             vaultId,
@@ -839,6 +916,7 @@ function checkProductionBackup(
       result: "pass",
       evidence: {
         fields: {
+          resourceUri: resource.resourceUri,
           [spec.idField]: id,
           productionMarker: marker,
           vaultId,
@@ -905,6 +983,7 @@ export function checkDbZoneOrGeo(
           closer: "A database read that includes those properties for that engine",
           evidence: {
             fields: {
+              resourceUri: database.resourceUri,
               databaseId,
               engine,
               zoneRedundant: typeof zoneRedundant === "boolean" ? zoneRedundant : null,
@@ -924,6 +1003,7 @@ export function checkDbZoneOrGeo(
           result: "fail",
           evidence: {
             fields: {
+              resourceUri: database.resourceUri,
               databaseId,
               engine,
               zoneRedundant,
@@ -937,7 +1017,15 @@ export function checkDbZoneOrGeo(
       return acceptFinding({
         checkId: DB_ZONE_OR_GEO,
         result: "pass",
-        evidence: { fields: { databaseId, engine, zoneRedundant, backupRedundancy } },
+        evidence: {
+          fields: {
+            resourceUri: database.resourceUri,
+            databaseId,
+            engine,
+            zoneRedundant,
+            backupRedundancy,
+          },
+        },
         scope,
       });
     });
@@ -977,6 +1065,7 @@ export function checkRetiringSkus(
           result: "fail",
           evidence: {
             fields: {
+              resourceUri: resource.resourceUri,
               resourceId,
               skuName,
               retirementDate: listed.retirementDate,
@@ -994,6 +1083,7 @@ export function checkRetiringSkus(
         result: "pass",
         evidence: {
           fields: {
+            resourceUri: resource.resourceUri,
             resourceId,
             skuName,
             catalogueVersion: catalogue.version,
@@ -1042,7 +1132,13 @@ function checkExpiringCerts(
           result: "undetermined",
           closer: "Set certificate expiry warning days in Settings",
           evidence: {
-            fields: { [spec.idField]: id, [spec.nameField]: name, expirationDate, daysRemaining: null },
+            fields: {
+              resourceUri: resource.resourceUri,
+              [spec.idField]: id,
+              [spec.nameField]: name,
+              expirationDate,
+              daysRemaining: null,
+            },
           },
           scope,
         });
@@ -1054,7 +1150,13 @@ function checkExpiringCerts(
           result: "undetermined",
           closer: "A certificate read that includes expirationDate",
           evidence: {
-            fields: { [spec.idField]: id, [spec.nameField]: name, expirationDate, daysRemaining: null },
+            fields: {
+              resourceUri: resource.resourceUri,
+              [spec.idField]: id,
+              [spec.nameField]: name,
+              expirationDate,
+              daysRemaining: null,
+            },
           },
           scope,
         });
@@ -1065,6 +1167,7 @@ function checkExpiringCerts(
           result: "fail",
           evidence: {
             fields: {
+              resourceUri: resource.resourceUri,
               [spec.idField]: id,
               [spec.nameField]: name,
               expirationDate,
@@ -1078,7 +1181,13 @@ function checkExpiringCerts(
         checkId: spec.checkId,
         result: "pass",
         evidence: {
-          fields: { [spec.idField]: id, [spec.nameField]: name, expirationDate, daysRemaining },
+          fields: {
+            resourceUri: resource.resourceUri,
+            [spec.idField]: id,
+            [spec.nameField]: name,
+            expirationDate,
+            daysRemaining,
+          },
         },
         scope,
       });
