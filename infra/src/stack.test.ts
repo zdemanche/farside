@@ -105,13 +105,21 @@ describe("deployStack", () => {
   });
 
   it("keeps the console bucket private", () => {
-    expect(ofType("aws:s3/bucket:Bucket")).toHaveLength(1);
-    expect(ofType("aws:s3/bucketPublicAccessBlock:BucketPublicAccessBlock")[0]?.inputs).toMatchObject({
-      blockPublicAcls: true,
-      blockPublicPolicy: true,
-      ignorePublicAcls: true,
-      restrictPublicBuckets: true,
-    });
+    const buckets = ofType("aws:s3/bucket:Bucket");
+    expect(buckets.map((bucket) => bucket.name).sort()).toEqual([
+      "farside-moonaan-dev-console",
+      "farside-moonaan-dev-store-blobs",
+    ]);
+    const blocks = ofType("aws:s3/bucketPublicAccessBlock:BucketPublicAccessBlock");
+    expect(blocks).toHaveLength(2);
+    for (const block of blocks) {
+      expect(block.inputs).toMatchObject({
+        blockPublicAcls: true,
+        blockPublicPolicy: true,
+        ignorePublicAcls: true,
+        restrictPublicBuckets: true,
+      });
+    }
     expect(ofType("aws:cloudfront/distribution:Distribution")).toHaveLength(1);
   });
 
@@ -183,6 +191,35 @@ describe("deployStack", () => {
           Resource: table,
         },
         { Effect: "Allow", Action: "dynamodb:Query", Resource: `${table}/index/gsi1` },
+      ]);
+    }
+  });
+
+  it("keeps oversized documents in a private, encrypted blob bucket only the two lambdas can reach", async () => {
+    expect(ofType("aws:s3/bucketServerSideEncryptionConfiguration:BucketServerSideEncryptionConfiguration")[0]?.inputs).toMatchObject({
+      rules: [{ applyServerSideEncryptionByDefault: { sseAlgorithm: "AES256" } }],
+    });
+    expect(ofType("aws:s3/bucketLifecycleConfiguration:BucketLifecycleConfiguration")[0]?.inputs).toMatchObject({
+      rules: [{ status: "Enabled", abortIncompleteMultipartUpload: { daysAfterInitiation: 1 } }],
+    });
+    expect(ofType("aws:s3/bucketVersioning:BucketVersioning")).toEqual([]);
+    for (const fn of ofType("aws:lambda/function:Function")) {
+      const variables = (fn.inputs.environment as { variables: Record<string, string> }).variables;
+      expect(variables.FARSIDE_BLOB_BUCKET, fn.name).toBe(`farside-moonaan-dev-store-blobs-123456789012`);
+    }
+    const grants = ofType("aws:iam/rolePolicy:RolePolicy").filter((policy) => policy.name.endsWith("-blobs"));
+    expect(grants.map((grant) => grant.name).sort()).toEqual(["farside-moonaan-dev-api-blobs", "farside-moonaan-dev-tick-blobs"]);
+    const bucket = "arn:aws:mock:us-east-2:123456789012:farside-moonaan-dev-store-blobs";
+    for (const grant of grants) {
+      const policy = JSON.parse(await resolved(pulumi.output(grant.inputs.policy as pulumi.Input<string>)));
+      expect(policy.Statement).toEqual([
+        { Effect: "Allow", Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], Resource: `${bucket}/ORG#*` },
+        {
+          Effect: "Allow",
+          Action: "s3:ListBucket",
+          Resource: bucket,
+          Condition: { StringLike: { "s3:prefix": "ORG#*" } },
+        },
       ]);
     }
   });

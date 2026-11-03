@@ -61,6 +61,7 @@ export function planDevStack(input: FarsideTagInput & { accountId: string }): De
     { name: `${prefix}-api-role`, kind: "iam-role", tags },
     { name: `${prefix}-operator-token`, kind: "ssm-parameter", tags },
     { name: `${prefix}-store`, kind: "dynamodb-table", tags },
+    { name: `${prefix}-store-blobs`, kind: "s3-bucket", tags },
     { name: `${prefix}-api-logs`, kind: "log-group", tags },
     { name: `${prefix}-api`, kind: "lambda", tags },
     { name: `${prefix}-api-url`, kind: "lambda-url", tags, authType: "AWS_IAM" },

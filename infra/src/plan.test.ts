@@ -22,6 +22,7 @@ describe("dev deploy plan", () => {
       "iam-role",
       "ssm-parameter",
       "dynamodb-table",
+      "s3-bucket",
       "log-group",
       "lambda",
       "lambda-url",

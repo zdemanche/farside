@@ -20,6 +20,7 @@ export type StackInputs = {
 const CACHING_OPTIMIZED = "658327ea-f89d-4fab-a63d-7e88639e58f6";
 const CLOUDFRONT = "cloudfront.amazonaws.com";
 const ORG_INDEX = "gsi1";
+const BLOB_PREFIX = "ORG#";
 const TABLE_ACTIONS = [
   "dynamodb:GetItem",
   "dynamodb:PutItem",
@@ -78,6 +79,30 @@ function grantTable(name: string, role: aws.iam.Role, tableArn: pulumi.Input<str
   });
 }
 
+function grantBlobs(name: string, role: aws.iam.Role, bucketArn: pulumi.Input<string>) {
+  new aws.iam.RolePolicy(`${name}-blobs`, {
+    role: role.id,
+    policy: pulumi.output(bucketArn).apply((arn) =>
+      JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+            Resource: `${arn}/${BLOB_PREFIX}*`,
+          },
+          {
+            Effect: "Allow",
+            Action: "s3:ListBucket",
+            Resource: arn,
+            Condition: { StringLike: { "s3:prefix": `${BLOB_PREFIX}*` } },
+          },
+        ],
+      }),
+    ),
+  });
+}
+
 function lambdaFunction(input: {
   name: string;
   bundle: string;
@@ -128,10 +153,31 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     deletionProtectionEnabled: storeDeletionProtection(tags.environment),
     tags,
   });
+  const blobs = new aws.s3.Bucket(`${prefix}-store-blobs`, {
+    bucket: `${prefix}-store-blobs-${plan.accountId}`,
+    forceDestroy: false,
+    tags,
+  });
+  new aws.s3.BucketPublicAccessBlock(`${prefix}-store-blobs-public-access`, {
+    bucket: blobs.id,
+    blockPublicAcls: true,
+    blockPublicPolicy: true,
+    ignorePublicAcls: true,
+    restrictPublicBuckets: true,
+  });
+  new aws.s3.BucketServerSideEncryptionConfiguration(`${prefix}-store-blobs-encryption`, {
+    bucket: blobs.id,
+    rules: [{ applyServerSideEncryptionByDefault: { sseAlgorithm: "AES256" } }],
+  });
+  new aws.s3.BucketLifecycleConfiguration(`${prefix}-store-blobs-lifecycle`, {
+    bucket: blobs.id,
+    rules: [{ id: "abort-incomplete-multipart", status: "Enabled", abortIncompleteMultipartUpload: { daysAfterInitiation: 1 } }],
+  });
   const environment = {
     FARSIDE_LOG_LEVEL: "info",
     FARSIDE_STORE: "dynamo",
     FARSIDE_TABLE_NAME: store.name,
+    FARSIDE_BLOB_BUCKET: blobs.bucket,
   };
   const tokenParameter = new aws.ssm.Parameter(`${prefix}-operator-token`, {
     name: `/${PRODUCT_KEY}/${plan.customerName}/operator-token`,
@@ -149,6 +195,7 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
   });
   const apiRole = lambdaRole(apiName, apiLogs.arn, tags);
   grantTable(apiName, apiRole, store.arn);
+  grantBlobs(apiName, apiRole, blobs.arn);
   const api = lambdaFunction({
     name: apiName,
     bundle: apiBundle,
@@ -189,6 +236,7 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
   });
   const tickRole = lambdaRole(tickName, tickLogs.arn, tags);
   grantTable(tickName, tickRole, store.arn);
+  grantBlobs(tickName, tickRole, blobs.arn);
   const tick = lambdaFunction({
     name: tickName,
     bundle: tickBundle,
