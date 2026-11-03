@@ -18,7 +18,7 @@ export async function bundle(outdir) {
   await build({ ...SHARED, entryPoints: [`${root}src/index.ts`], outdir });
   await build({
     ...SHARED,
-    entryPoints: [`${root}src/lambda.ts`],
+    entryPoints: [`${root}src/lambda.ts`, `${root}src/scheduled.ts`],
     outdir,
     outExtension: { ".js": ".mjs" },
   });

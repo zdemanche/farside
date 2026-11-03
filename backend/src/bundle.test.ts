@@ -40,3 +40,8 @@ it("bundles the lambda handler with the docs JSON", async () => {
   const result = await bundled.handler({ rawPath: "/health" });
   expect(result.statusCode).toBe(200);
 });
+
+it("bundles the scheduled tick handler", async () => {
+  const bundled = (await import(join(dir, "scheduled.mjs"))) as typeof import("./scheduled.js");
+  expect(await bundled.handler()).toEqual({ orgs: [], retired: 0 });
+});

@@ -128,6 +128,10 @@ export class MemoryStore {
     };
   }
 
+  orgIds(): string[] {
+    return [...this.#orgs.keys()];
+  }
+
   hasOrg(orgId: string): boolean {
     return this.#orgs.has(orgId);
   }
