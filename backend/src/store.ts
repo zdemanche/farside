@@ -133,6 +133,10 @@ export class MemoryStore implements OrgRepository {
     return sweepRetention(this, now, onlyOrgId);
   }
 
+  async repurgeDeleted(_now?: string): Promise<number> {
+    return 0;
+  }
+
   async nextSequence(orgId: string, kind: Sequence): Promise<number> {
     const { sequences } = this.org(orgId);
     sequences[kind] += 1;

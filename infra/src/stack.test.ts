@@ -186,6 +186,7 @@ describe("deployStack", () => {
             "dynamodb:UpdateItem",
             "dynamodb:DeleteItem",
             "dynamodb:BatchWriteItem",
+            "dynamodb:ConditionCheckItem",
             "dynamodb:Query",
           ],
           Resource: table,

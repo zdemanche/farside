@@ -59,6 +59,11 @@ export async function runScheduledTick(deps: TickDeps): Promise<TickSummary> {
   } catch (error) {
     log.error({ err: error }, "retention sweep failed");
   }
+  try {
+    await store.repurgeDeleted(clock());
+  } catch (error) {
+    log.error({ err: error }, "deleted-org re-purge failed");
+  }
   const summary: TickSummary = { orgs: [], retired: retired.length };
   const started: StartedScan[] = [];
   for (const orgId of (await store.orgIds()).filter((id) => !isDemoOrg(id))) {

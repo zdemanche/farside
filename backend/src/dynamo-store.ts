@@ -1,13 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
-import { ConditionalCheckFailedException, DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { ConditionalCheckFailedException, DynamoDBClient, TransactionCanceledException } from "@aws-sdk/client-dynamodb";
 import {
   BatchWriteCommand,
   DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
-  PutCommand,
   QueryCommand,
-  UpdateCommand,
+  TransactWriteCommand,
+  type TransactWriteItem,
 } from "@aws-sdk/lib-dynamodb";
 import type { Cloud, Finding, Inventory } from "@farside/scan-contracts";
 import type { BlobStore } from "./blob-store.js";
@@ -60,7 +60,10 @@ export const INLINE_BYTES = 300_000;
 
 const ORG_PREFIX = "ORG#";
 const ORG_LISTING = "ORGS";
+const DELETED_LISTING = "DELETED";
+const REPURGE_MS = 48 * 60 * 60 * 1000;
 const MAX_ATTEMPTS = 12;
+const SEQ_ATTEMPTS = 40;
 const BACKOFF_BASE_MS = 20;
 const BACKOFF_CAP_MS = 1_000;
 const BATCH_SIZE = 25;
@@ -231,6 +234,8 @@ export class DynamoStore implements OrgRepository {
     options: {
       prefix?: string;
       index?: boolean;
+      indexPk?: string;
+      skFrom?: string;
       projection?: string;
       names?: Record<string, string>;
       limit?: number;
@@ -247,13 +252,16 @@ export class DynamoStore implements OrgRepository {
           TableName: this.table,
           ...(options.index ? { IndexName: ORG_INDEX } : { ConsistentRead: true }),
           KeyConditionExpression: options.index
-            ? "gsi1pk = :pk"
+            ? options.skFrom === undefined
+              ? "gsi1pk = :pk"
+              : "gsi1pk = :pk AND gsi1sk >= :from"
             : options.prefix === undefined
               ? "pk = :pk"
               : "pk = :pk AND begins_with(sk, :prefix)",
           ExpressionAttributeValues: {
-            ":pk": options.index ? ORG_LISTING : orgKey(orgId),
+            ":pk": options.index ? (options.indexPk ?? ORG_LISTING) : orgKey(orgId),
             ...(options.prefix === undefined || options.index ? {} : { ":prefix": options.prefix }),
+            ...(options.skFrom === undefined ? {} : { ":from": options.skFrom }),
           },
           ...(options.projection ? { ProjectionExpression: options.projection } : {}),
           ...(options.names ? { ExpressionAttributeNames: options.names } : {}),
@@ -328,6 +336,51 @@ export class DynamoStore implements OrgRepository {
     return new Map(resolved);
   }
 
+  async #writeLive(orgId: string, write: TransactWriteItem, live = true): Promise<void> {
+    const TransactItems = live
+      ? [
+          {
+            ConditionCheck: {
+              TableName: this.table,
+              Key: { pk: orgKey(orgId), sk: SK.deletion },
+              ConditionExpression: "attribute_not_exists(pk)",
+            },
+          },
+          write,
+        ]
+      : [write];
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      try {
+        await this.client.send(new TransactWriteCommand({ TransactItems }));
+        return;
+      } catch (error) {
+        const reasons =
+          error instanceof TransactionCanceledException
+            ? (error.CancellationReasons ?? [])
+            : typeof error === "object" && error !== null && "CancellationReasons" in error
+              ? ((error as TransactionCanceledException).CancellationReasons ?? [])
+              : undefined;
+        if (reasons) {
+          if (live && reasons[0]?.Code === "ConditionalCheckFailed") {
+            throw new DeletedOrgError(orgId);
+          }
+          if (reasons[live ? 1 : 0]?.Code === "ConditionalCheckFailed") {
+            throw new ConditionalCheckFailedException({
+              message: error instanceof Error ? error.message : "The conditional request failed",
+              $metadata: error instanceof TransactionCanceledException ? error.$metadata : { httpStatusCode: 400 },
+            });
+          }
+          if (reasons.some((reason) => reason.Code === "TransactionConflict")) {
+            await backoff(attempt);
+            continue;
+          }
+        }
+        throw error;
+      }
+    }
+    throw new Error(`transaction for ${orgId} conflicted after ${MAX_ATTEMPTS} attempts`);
+  }
+
   async #putDoc(orgId: string, sk: string, value: unknown, options: PutOptions = {}): Promise<void> {
     const pk = orgKey(orgId);
     const json = JSON.stringify(value);
@@ -367,38 +420,38 @@ export class DynamoStore implements OrgRepository {
     if (expected !== undefined && expected !== 0) {
       values[":expected"] = expected;
     }
-    let result;
+    const previous =
+      expected === 0
+        ? undefined
+        : ((
+            await this.client.send(
+              new GetCommand({ TableName: this.table, Key: { pk, sk }, ConsistentRead: true }),
+            )
+          ).Item as Header | undefined);
     try {
-      result = await this.client.send(
-        new UpdateCommand({
-          TableName: this.table,
-          Key: { pk, sk },
-          UpdateExpression: `SET ${sets.join(", ")} REMOVE ${removes.join(", ")} ADD #version :one`,
-          ExpressionAttributeNames: names,
-          ExpressionAttributeValues: values,
-          ReturnValues: "ALL_OLD",
-          ...(expected === undefined
-            ? {}
-            : { ConditionExpression: expected === 0 ? "attribute_not_exists(pk)" : "#version = :expected" }),
-        }),
+      await this.#writeLive(
+        orgId,
+        {
+          Update: {
+            TableName: this.table,
+            Key: { pk, sk },
+            UpdateExpression: `SET ${sets.join(", ")} REMOVE ${removes.join(", ")} ADD #version :one`,
+            ExpressionAttributeNames: names,
+            ExpressionAttributeValues: values,
+            ...(expected === undefined
+              ? {}
+              : { ConditionExpression: expected === 0 ? "attribute_not_exists(pk)" : "#version = :expected" }),
+          },
+        },
+        sk !== SK.deletion,
       );
     } catch (error) {
-      if (blobKey && error instanceof ConditionalCheckFailedException) {
+      if (blobKey && (error instanceof ConditionalCheckFailedException || error instanceof DeletedOrgError)) {
         await this.#dropBlob(blobKey);
       }
       throw error;
     }
-    await this.#dropBlob((result.Attributes as Header | undefined)?.blobKey, blobKey);
-    if (sk !== SK.deletion) {
-      await this.#abortIfDeleted(orgId, sk);
-    }
-  }
-
-  async #abortIfDeleted(orgId: string, sk: string): Promise<void> {
-    if (await this.deletion(orgId)) {
-      await this.#delDoc(orgId, sk);
-      throw new DeletedOrgError(orgId);
-    }
+    await this.#dropBlob(previous?.blobKey, blobKey);
   }
 
   async #delDoc(orgId: string, sk: string): Promise<void> {
@@ -432,19 +485,18 @@ export class DynamoStore implements OrgRepository {
       return;
     }
     try {
-      await this.client.send(
-        new PutCommand({
+      await this.#writeLive(orgId, {
+        Put: {
           TableName: this.table,
           Item: { pk: orgKey(orgId), sk: SK.meta, gsi1pk: ORG_LISTING, gsi1sk: orgKey(orgId) },
           ConditionExpression: "attribute_not_exists(pk)",
-        }),
-      );
+        },
+      });
     } catch (error) {
       if (!(error instanceof ConditionalCheckFailedException)) {
         throw error;
       }
     }
-    await this.#abortIfDeleted(orgId, SK.meta);
     this.#known.add(orgId);
   }
 
@@ -566,32 +618,49 @@ export class DynamoStore implements OrgRepository {
 
   async nextSequence(orgId: string, kind: Sequence): Promise<number> {
     await this.#touch(orgId);
-    const result = await this.client.send(
-      new UpdateCommand({
-        TableName: this.table,
-        Key: { pk: orgKey(orgId), sk: SK.seq },
-        UpdateExpression: "ADD #kind :one",
-        ExpressionAttributeNames: { "#kind": kind },
-        ExpressionAttributeValues: { ":one": 1 },
-        ReturnValues: "UPDATED_NEW",
-      }),
-    );
-    await this.#abortIfDeleted(orgId, SK.seq);
-    return (result.Attributes as Record<Sequence, number>)[kind];
+    for (let attempt = 0; attempt < SEQ_ATTEMPTS; attempt += 1) {
+      const current = await this.client.send(
+        new GetCommand({
+          TableName: this.table,
+          Key: { pk: orgKey(orgId), sk: SK.seq },
+          ConsistentRead: true,
+        }),
+      );
+      const prior = (current.Item as Record<string, number> | undefined)?.[kind] ?? 0;
+      const next = prior + 1;
+      try {
+        await this.#writeLive(orgId, {
+          Update: {
+            TableName: this.table,
+            Key: { pk: orgKey(orgId), sk: SK.seq },
+            UpdateExpression: "SET #kind = :next",
+            ConditionExpression: prior === 0 ? "attribute_not_exists(#kind)" : "#kind = :current",
+            ExpressionAttributeNames: { "#kind": kind },
+            ExpressionAttributeValues: prior === 0 ? { ":next": next } : { ":next": next, ":current": prior },
+          },
+        });
+        return next;
+      } catch (error) {
+        if (!(error instanceof ConditionalCheckFailedException)) {
+          throw error;
+        }
+      }
+    }
+    throw new Error(`sequence ${kind} for ${orgId} changed concurrently after ${SEQ_ATTEMPTS} attempts`);
   }
 
   async #raiseSequence(orgId: string, kind: Sequence, floor: number): Promise<void> {
     try {
-      await this.client.send(
-        new UpdateCommand({
+      await this.#writeLive(orgId, {
+        Update: {
           TableName: this.table,
           Key: { pk: orgKey(orgId), sk: SK.seq },
           UpdateExpression: "SET #kind = :floor",
           ConditionExpression: "attribute_not_exists(#kind) OR #kind < :floor",
           ExpressionAttributeNames: { "#kind": kind },
           ExpressionAttributeValues: { ":floor": floor },
-        }),
-      );
+        },
+      });
     } catch (error) {
       if (!(error instanceof ConditionalCheckFailedException)) {
         throw error;
@@ -694,15 +763,14 @@ export class DynamoStore implements OrgRepository {
     markVerified(inventory);
     await this.#touch(orgId);
     await this.#putDoc(orgId, `${PREFIX.inventory}${inventory.cloud}`, inventory);
-    await this.client.send(
-      new UpdateCommand({
+    await this.#writeLive(orgId, {
+      Update: {
         TableName: this.table,
         Key: { pk: orgKey(orgId), sk: SK.meta },
         UpdateExpression: "SET latestInventory = :cloud",
         ExpressionAttributeValues: { ":cloud": inventory.cloud },
-      }),
-    );
-    await this.#abortIfDeleted(orgId, SK.meta);
+      },
+    });
     return inventory;
   }
 
@@ -901,15 +969,14 @@ export class DynamoStore implements OrgRepository {
         issues: draft.issues,
       });
     });
-    await this.client.send(
-      new UpdateCommand({
+    await this.#writeLive(orgId, {
+      Update: {
         TableName: this.table,
         Key: { pk: orgKey(orgId), sk: SK.meta },
         UpdateExpression: "SET latestInventory = :cloud",
         ExpressionAttributeValues: { ":cloud": cloud },
-      }),
-    );
-    await this.#abortIfDeleted(orgId, SK.meta);
+      },
+    });
   }
 
   async seeded(orgId: string): Promise<boolean> {
@@ -953,7 +1020,10 @@ export class DynamoStore implements OrgRepository {
     });
     assertNoSecrets(record);
     try {
-      await this.#putDoc(orgId, SK.deletion, record, { expected: 0 });
+      await this.#putDoc(orgId, SK.deletion, record, {
+        expected: 0,
+        extra: { gsi1pk: DELETED_LISTING, gsi1sk: record.deletedAt },
+      });
     } catch (error) {
       if (error instanceof ConditionalCheckFailedException) {
         return (await this.deletion(orgId)) ?? record;
@@ -992,6 +1062,21 @@ export class DynamoStore implements OrgRepository {
 
   sweepRetention(now: string = this.clock(), onlyOrgId?: string): Promise<DeletionRecord[]> {
     return sweepRetention(this, now, onlyOrgId, this.log);
+  }
+
+  async repurgeDeleted(now: string = this.clock()): Promise<number> {
+    const cutoff = new Date(Date.parse(now) - REPURGE_MS).toISOString();
+    const { items } = await this.#query("", { index: true, indexPk: DELETED_LISTING, skFrom: cutoff });
+    const orgIds = [...new Set(items.map((item) => (item.pk as string).slice(ORG_PREFIX.length)))];
+    let purged = 0;
+    for (const orgId of orgIds) {
+      if (!(await this.deletion(orgId))) {
+        continue;
+      }
+      await this.#purge(orgId);
+      purged += 1;
+    }
+    return purged;
   }
 }
 

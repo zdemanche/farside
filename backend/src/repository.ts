@@ -77,6 +77,7 @@ export interface OrgRepository {
     requestedBy?: string,
   ): Promise<DeletionRecord>;
   sweepRetention(now?: string, onlyOrgId?: string): Promise<DeletionRecord[]>;
+  repurgeDeleted(now?: string): Promise<number>;
   trackScan(orgId: string): { signal: AbortSignal; release: () => void };
 
   nextSequence(orgId: string, kind: Sequence): Promise<number>;
