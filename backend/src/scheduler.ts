@@ -7,7 +7,6 @@ export const DEFAULT_INTERVAL_HOURS = 24;
 export const DEFAULT_RETRY_LIMIT = 3;
 export const RETRY_DELAY_HOURS = 1;
 export const DEFAULT_SCAN_TIMEOUT_MS = 600_000;
-export const OVERLAP_ATTENTION_STREAK = 3;
 
 export type ScheduleAction = "started" | "skipped_overlap" | "skipped_broken" | "retried" | "missed";
 
@@ -26,12 +25,13 @@ export type ScheduleState = {
   lastTickAt: string | null;
   retryCount: number;
   retryCounts: Record<string, number>;
-  overlapStreak: number;
+  regularRunAt: string | null;
+  retryAt: string | null;
   records: ScheduleRecord[];
 };
 
 export function emptySchedule(): ScheduleState {
-  return { nextRunAt: null, lastTickAt: null, retryCount: 0, retryCounts: {}, overlapStreak: 0, records: [] };
+  return { nextRunAt: null, lastTickAt: null, retryCount: 0, retryCounts: {}, regularRunAt: null, retryAt: null, records: [] };
 }
 
 export function addHours(iso: string, hours: number): string {
@@ -128,9 +128,13 @@ export class ScanScheduler {
     const org = this.store.org(orgId);
     if (!org.settings.scanScheduleEnabled) {
       org.schedule.nextRunAt = null;
+      org.schedule.regularRunAt = null;
+      org.schedule.retryAt = null;
       return org.schedule;
     }
-    org.schedule.nextRunAt = addHours(now, org.settings.scanIntervalHours);
+    org.schedule.regularRunAt = addHours(now, org.settings.scanIntervalHours);
+    org.schedule.retryAt = null;
+    org.schedule.nextRunAt = org.schedule.regularRunAt;
     return org.schedule;
   }
 
@@ -138,8 +142,9 @@ export class ScanScheduler {
     const org = this.store.org(orgId);
     org.schedule.lastTickAt = now;
     const healthy = healthyConnections(org.connections);
+    const expired = this.runner.expireStaleScans(orgId, now);
     const running = healthy.flatMap((item) => {
-      const job = this.store.runningScan(orgId, item.subscriptionId, this.runner.scanTimeoutMs, now);
+      const job = this.store.runningScan(orgId, item.subscriptionId);
       return job ? [job] : [];
     });
     const connection = healthy[0] ?? null;
@@ -152,6 +157,11 @@ export class ScanScheduler {
     });
     const retryCountOf = (item: Connection) => org.schedule.retryCounts[item.subscriptionId] ?? 0;
     const retryable = failedRetryable.filter((item) => retryCountOf(item) < org.settings.scanRetryLimit);
+    const retryDue = org.schedule.retryAt !== null && Date.parse(now) >= Date.parse(org.schedule.retryAt);
+    if (retryDue && retryable.length === 0 && org.schedule.regularRunAt) {
+      org.schedule.retryAt = null;
+      org.schedule.nextRunAt = org.schedule.regularRunAt;
+    }
     const decision = decideTick({
       now,
       enabled: org.settings.scanScheduleEnabled,
@@ -163,23 +173,13 @@ export class ScanScheduler {
       running: healthy.length > 0 && running.length === healthy.length,
       lastSystemFailed: failedRetryable.length > 0,
     });
-    if (decision.action === "skipped_overlap") {
-      org.schedule.overlapStreak += 1;
-    } else if (decision.action !== "idle") {
-      org.schedule.overlapStreak = 0;
-    }
-    const oldestStart = running
-      .map((job) => Date.parse(job.startedAt ?? job.createdAt))
-      .reduce((oldest, value) => Math.min(oldest, value), Number.POSITIVE_INFINITY);
     const attention =
-      org.schedule.overlapStreak >= OVERLAP_ATTENTION_STREAK
-        ? `scans are overlapping; the previous scan has run for ${Math.max(0, Math.floor((Date.parse(now) - oldestStart) / 60_000))} minutes`
-        : decision.attention;
+      expired.length > 0 ? "scan stuck: a scan ran past the timeout and was marked failed" : decision.attention;
     if (decision.action === "idle") {
       emitDecision(this.log, { decision: "idle", orgId, at: now });
       return {
         action: "idle",
-        attention: decision.attention,
+        attention,
         record: null,
         scan: null,
         scanStarted: false,
@@ -204,7 +204,14 @@ export class ScanScheduler {
       }
       org.schedule.retryCount = Math.max(0, ...Object.values(org.schedule.retryCounts));
     }
-    org.schedule.nextRunAt = addHours(now, org.settings.scanIntervalHours);
+    if (action === "retried") {
+      org.schedule.retryAt = null;
+      org.schedule.nextRunAt = org.schedule.regularRunAt;
+    } else {
+      org.schedule.regularRunAt = addHours(now, org.settings.scanIntervalHours);
+      org.schedule.retryAt = null;
+      org.schedule.nextRunAt = org.schedule.regularRunAt;
+    }
     const records = (scans.length > 0 ? scans : [null]).map((target, offset) =>
       recordOf(
         orgId,
@@ -218,7 +225,7 @@ export class ScanScheduler {
     );
     org.schedule.records.push(...records);
     emitDecision(this.log, {
-      decision: action === "skipped_broken" ? "blocked" : action,
+      decision: action,
       orgId,
       at: now,
       ...(scans[0] ? { scanId: scans[0].scan.id } : {}),

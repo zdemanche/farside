@@ -68,6 +68,7 @@ import { scopeOf } from "./scope.js";
 import {
   audit,
   auditRetention,
+  emitDecision,
   pinoOptions,
   type LoggerOptions,
 } from "./observability.js";
@@ -551,7 +552,6 @@ export function buildApp(
     }
     const body = request.body as Record<string, unknown> | null;
     const subscriptionId = body && typeof body.subscriptionId === "string" ? body.subscriptionId : "";
-    const actor = body && body.actor === "system" ? "system" : "user";
     if (!subscriptionId) {
       return problem(reply, 400, "Invalid scan", {
         errors: [{ path: "subscriptionId", message: "required string" }],
@@ -573,7 +573,7 @@ export function buildApp(
         errors: [{ path: "subscriptionId", message: "not a connected subscription" }],
       });
     }
-    const scan = runner.start({ orgId: request.params.orgId, subscriptionId: connected, actor });
+    const scan = runner.start({ orgId: request.params.orgId, subscriptionId: connected, actor: "user" });
     return sendClean(reply, scan.started ? 202 : 200, {
       scan: toScanView(scan.job, false),
       scanStarted: scan.started,
@@ -1031,6 +1031,7 @@ export function buildApp(
     const body = (request.body as Record<string, unknown> | null) ?? {};
     const now = clientTime(body.now);
     if (!canScan(store.snapshot(request.params.orgId).contract, clock())) {
+      emitDecision(app.log, { decision: "blocked", orgId: request.params.orgId, at: now });
       return sendClean(reply, 200, {
         action: "blocked",
         attention: "scans paused",

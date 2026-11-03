@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Finding, Inventory } from "@farside/scan-contracts";
 import { MIXED_CURRENCY_CLOSER } from "./cost-total.js";
 import { harvestCost, MONTH_ON_MONTH, SPEND_BY_SERVICE, TWO_MONTHS_CLOSER, type CostSnapshot } from "./cost.js";
@@ -13,6 +13,16 @@ import { silentLog, type LogSink } from "./observability.js";
 
 const LONG_TIMEOUT_MS = 2_000_000_000;
 const NEVER = new Promise<void>(() => undefined);
+const FAKE_TIMEOUTS = { toFake: ["setTimeout", "clearTimeout"] } as const;
+
+const openStores: MemoryStore[] = [];
+
+afterEach(() => {
+  for (const store of openStores.splice(0)) {
+    store.offboard(ORG, FIXED_NOW);
+  }
+  vi.useRealTimers();
+});
 
 const ORG = "org-a";
 const DISK_TYPE = "Microsoft.Compute/disks";
@@ -351,9 +361,15 @@ describe("concurrent scans in one org", () => {
   });
 });
 
-function scheduled(harvester: Harvester, clock: Clock = fixedClock, log: LogSink = silentLog) {
+function scheduled(
+  harvester: Harvester,
+  clock: Clock = fixedClock,
+  log: LogSink = silentLog,
+  timeoutMs: number = LONG_TIMEOUT_MS,
+) {
   const store = new MemoryStore(clock);
-  const runner = new ScanRunner(store, harvester, {}, clock, log, LONG_TIMEOUT_MS);
+  openStores.push(store);
+  const runner = new ScanRunner(store, harvester, {}, clock, log, timeoutMs);
   const scheduler = new ScanScheduler(store, runner, clock, log);
   store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
   store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-b" });
@@ -363,6 +379,10 @@ function scheduled(harvester: Harvester, clock: Clock = fixedClock, log: LogSink
 }
 
 describe("scheduler with several connections", () => {
+  beforeEach(() => {
+    vi.useFakeTimers(FAKE_TIMEOUTS);
+  });
+
   it("starts one scan per healthy connection and skips the unhealthy one", async () => {
     const { store, scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS));
     const broken = store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-c" });
@@ -495,8 +515,14 @@ describe("full-URI issue identity", () => {
 });
 
 describe("scheduler hardening", () => {
+  beforeEach(() => {
+    vi.useFakeTimers(FAKE_TIMEOUTS);
+  });
+
   it("fails a hung harvest with harvest_timeout and lets the org queue move on", async () => {
+    vi.useRealTimers();
     const store = new MemoryStore(fixedClock);
+    openStores.push(store);
     const runner = new ScanRunner(store, harvesterFor(TWO_SUBSCRIPTIONS, { gates: { "sub-a": NEVER } }), {}, fixedClock, silentLog, 20);
     const first = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "system" });
     const second = runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "system" });
@@ -508,6 +534,7 @@ describe("scheduler hardening", () => {
     let now = Date.parse("2026-10-01T00:00:00.000Z");
     const clock: Clock = () => new Date(now).toISOString();
     const store = new MemoryStore(clock);
+    openStores.push(store);
     const runner = new ScanRunner(store, harvesterFor(TWO_SUBSCRIPTIONS, { gates: { "sub-a": NEVER } }), {}, clock, silentLog, 60_000);
     const stuck = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
     expect(runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" }).started).toBe(false);
@@ -533,20 +560,103 @@ describe("scheduler hardening", () => {
     await settled(store);
   });
 
-  it("raises attention after three consecutive overlap skips", () => {
+  it("fails a stuck job at tick time, flags it, and starts a fresh scan", () => {
+    let now = FIXED_NOW;
     const { store, runner, scheduler } = scheduled(
       harvesterFor(TWO_SUBSCRIPTIONS, { gates: { "sub-a": NEVER, "sub-b": NEVER } }),
+      () => now,
+      silentLog,
+      60_000,
     );
-    runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
-    runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "user" });
-    const attentions = [24, 48, 72].map((hours) => scheduler.tick(ORG, addHours(FIXED_NOW, hours)));
-    expect(attentions.map((tick) => tick.action)).toEqual(["skipped_overlap", "skipped_overlap", "skipped_overlap"]);
-    expect(attentions.map((tick) => tick.attention)).toEqual([
-      null,
-      null,
-      "scans are overlapping; the previous scan has run for 4320 minutes",
-    ]);
-    expect(store.snapshot(ORG).schedule.overlapStreak).toBe(3);
+    const stuck = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    now = addHours(FIXED_NOW, 24);
+    const tick = scheduler.tick(ORG, now);
+    expect(store.getJob(ORG, stuck.job.id)).toMatchObject({ status: "failed", error: "harvest_timeout" });
+    expect(tick.attention).toBe("scan stuck: a scan ran past the timeout and was marked failed");
+    expect(tick.action).toBe("started");
+    expect(tick.scans.every((item) => item.started)).toBe(true);
+  });
+
+  it("shares one budget across the main harvest and the cost harvest", async () => {
+    let now = Date.parse("2026-10-01T00:00:00.000Z");
+    const clock: Clock = () => new Date(now).toISOString();
+    const store = new MemoryStore(clock);
+    openStores.push(store);
+    const inner = harvesterFor(TWO_SUBSCRIPTIONS);
+    const harvester: Harvester = {
+      harvest: async (input) => {
+        now += 6 * 60_000;
+        return inner.harvest(input);
+      },
+    };
+    const runner = new ScanRunner(store, harvester, { costClient: { query: () => NEVER as never } }, clock, silentLog, 10 * 60_000);
+    const { job } = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    await vi.advanceTimersByTimeAsync(4 * 60_000 - 1);
+    expect(store.getJob(ORG, job.id)?.status).toBe("running");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(store.getJob(ORG, job.id)).toMatchObject({ status: "failed", error: "harvest_timeout" });
+  });
+
+  it("keeps a scan alive when its harvests together fit the budget, even if a tick arrives mid-scan", async () => {
+    let now = Date.parse("2026-10-01T00:00:00.000Z");
+    const clock: Clock = () => new Date(now).toISOString();
+    const store = new MemoryStore(clock);
+    openStores.push(store);
+    const inner = harvesterFor(TWO_SUBSCRIPTIONS);
+    const harvester: Harvester = {
+      harvest: async (input) => {
+        now += 3 * 60_000;
+        return inner.harvest(input);
+      },
+    };
+    let expiredMidScan: unknown[] = [];
+    const runner: ScanRunner = new ScanRunner(
+      store,
+      harvester,
+      {
+        costClient: {
+          query: async () => {
+            now += 3 * 60_000;
+            expiredMidScan = runner.expireStaleScans(ORG, clock());
+            return { rows: [] };
+          },
+        },
+      },
+      clock,
+      silentLog,
+      10 * 60_000,
+    );
+    const { done } = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    expect((await done).status).toBe("succeeded");
+    expect(expiredMidScan).toEqual([]);
+  });
+
+  it("goes back to the regular cadence when a retry comes due with nothing left to retry", async () => {
+    let now = FIXED_NOW;
+    const { store, scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS, { failFor: "sub-a" }), () => now);
+    now = addHours(FIXED_NOW, 24);
+    scheduler.tick(ORG, now);
+    await settled(store);
+    const regular = addHours(now, 24);
+    expect(store.snapshot(ORG).schedule).toMatchObject({ retryAt: addHours(now, 1), regularRunAt: regular });
+    store.snapshot(ORG).scans.forEach((job) => store.patchJob(ORG, job.id, { status: "succeeded" }));
+    const due = scheduler.tick(ORG, addHours(now, 1));
+    expect(due.action).toBe("idle");
+    expect(store.snapshot(ORG).schedule).toMatchObject({ retryAt: null, nextRunAt: regular, retryCounts: {} });
+  });
+
+  it("does not push the regular cadence later after a retry", async () => {
+    let now = FIXED_NOW;
+    const { store, scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS, { failFor: "sub-a" }), () => now);
+    now = addHours(FIXED_NOW, 24);
+    scheduler.tick(ORG, now);
+    await settled(store);
+    const regular = addHours(now, 24);
+    now = addHours(now, 1);
+    expect(scheduler.tick(ORG, now).action).toBe("retried");
+    await settled(store);
+    expect(store.snapshot(ORG).schedule.regularRunAt).toBe(regular);
+    expect(store.snapshot(ORG).schedule.retryAt).toBe(addHours(now, 1));
   });
 
   describe("decision metrics", () => {
@@ -585,6 +695,7 @@ describe("scheduler hardening", () => {
         Decision: "idle",
         Decisions: 1,
         _aws: {
+          Timestamp: Date.parse(FIXED_NOW),
           CloudWatchMetrics: [
             {
               Namespace: "Farside/Scheduler",

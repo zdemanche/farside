@@ -15,7 +15,7 @@ import type { CommitmentSnapshot } from "./commitments.js";
 import type { CostSnapshot } from "./cost.js";
 import { DeletedOrgError, type DeletionRecord, type RowsPurged } from "./offboard.js";
 import type { ScanJob } from "./scans.js";
-import { DEFAULT_SCAN_TIMEOUT_MS, emptySchedule, type ScheduleState } from "./scheduler.js";
+import { emptySchedule, type ScheduleState } from "./scheduler.js";
 import { assertNoSecrets } from "./secrets.js";
 import { DEFAULT_SETTINGS, type OrgSettings } from "./settings.js";
 
@@ -408,28 +408,11 @@ export class MemoryStore {
     return next;
   }
 
-  runningScan(
-    orgId: string,
-    subscriptionId: string,
-    staleAfterMs: number = DEFAULT_SCAN_TIMEOUT_MS,
-    now: string = this.clock(),
-  ): ScanJob | undefined {
-    const org = this.org(orgId);
-    const job = org.scans.find(
-      (item) =>
-        item.subscriptionId === subscriptionId && (item.status === "queued" || item.status === "running"),
+  runningScan(orgId: string, subscriptionId: string): ScanJob | undefined {
+    return this.org(orgId).scans.find(
+      (job) =>
+        job.subscriptionId === subscriptionId && (job.status === "queued" || job.status === "running"),
     );
-    if (job?.status !== "running" || !job.startedAt || Date.parse(now) - Date.parse(job.startedAt) <= staleAfterMs) {
-      return job;
-    }
-    this.patchJob(orgId, job.id, {
-      status: "failed",
-      complete: false,
-      finishedAt: now,
-      error: "harvest_timeout",
-      durationMs: Date.parse(now) - Date.parse(job.startedAt),
-    });
-    return this.runningScan(orgId, subscriptionId, staleAfterMs, now);
   }
 
   isConnected(orgId: string, subscriptionId: string): boolean {

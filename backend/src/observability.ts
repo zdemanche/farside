@@ -61,7 +61,7 @@ export function auditRetention(
   }
 }
 
-export type SchedulerDecision = "started" | "skipped_overlap" | "missed" | "retried" | "idle" | "blocked";
+export type SchedulerDecision = "started" | "skipped_overlap" | "skipped_broken" | "missed" | "retried" | "idle" | "blocked";
 
 export function emitDecision(
   log: LogSink,

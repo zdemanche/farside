@@ -351,7 +351,8 @@ export class ScanRunner {
     started: boolean;
     done: Promise<ScanJob>;
   } {
-    const existing = this.store.runningScan(input.orgId, input.subscriptionId, this.scanTimeoutMs);
+    this.expireStaleScans(input.orgId, this.clock());
+    const existing = this.store.runningScan(input.orgId, input.subscriptionId);
     if (existing) {
       return { job: existing, started: false, done: Promise.resolve(existing) };
     }
@@ -412,10 +413,74 @@ export class ScanRunner {
     if (!settings.scanScheduleEnabled || (schedule.retryCounts[subscriptionId] ?? 0) >= settings.scanRetryLimit) {
       return;
     }
-    const retryAt = addHours(finishedAt, RETRY_DELAY_HOURS);
-    if (!schedule.nextRunAt || Date.parse(retryAt) < Date.parse(schedule.nextRunAt)) {
-      schedule.nextRunAt = retryAt;
+    const candidate = addHours(finishedAt, RETRY_DELAY_HOURS);
+    if (!schedule.retryAt || Date.parse(candidate) < Date.parse(schedule.retryAt)) {
+      schedule.retryAt = candidate;
     }
+    if (!schedule.regularRunAt || Date.parse(schedule.retryAt) < Date.parse(schedule.regularRunAt)) {
+      schedule.nextRunAt = schedule.retryAt;
+    }
+  }
+
+  private recordFailure(
+    orgId: string,
+    job: ScanJob,
+    startedAt: string,
+    failure: { error: unknown; errorCode: string; stored: string; covered: string[] },
+  ): ScanJob {
+    const checks = checksFromFailure(failure.covered, job.subscriptionId);
+    const finishedAt = this.clock();
+    const errorId = randomUUID();
+    const failed = this.store.patchJob(orgId, job.id, {
+      status: "failed",
+      complete: false,
+      coveredScopes: failure.covered,
+      finishedAt,
+      error: failure.stored,
+      errorId,
+      durationMs: durationMsFrom(startedAt, finishedAt),
+      coverageSummary: coverageSummaryFrom(checks),
+      checks,
+    });
+    if (job.actor === "system") {
+      this.scheduleRetry(orgId, job.subscriptionId, finishedAt);
+    }
+    this.log.error(
+      {
+        event: "scan.failed",
+        orgId,
+        scanId: job.id,
+        durationMs: failed.durationMs,
+        checkCount: checks.length,
+        coverageSummary: failed.coverageSummary,
+        errorCode: failure.errorCode,
+        errorId,
+        err: failure.error,
+      },
+      "scan.failed",
+    );
+    return failed;
+  }
+
+  expireStaleScans(orgId: string, now: string): ScanJob[] {
+    return this.store
+      .org(orgId)
+      .scans.filter(
+        (job) =>
+          job.status === "running" &&
+          job.startedAt !== null &&
+          Date.parse(now) - Date.parse(job.startedAt) > this.scanTimeoutMs,
+      )
+      .map((job) => {
+        const error = new Error(`scan exceeded ${this.scanTimeoutMs}ms`);
+        error.name = "TimeoutError";
+        return this.recordFailure(orgId, job, job.startedAt ?? now, {
+          error,
+          errorCode: "harvest_timeout",
+          stored: "harvest_timeout",
+          covered: [],
+        });
+      });
   }
 
   private async execute(orgId: string, jobId: string, connectedAtStart: boolean): Promise<ScanJob> {
@@ -429,6 +494,8 @@ export class ScanRunner {
     const scanFields = { orgId, scanId: jobId };
     this.log.info({ event: "scan.start", ...scanFields }, "scan.start");
     const cancelled = (): ScanJob => this.cancel(orgId, current, { startedAt });
+    const deadline = Date.parse(startedAt) + this.scanTimeoutMs;
+    const remainingMs = () => Math.max(0, deadline - Date.parse(this.clock()));
     let harvesting = true;
     try {
       const settings = this.store.snapshot(orgId).settings;
@@ -439,7 +506,7 @@ export class ScanRunner {
           subscriptionId: current.subscriptionId,
           settings,
         }),
-        this.scanTimeoutMs,
+        remainingMs(),
       );
       harvesting = false;
       if (signal.aborted) {
@@ -456,7 +523,7 @@ export class ScanRunner {
       const replaceIds = new Set(registeredCheckIds(result.inventory.cloud));
       const collected =
         result.inventory.cloud === "azure"
-          ? await this.collectAzureHarvests(current.subscriptionId, signal)
+          ? await this.collectAzureHarvests(current.subscriptionId, signal, remainingMs)
           : {};
       if (!collected || signal.aborted) {
         return cancelled();
@@ -525,45 +592,23 @@ export class ScanRunner {
       if (signal.aborted) {
         return cancelled();
       }
-      const covered = error instanceof ScanFailedError ? error.coveredScopes : [];
-      const checks = checksFromFailure(covered, current.subscriptionId);
-      const finishedAt = this.clock();
       const errorCode = failureCode(error, harvesting);
-      const errorId = randomUUID();
-      const failed = this.store.patchJob(orgId, jobId, {
-        status: "failed",
-        complete: false,
-        coveredScopes: covered,
-        finishedAt,
-        error: error instanceof ProviderNotConfiguredError ? PROVIDER_NOT_CONFIGURED : errorCode,
-        errorId,
-        durationMs: durationMsFrom(startedAt, finishedAt),
-        coverageSummary: coverageSummaryFrom(checks),
-        checks,
+      return this.recordFailure(orgId, current, startedAt, {
+        error,
+        errorCode,
+        stored: error instanceof ProviderNotConfiguredError ? PROVIDER_NOT_CONFIGURED : errorCode,
+        covered: error instanceof ScanFailedError ? error.coveredScopes : [],
       });
-      if (current.actor === "system") {
-        this.scheduleRetry(orgId, current.subscriptionId, finishedAt);
-      }
-      this.log.error(
-        {
-          event: "scan.failed",
-          ...scanFields,
-          durationMs: failed.durationMs,
-          checkCount: checks.length,
-          coverageSummary: failed.coverageSummary,
-          errorCode,
-          errorId,
-          err: error,
-        },
-        "scan.failed",
-      );
-      return failed;
     } finally {
       release();
     }
   }
 
-  private async collectAzureHarvests(subscriptionId: string, signal: AbortSignal): Promise<AzureHarvests | null> {
+  private async collectAzureHarvests(
+    subscriptionId: string,
+    signal: AbortSignal,
+    remainingMs: () => number,
+  ): Promise<AzureHarvests | null> {
     const billingScope = `/subscriptions/${subscriptionId}`;
     const collected: AzureHarvests = {};
     if (this.harvestClients.costClient) {
@@ -576,7 +621,7 @@ export class ScanRunner {
         agreementType: "payg",
         asOf: this.clock(),
         }),
-        this.scanTimeoutMs,
+        remainingMs(),
       );
       if (signal.aborted) {
         return null;
@@ -590,7 +635,7 @@ export class ScanRunner {
         subscriptionId,
         billingScope,
         }),
-        this.scanTimeoutMs,
+        remainingMs(),
       );
       if (signal.aborted) {
         return null;
@@ -603,7 +648,7 @@ export class ScanRunner {
         client: this.harvestClients.budgetClient,
         lastConfirmed: this.clock(),
         }),
-        this.scanTimeoutMs,
+        remainingMs(),
       );
       if (signal.aborted) {
         return null;

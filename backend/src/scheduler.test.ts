@@ -234,6 +234,18 @@ describe("schedule routes", () => {
     expect(finished.status).toBe("succeeded");
   });
 
+  it("ignores a system actor in the POST /scans body", async () => {
+    await connectAt();
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/scans",
+      headers: ORG,
+      payload: { subscriptionId: "main", actor: "system" },
+    });
+    expect(response.json().scan.actor).toBe("user");
+    await waitForJob(store, "org-a", response.json().scan.id, "succeeded");
+  });
+
   it("does not start when the connection is marked unhealthy", async () => {
     await connectAt();
     const connection = store.snapshot("org-a").connections[0];
