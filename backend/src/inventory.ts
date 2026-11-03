@@ -1,3 +1,4 @@
+import type { DeepReadonly } from "./readonly.js";
 import {
   assertValid,
   validateInventory,
@@ -63,7 +64,7 @@ export function inventoryFromManifest(
   return inventory;
 }
 
-export function noOwnerTotal(inventory: Inventory): {
+export function noOwnerTotal(inventory: DeepReadonly<Inventory>): {
   total: number;
   resourceUris: string[];
 } {
@@ -127,7 +128,7 @@ export type BrowsableResource = InventoryRecord & {
 };
 
 export function filterInventory(
-  inventory: Inventory,
+  inventory: DeepReadonly<Inventory>,
   filters: InventoryFilters,
 ): BrowsableResource[] {
   if (filters.cloud && inventory.cloud !== filters.cloud) {
@@ -163,7 +164,7 @@ export function filterInventory(
 }
 
 export function browseInventories(
-  inventories: Inventory[],
+  inventories: readonly DeepReadonly<Inventory>[],
   filters: InventoryFilters,
 ): BrowsableResource[] {
   return inventories.flatMap((inventory) => filterInventory(inventory, filters));

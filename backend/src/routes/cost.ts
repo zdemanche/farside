@@ -1,4 +1,7 @@
-import { applyCostCoverage, harvestCost, unconfiguredCostClient } from "../cost.js";
+import type { AlertAnalysis } from "../alerts.js";
+import type { CommitmentSnapshot } from "../commitments.js";
+import { asMutable } from "../readonly.js";
+import { applyCostCoverage, harvestCost, unconfiguredCostClient, type CostSnapshot } from "../cost.js";
 import { guardProviderClient } from "../demo.js";
 import { buildHeadline } from "../headline.js";
 import type { OrgParams, RoutePlugin } from "../http/context.js";
@@ -24,9 +27,9 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
         reply,
         200,
         costWasteView({
-          cost: org.cost,
-          alerts: org.alerts,
-          commitments: org.commitments,
+          cost: asMutable<CostSnapshot | null>(org.cost),
+          alerts: asMutable<AlertAnalysis | null>(org.alerts),
+          commitments: asMutable<CommitmentSnapshot | null>(org.commitments),
           findings: cloudFilter(org.findings, cloud, (finding) => finding.scope.cloud),
           coverage: cloudFilter(org.coverage, cloud, (entry) => entry.cloud),
         }),
@@ -44,7 +47,7 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
         reply,
         200,
         buildHeadline({
-          cost: org.cost,
+          cost: asMutable<CostSnapshot | null>(org.cost),
           findings: org.findings,
           coverage: org.coverage,
           now: ctx.clock(),

@@ -1,4 +1,6 @@
 import type { FastifyReply } from "fastify";
+import type { CostSnapshot } from "../cost.js";
+import { asMutable } from "../readonly.js";
 import { inventoriesFor } from "../estate.js";
 import {
   exportCost,
@@ -69,7 +71,7 @@ export const exportRoutes: RoutePlugin = (ctx) => async (app) => {
         200,
         exportCost(
           request.params.orgId,
-          ctx.store.view(request.params.orgId).cost,
+          asMutable<CostSnapshot | null>(ctx.store.view(request.params.orgId).cost),
           ctx.clientTime(request.query.asOf),
         ),
       );

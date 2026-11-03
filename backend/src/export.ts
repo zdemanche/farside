@@ -1,3 +1,4 @@
+import type { DeepReadonly } from "./readonly.js";
 import { RAW_PROVIDER_KEYS, type Cloud, type Inventory } from "@farside/scan-contracts";
 import type { CostSnapshot } from "./cost.js";
 import type { StoredIssue } from "./issues.js";
@@ -74,7 +75,7 @@ export function exportIssues(orgId: string, issues: readonly StoredIssue[], expo
 
 export function exportInventory(
   orgId: string,
-  inventory: Inventory | null,
+  inventory: DeepReadonly<Inventory> | null,
   exportedAt: string,
 ): ExportEnvelope {
   return {

@@ -1,6 +1,6 @@
 import { canScan } from "../billing.js";
 import type { OrgParams, RoutePlugin } from "../http/context.js";
-import { problem, cloudOf, requireConnected, sendClean, sendStored } from "../http/responses.js";
+import { problem, cloudOf, requireConnected, sendClean } from "../http/responses.js";
 import {
   DEFAULT_SCAN_PAGE,
   MAX_SCAN_PAGE,
@@ -27,11 +27,19 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
       const views = toScanViews(ctx.store.view(request.params.orgId).scans);
       const end =
         before === undefined ? views.length : views.findIndex((scan) => scan.id === before);
-      const scans = views
-        .slice(0, Math.max(end, 0))
-        .filter((scan) => cloud == null || scan.cloud === cloud)
-        .slice(-limit);
-      return sendStored(reply, 200, { scans });
+      if (end < 0) {
+        return problem(reply, 400, "Invalid cursor", {
+          errors: [{ path: "before", message: "not a known scan" }],
+        });
+      }
+      const matching = views
+        .slice(0, end)
+        .filter((scan) => cloud == null || scan.cloud === cloud);
+      const scans = matching.slice(-limit);
+      const current = before === undefined ? matching.find((scan) => scan.current) : undefined;
+      return sendClean(reply, 200, {
+        scans: current && !scans.includes(current) ? [current, ...scans] : scans,
+      });
     },
   );
 
@@ -40,7 +48,7 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: scanParams } },
     async (request, reply) => {
       const view = findScanView(ctx.store.view(request.params.orgId).scans, request.params.scanId);
-      return view ? sendStored(reply, 200, view) : problem(reply, 404, "Not found");
+      return view ? sendClean(reply, 200, view) : problem(reply, 404, "Not found");
     },
   );
 

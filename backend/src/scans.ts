@@ -14,6 +14,7 @@ import { scopeOf } from "./scope.js";
 import { silentLog, type LogSink } from "./observability.js";
 import { addHours, DEFAULT_SCAN_TIMEOUT_MS, RETRY_DELAY_HOURS } from "./scheduler.js";
 import type { MemoryStore } from "./store.js";
+import { asMutable, type DeepReadonly } from "./readonly.js";
 
 // "cancelled" is stored so a cancelled job frees its subscription, but the API never returns it
 export type ScanStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -56,7 +57,7 @@ export type ScanJob = {
   checks: ScanCheckOutcome[];
 };
 
-export type ScanView = ScanJob & { current: boolean };
+export type ScanView = DeepReadonly<ScanJob> & { current: boolean };
 
 const FAILED_BEFORE_CHECK = "Scan failed before this check ran.";
 
@@ -107,7 +108,7 @@ export function checksFromFailure(
   });
 }
 
-export function toScanView(job: ScanJob, current: boolean): ScanView {
+export function toScanView(job: DeepReadonly<ScanJob>, current: boolean): ScanView {
   return {
     ...job,
     durationMs: durationMsFrom(job.startedAt, job.finishedAt),
@@ -115,7 +116,7 @@ export function toScanView(job: ScanJob, current: boolean): ScanView {
   };
 }
 
-function currentScanId(jobs: readonly ScanJob[]): string | undefined {
+function currentScanId(jobs: readonly DeepReadonly<ScanJob>[]): string | undefined {
   for (let index = jobs.length - 1; index >= 0; index -= 1) {
     const job = jobs[index];
     if (job && job.status === "succeeded" && job.complete) {
@@ -125,12 +126,12 @@ function currentScanId(jobs: readonly ScanJob[]): string | undefined {
   return undefined;
 }
 
-export function toScanViews(jobs: readonly ScanJob[]): ScanView[] {
+export function toScanViews(jobs: readonly DeepReadonly<ScanJob>[]): ScanView[] {
   const currentId = currentScanId(jobs);
   return jobs.filter((job) => job.status !== "cancelled").map((job) => toScanView(job, job.id === currentId));
 }
 
-export function findScanView(jobs: readonly ScanJob[], scanId: string): ScanView | undefined {
+export function findScanView(jobs: readonly DeepReadonly<ScanJob>[], scanId: string): ScanView | undefined {
   const job = jobs.find((candidate) => candidate.id === scanId);
   return job && job.status !== "cancelled" ? toScanView(job, job.id === currentScanId(jobs)) : undefined;
 }
@@ -321,7 +322,7 @@ export class ScanRunner {
 
   private cancel(orgId: string, job: ScanJob, patch: Partial<ScanJob> = {}): ScanJob {
     this.log.info({ event: "scan.cancelled", orgId, scanId: job.id }, "scan.cancelled");
-    if (!this.store.hasOrg(orgId) || this.store.deletion(orgId)) {
+    if (!this.store.hasOrg(orgId) || this.store.deletion(orgId) || !this.store.getJob(orgId, job.id)) {
       return { ...job, ...patch, status: "cancelled" };
     }
     return this.store.patchJob(orgId, job.id, { ...patch, status: "cancelled" });
@@ -350,7 +351,7 @@ export class ScanRunner {
     const checks = checksFromFailure(failure.covered, job.subscriptionId, job.cloud ?? DEFAULT_CLOUD);
     const finishedAt = this.clock();
     const errorId = randomUUID();
-    const failed = this.store.patchJob(orgId, job.id, {
+    const patch: Partial<ScanJob> = {
       status: "failed",
       complete: false,
       coveredScopes: failure.covered,
@@ -360,7 +361,10 @@ export class ScanRunner {
       durationMs: durationMsFrom(startedAt, finishedAt),
       coverageSummary: coverageSummaryFrom(checks),
       checks,
-    });
+    };
+    const failed = this.store.getJob(orgId, job.id)
+      ? this.store.patchJob(orgId, job.id, patch)
+      : { ...job, ...patch };
     if (job.actor === "system") {
       this.scheduleRetry(orgId, job.subscriptionId, finishedAt);
     }
@@ -465,7 +469,7 @@ export class ScanRunner {
       const fresh = this.store.view(orgId);
       this.store.putInventory(
         orgId,
-        mergeScanInventory(fresh.inventories[result.inventory.cloud], result.inventory, current.subscriptionId),
+        mergeScanInventory(asMutable<Inventory | undefined>(fresh.inventories[result.inventory.cloud]), result.inventory, current.subscriptionId),
       );
       this.store.putFacts(
         orgId,

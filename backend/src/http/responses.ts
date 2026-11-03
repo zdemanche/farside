@@ -2,7 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { matchesCloud, type Cloud } from "../cloud.js";
 import { audit } from "../observability.js";
 import { ProviderNotConfiguredError } from "../providers/unconfigured.js";
-import { SecretLeakError, assertNoSecrets } from "../secrets.js";
+import { SecretLeakError, assertNoSecrets, isVerified } from "../secrets.js";
 import type { MemoryStore } from "../store.js";
 import type { AppContext } from "./context.js";
 
@@ -34,6 +34,9 @@ export function sendClean(reply: FastifyReply, status: number, body: unknown) {
 }
 
 export function sendStored(reply: FastifyReply, status: number, body: unknown) {
+  if (!isVerified(body)) {
+    assertNoSecrets(body);
+  }
   return reply.code(status).send(body);
 }
 

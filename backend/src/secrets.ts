@@ -106,3 +106,37 @@ export function assertNoSecrets(value: unknown): void {
     throw new SecretLeakError(hits[0] ?? "");
   }
 }
+
+const verified = new WeakSet<object>();
+
+export function markVerified<T extends object>(value: T): T {
+  verified.add(value);
+  return value;
+}
+
+export function markVerifiedAll<T extends object>(values: readonly T[]): readonly T[] {
+  verified.add(values);
+  for (const value of values) {
+    verified.add(value);
+  }
+  return values;
+}
+
+function isVerifiedValue(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  return verified.has(value) || (Array.isArray(value) && value.every((item) => isVerifiedValue(item)));
+}
+
+export function isVerified(body: unknown): boolean {
+  if (isVerifiedValue(body)) {
+    return true;
+  }
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    !Array.isArray(body) &&
+    Object.values(body).every((value) => isVerifiedValue(value))
+  );
+}
