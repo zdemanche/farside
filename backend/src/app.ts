@@ -605,6 +605,7 @@ export function buildApp(
         cost: org.cost,
         findings: org.findings,
         coverage: org.coverage,
+        now: clock(),
         ...(cloud.cloud ? { cloud: cloud.cloud } : {}),
       }),
     );

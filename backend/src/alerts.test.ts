@@ -23,11 +23,7 @@ describe("floor and burst", () => {
   it("uses the rolling 14-day minimum as floor and actual minus floor as burst", () => {
     const points = floorBurst(FIXTURE.rows, FIXTURE.asOf);
     const asOf = points.find((point) => point.date === "2026-10-15");
-    expect(asOf).toMatchObject({
-      actual: "260.00",
-      floor: "100.00",
-      burst: "160.00",
-    });
+    expect(asOf).toMatchObject({ actual: "260.00", floor: "100.00", burst: "160.00" });
     const first = points.find((point) => point.date === "2026-10-02");
     expect(first?.floor).toBe("100.00");
   });
@@ -60,16 +56,11 @@ describe("relative alert rules", () => {
   });
 
   it("is undetermined, never summed, when rows mix currencies", () => {
-    const mixed = FIXTURE.rows.map((row, index) =>
-      index === 0 ? { ...row, currency: "EUR" } : row,
-    );
+    const mixed = FIXTURE.rows.map((row, index) => (index === 0 ? { ...row, currency: "EUR" } : row));
     const analysis = analyzeAlerts({ rows: mixed });
     expect(analysis.alerts).toEqual([]);
     expect(analysis.floorBurst).toEqual([]);
-    expect(analysis.undetermined).toMatchObject({
-      reason: "mixed_currency",
-      closer: CURRENCY_CLOSER,
-    });
+    expect(analysis.undetermined).toMatchObject({ reason: "mixed_currency", closer: CURRENCY_CLOSER });
   });
 
   it("counts GCP export days and stays undetermined on an empty first day", () => {

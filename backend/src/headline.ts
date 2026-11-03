@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CLOUDS, type Cloud, type Finding } from "@farside/scan-contracts";
-import { systemClock } from "./clock.js";
 import { matchesCloud } from "./cloud.js";
 import type { CostSnapshot } from "./cost.js";
 import { SPEND_BY_SERVICE } from "./cost.js";
@@ -99,28 +98,27 @@ function latestMonthCost(cost: CostSnapshot | null): string | null {
 }
 
 const RESOURCE_ID_FIELDS = ["vmId", "sqlResourceId", "instanceName", "resourceName"];
-const LIFECYCLE_DATE_FIELDS = ["retirementDate", "expirationDate", "supportEnd"];
-export const LIFECYCLE_WINDOW_DAYS = 90;
+const LIFECYCLE_DATE_FIELDS = ["retirementDate", "expirationDate", "supportEnd", "expireTime"];
+const LIFECYCLE_WINDOW_DAYS = 90;
 const DAY_MS = 86_400_000;
 
 function resourceKey(finding: Finding): string {
   const field = RESOURCE_ID_FIELDS.find((name) => typeof finding.evidence.fields[name] === "string");
-  return `${finding.checkId}:${field ? String(finding.evidence.fields[field]) : finding.scope.id}`;
+  const id = field ? String(finding.evidence.fields[field]) : finding.scope.id;
+  return `${finding.checkId}:${finding.scope.subscriptionOrProject}:${id}`;
 }
 
 function backupCounts(findings: Finding[], coverage: CoverageEntry[], records: RunRecord[], cloud: Cloud) {
-  const relevant = findings.filter(
-    (finding) =>
-      BACKUP_IDS[cloud].includes(finding.checkId) &&
-      isProven(finding.checkId, records) &&
-      isAssessedFinding(coverage, finding),
+  const proven = findings.filter(
+    (finding) => BACKUP_IDS[cloud].includes(finding.checkId) && isProven(finding.checkId, records),
   );
-  const keysWhere = (predicate: (finding: Finding) => boolean) =>
-    new Set(relevant.filter(predicate).map(resourceKey));
+  const assessed = proven.filter((finding) => isAssessedFinding(coverage, finding));
+  const keysWhere = (list: Finding[], predicate: (finding: Finding) => boolean) =>
+    new Set(list.filter(predicate).map(resourceKey));
   return {
-    unprotected: keysWhere((finding) => finding.result === "fail").size,
-    production: keysWhere((finding) => finding.result !== "undetermined").size,
-    undetermined: keysWhere((finding) => finding.result === "undetermined").size,
+    unprotected: keysWhere(assessed, (finding) => finding.result === "fail").size,
+    production: keysWhere(assessed, (finding) => finding.result !== "undetermined").size,
+    undetermined: keysWhere(proven, (finding) => finding.result === "undetermined").size,
   };
 }
 
@@ -324,10 +322,9 @@ export function buildHeadline(input: {
   coverage: CoverageEntry[];
   records?: RunRecord[];
   cloud?: Cloud;
-  now?: string;
+  now: string;
 }): Headline {
   const records = input.records ?? runRecordsFromSpec();
-  const now = input.now ?? systemClock();
   const selected = input.cloud ? [input.cloud] : [...CLOUDS];
   const clouds = selected.map((cloud) => ({
     cloud,
@@ -341,7 +338,7 @@ export function buildHeadline(input: {
       findings: input.findings,
       coverage: input.coverage,
       records,
-      now,
+      now: input.now,
     }),
   }));
   const figures: HeadlineFigure[] = [

@@ -174,6 +174,7 @@ function completeMonthRows(rows: CostQueryRow[]): CostQueryRow[] {
   const dates = rows.map((row) => row.date).sort();
   const first = dates[0];
   const last = dates.at(-1);
+  // The query window is not known here, so the first row date stands in for it: a scope with $0 on the 1st reads as a partial month.
   const leadingPartial = first && !first.endsWith("-01") ? yearMonth(first) : null;
   const trailing = last ? yearMonth(last) : null;
   return rows.filter((row) => {

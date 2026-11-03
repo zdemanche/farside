@@ -54,6 +54,7 @@ See `HEALTH_SCORE_FORMULA` in `@farside/scan-contracts`. Scopes that were not as
 
 ## Leftover
 
+- Month-on-month uses the first cost row date as the window start: a leading month whose first row is after the 1st is partial, so a scope with no spend on the 1st reads as partial and month-on-month stays undetermined.
 - Publishing `@farside/scan-contracts` to GitHub Packages (dashmeta’s path) is switch-on-later; the workspace package is the published build for this repo.
 - Mapping Farside findings onto dashmeta SARIF for a combined Atlas view is not done.
 - Azure billing-scope / GCP export fields land with the cost stories, not this package’s 0.1.0 core.

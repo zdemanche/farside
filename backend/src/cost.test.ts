@@ -23,9 +23,7 @@ import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 const SCOPE = "/subscriptions/main";
 
-function figure(
-  input: Partial<CostFigure> & Pick<CostFigure, "serviceName" | "periodStart" | "costAmount">,
-): CostFigure {
+function figure(input: Partial<CostFigure> & Pick<CostFigure, "serviceName" | "periodStart" | "costAmount">): CostFigure {
   return {
     billingScope: SCOPE,
     currency: "USD",
@@ -58,26 +56,10 @@ describe("cost paging and currency", () => {
   it("derives month-on-month change per service from two complete months", () => {
     const changes = monthOnMonth(
       [
-        figure({
-          serviceName: "Virtual Machines",
-          periodStart: "2026-09-01",
-          costAmount: "40.00",
-        }),
-        figure({
-          serviceName: "Storage",
-          periodStart: "2026-09-01",
-          costAmount: "10.00",
-        }),
-        figure({
-          serviceName: "Virtual Machines",
-          periodStart: "2026-10-01",
-          costAmount: "50.00",
-        }),
-        figure({
-          serviceName: "Storage",
-          periodStart: "2026-10-01",
-          costAmount: "12.00",
-        }),
+        figure({ serviceName: "Virtual Machines", periodStart: "2026-09-01", costAmount: "40.00" }),
+        figure({ serviceName: "Storage", periodStart: "2026-09-01", costAmount: "10.00" }),
+        figure({ serviceName: "Virtual Machines", periodStart: "2026-10-01", costAmount: "50.00" }),
+        figure({ serviceName: "Storage", periodStart: "2026-10-01", costAmount: "12.00" }),
       ],
       "payg",
     );
@@ -148,23 +130,15 @@ describe("cost harvest", () => {
   function dailyRows(from: string, to: string, currency = "USD"): CostQueryRow[] {
     const rows: CostQueryRow[] = [];
     for (let day = Date.parse(from); day <= Date.parse(to); day += 86_400_000) {
-      rows.push({
-        date: new Date(day).toISOString().slice(0, 10),
-        serviceName: "Virtual Machines",
-        costAmount: "1.00",
-        currency,
-      });
+      const date = new Date(day).toISOString().slice(0, 10);
+      rows.push({ date, serviceName: "Virtual Machines", costAmount: "1.00", currency });
     }
     return rows;
   }
 
-  function clientOf(rows: CostQueryRow[]) {
-    return { query: async () => ({ rows }) };
-  }
-
   const harvestRows = (rows: CostQueryRow[]) =>
     harvestCost({
-      client: clientOf(rows),
+      client: { query: async () => ({ rows }) },
       subscriptionId: "main",
       billingScope: SCOPE,
       agreementType: "payg",
@@ -179,26 +153,18 @@ describe("cost harvest", () => {
     expect(harvested.snapshot.monthOnMonth).toEqual([]);
     expect(harvested.snapshot.months.map((row) => row.periodStart)).toEqual(["2026-09-01"]);
     const mom = harvested.coverage.find((entry) => entry.checkId === MONTH_ON_MONTH);
-    expect(mom).toMatchObject({
-      state: "undetermined",
-      closer: TWO_MONTHS_CLOSER,
-    });
+    expect(mom).toMatchObject({ state: "undetermined", closer: TWO_MONTHS_CLOSER });
   });
 
   it("counts a leading month starting on the 1st as complete", async () => {
-    const harvested = await harvestRows(dailyRows("2026-08-01", "2026-10-05"));
-    expect(harvested.ok && harvested.snapshot.monthOnMonth.map((row) => row.previousMonth)).toEqual(
-      ["2026-08"],
-    );
-    const dayTwo = await harvestRows(dailyRows("2026-08-02", "2026-10-05"));
-    expect(dayTwo.ok && dayTwo.snapshot.monthOnMonth).toEqual([]);
+    const first = await harvestRows(dailyRows("2026-08-01", "2026-10-05"));
+    expect(first.ok && first.snapshot.monthOnMonth.map((row) => row.previousMonth)).toEqual(["2026-08"]);
+    const second = await harvestRows(dailyRows("2026-08-02", "2026-10-05"));
+    expect(second.ok && second.snapshot.monthOnMonth).toEqual([]);
   });
 
   it("returns an undetermined currency row instead of throwing on mixed currencies", async () => {
-    const rows = [
-      ...dailyRows("2026-08-01", "2026-10-05"),
-      ...dailyRows("2026-09-10", "2026-09-10", "EUR"),
-    ];
+    const rows = [...dailyRows("2026-08-01", "2026-10-05"), ...dailyRows("2026-09-10", "2026-09-10", "EUR")];
     const harvested = await harvestRows(rows);
     expect(harvested.ok).toBe(false);
     if (harvested.ok) {
@@ -224,9 +190,9 @@ describe("cost harvest", () => {
     }
     expect(harvested.reason).toBe("missing_role");
     expect(harvested.coverage.every((entry) => entry.state === "unassessed")).toBe(true);
-    expect(
-      harvested.coverage.every((entry) => entry.closer?.includes("Cost Management Reader")),
-    ).toBe(true);
+    expect(harvested.coverage.every((entry) => entry.closer?.includes("Cost Management Reader"))).toBe(
+      true,
+    );
   });
 });
 
@@ -267,10 +233,7 @@ describe("cost routes", () => {
 
 describe("missing cost role on the API", () => {
   const store = new MemoryStore(fixedClock);
-  const app = buildApp(store, {
-    ...TEST_APP_OPTIONS,
-    costClient: missingCostRoleClient(),
-  });
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, costClient: missingCostRoleClient() });
 
   afterAll(async () => {
     await app.close();
@@ -283,19 +246,14 @@ describe("missing cost role on the API", () => {
       headers: ORG,
       payload: { subscriptionId: "main" },
     });
-    expect(posted.json()).toMatchObject({
-      harvested: false,
-      reason: "missing_role",
-    });
+    expect(posted.json()).toMatchObject({ harvested: false, reason: "missing_role" });
     expect(store.snapshot("org-a").cost).toBeNull();
     const spots = await app.inject({
       method: "GET",
       url: "/v1/orgs/org-a/blind-spots",
       headers: ORG,
     });
-    const spend = spots
-      .json()
-      .spots.find((spot: { checkId: string }) => spot.checkId === SPEND_BY_SERVICE);
+    const spend = spots.json().spots.find((spot: { checkId: string }) => spot.checkId === SPEND_BY_SERVICE);
     expect(spend.closer).toMatch(/Cost Management Reader/);
   });
 });

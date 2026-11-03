@@ -16,11 +16,7 @@ import { MemoryStore } from "./store.js";
 import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
-const PERIOD = {
-  subscriptionId: "main",
-  periodStart: "2026-10-01",
-  periodEnd: "2026-10-31",
-};
+const PERIOD = { subscriptionId: "main", periodStart: "2026-10-01", periodEnd: "2026-10-31" };
 
 describe("commitment use checks", () => {
   it("fails low reservation use with an unused-spend range and passes a well-used one", () => {
@@ -48,11 +44,7 @@ describe("commitment use checks", () => {
     const low = findings.find((finding) => finding.evidence.fields.reservationId === "res-low");
     const used = findings.find((finding) => finding.evidence.fields.reservationId === "res-used");
     expect(low?.result).toBe("fail");
-    expect(low?.savings).toEqual({
-      min: "52.00",
-      max: "78.00",
-      currency: "USD",
-    });
+    expect(low?.savings).toEqual({ min: "52.00", max: "78.00", currency: "USD" });
     expect(low?.evidence.fields.periodStart).toBe("2026-10-01");
     expect(used?.result).toBe("pass");
     expect(used?.savings).toBeUndefined();
@@ -73,11 +65,7 @@ describe("commitment use checks", () => {
       PERIOD,
     )[0];
     expect(low?.result).toBe("fail");
-    expect(low?.savings).toEqual({
-      min: "56.00",
-      max: "84.00",
-      currency: "USD",
-    });
+    expect(low?.savings).toEqual({ min: "56.00", max: "84.00", currency: "USD" });
     const eur = checkSavingsPlans(
       [
         {
@@ -91,11 +79,7 @@ describe("commitment use checks", () => {
       ],
       PERIOD,
     )[0];
-    expect(eur?.savings).toEqual({
-      min: "400.00",
-      max: "600.00",
-      currency: "EUR",
-    });
+    expect(eur?.savings).toEqual({ min: "400.00", max: "600.00", currency: "EUR" });
     const none = checkReservations([], PERIOD)[0];
     expect(none?.result).toBe("pass");
     expect(none?.evidence.fields.noneFound).toBe(true);
@@ -117,10 +101,7 @@ describe("commitment harvest", () => {
     }
     expect(harvested.snapshot.reservations).toHaveLength(2);
     expect(harvested.snapshot.savingsPlans).toHaveLength(2);
-    expect(harvested.snapshot.noneFound).toEqual({
-      reservations: false,
-      savingsPlans: false,
-    });
+    expect(harvested.snapshot.noneFound).toEqual({ reservations: false, savingsPlans: false });
     expect(harvested.findings.some((finding) => finding.result === "fail")).toBe(true);
     expect(harvested.coverage.every((entry) => entry.state === "assessed")).toBe(true);
   });
@@ -135,10 +116,7 @@ describe("commitment harvest", () => {
     if (!harvested.ok) {
       return;
     }
-    expect(harvested.snapshot.noneFound).toEqual({
-      reservations: true,
-      savingsPlans: true,
-    });
+    expect(harvested.snapshot.noneFound).toEqual({ reservations: true, savingsPlans: true });
     expect(harvested.findings.every((finding) => finding.evidence.fields.noneFound === true)).toBe(
       true,
     );
@@ -181,9 +159,9 @@ describe("commitment routes", () => {
     });
     expect(posted.statusCode).toBe(200);
     expect(posted.json().harvested).toBe(true);
-    expect(
-      posted.json().findings.some((finding: { result: string }) => finding.result === "fail"),
-    ).toBe(true);
+    expect(posted.json().findings.some((finding: { result: string }) => finding.result === "fail")).toBe(
+      true,
+    );
     const stored = await app.inject({
       method: "GET",
       url: "/v1/orgs/org-a/commitments",

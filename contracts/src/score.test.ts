@@ -45,6 +45,10 @@ describe("health score", () => {
       evidence: { fields: { diskId: `disk-${n}` } },
     }));
     expect(scoreHealth(twoAssessed, threeFails).score).toBe(50);
-    expect(scoreHealth(twoAssessed, [...threeFails, { ...failing, scope: { ...failing.scope, id: "sub-2:azure-waste-unattached-disks" } }]).score).toBe(0);
+    const secondScopeFail: Finding = {
+      ...failing,
+      scope: { ...failing.scope, id: "sub-2:azure-waste-unattached-disks" },
+    };
+    expect(scoreHealth(twoAssessed, [...threeFails, secondScopeFail]).score).toBe(0);
   });
 });
