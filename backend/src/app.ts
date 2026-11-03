@@ -36,6 +36,7 @@ import {
   harvestCost,
   type CostQueryClient,
 } from "./cost.js";
+import { CardDataError, advanceContract, billingView, canScan, parseContract } from "./billing.js";
 import { demoDescriptor, isDemoOrg, seedDemoOrg } from "./demo.js";
 import { estateOverview } from "./estate.js";
 import { buildHeadline } from "./headline.js";
@@ -197,6 +198,14 @@ export function buildApp(
       request.params.orgId,
       typeof asOf === "string" ? asOf : connection.createdAt,
     );
+    if (!canScan(store.snapshot(request.params.orgId).contract)) {
+      return sendClean(reply, 201, {
+        ...connection,
+        scan: null,
+        scanStarted: false,
+        attention: "scans paused",
+      });
+    }
     const scan = runner.start({
       orgId: request.params.orgId,
       subscriptionId: input.subscriptionId,
@@ -324,6 +333,9 @@ export function buildApp(
         return problem(reply, 404, "Not found");
       }
       return sendClean(reply, 200, { scan: toScanView(job, true), scanStarted: false });
+    }
+    if (!canScan(store.snapshot(request.params.orgId).contract)) {
+      return problem(reply, 409, "Scans paused", { attention: "scans paused" });
     }
     const scan = runner.start({ orgId: request.params.orgId, subscriptionId, actor });
     return sendClean(reply, scan.started ? 202 : 200, {
@@ -651,6 +663,16 @@ export function buildApp(
     }
     const body = (request.body as Record<string, unknown> | null) ?? {};
     const now = typeof body.now === "string" ? body.now : "1970-01-01T00:00:00.000Z";
+    if (!canScan(store.snapshot(request.params.orgId).contract)) {
+      return sendClean(reply, 200, {
+        action: "blocked",
+        attention: "scans paused",
+        record: null,
+        scan: null,
+        scanStarted: false,
+        schedule: store.snapshot(request.params.orgId).schedule,
+      });
+    }
     const tick = scheduler.tick(request.params.orgId, now);
     return sendClean(reply, 200, {
       action: tick.action,
@@ -660,6 +682,62 @@ export function buildApp(
       scanStarted: tick.scanStarted,
       schedule: tick.schedule,
     });
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/contract", async (request, reply) => {
+    if (!requireOrg(request, reply, store)) {
+      return reply;
+    }
+    const contract = store.snapshot(request.params.orgId).contract;
+    if (!contract) {
+      return problem(reply, 404, "Not found");
+    }
+    return sendClean(reply, 200, billingView(contract));
+  });
+
+  app.put<{ Params: OrgParams }>("/v1/orgs/:orgId/contract", async (request, reply) => {
+    if (!requireOrg(request, reply, store)) {
+      return reply;
+    }
+    if (rejectSecrets(request.body, reply)) {
+      return reply;
+    }
+    const body = (request.body as Record<string, unknown> | null) ?? {};
+    const now = typeof body.asOf === "string" ? body.asOf : "1970-01-01T00:00:00.000Z";
+    try {
+      const parsed = parseContract(request.body, now);
+      if (!parsed) {
+        return problem(reply, 400, "Invalid contract", {
+          errors: [{ path: "body", message: "plan and startDate are required" }],
+        });
+      }
+      store.putContract(request.params.orgId, parsed);
+      return sendClean(reply, 200, billingView(parsed));
+    } catch (error) {
+      if (error instanceof CardDataError) {
+        return problem(reply, 400, "Card data rejected");
+      }
+      throw error;
+    }
+  });
+
+  app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/contract/advance", async (request, reply) => {
+    if (!requireOrg(request, reply, store)) {
+      return reply;
+    }
+    const current = store.snapshot(request.params.orgId).contract;
+    if (!current) {
+      return problem(reply, 404, "Not found");
+    }
+    const body = (request.body as Record<string, unknown> | null) ?? {};
+    const now = typeof body.now === "string" ? body.now : current.stateChangedAt;
+    const event =
+      body.event === "failed_payment" || body.event === "paid" || body.event === "ended"
+        ? body.event
+        : undefined;
+    const next = advanceContract(current, event ? { now, event } : { now });
+    store.putContract(request.params.orgId, next);
+    return sendClean(reply, 200, billingView(next));
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/inventory/browse", async (request, reply) => {

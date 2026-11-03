@@ -5,6 +5,7 @@ import type { StoredIssue } from "./issues.js";
 import { applyOwnerTag } from "./inventory.js";
 import { REQUIRED_AZURE_ROLES } from "./roles.js";
 import type { AlertAnalysis } from "./alerts.js";
+import type { Contract } from "./billing.js";
 import type { BudgetSnapshot } from "./budgets.js";
 import type { CommitmentSnapshot } from "./commitments.js";
 import type { CostSnapshot } from "./cost.js";
@@ -36,6 +37,7 @@ export type OrgState = {
   budgets: BudgetSnapshot | null;
   alerts: AlertAnalysis | null;
   schedule: ScheduleState;
+  contract: Contract | null;
 };
 
 function emptyOrg(): OrgState {
@@ -53,6 +55,7 @@ function emptyOrg(): OrgState {
     budgets: null,
     alerts: null,
     schedule: emptySchedule(),
+    contract: null,
   };
 }
 
@@ -162,6 +165,14 @@ export class MemoryStore {
       org.inventory = applyOwnerTag(org.inventory, settings.ownerTagKey);
     }
     return settings;
+  }
+
+  putContract(orgId: string, contract: Contract | null): Contract | null {
+    if (contract) {
+      assertNoSecrets(contract);
+    }
+    this.org(orgId).contract = contract;
+    return contract;
   }
 
   putJob(input: Omit<ScanJob, "id">): ScanJob {
