@@ -442,6 +442,7 @@ describe("untrusted client clock", () => {
   const cases: {
     name: string;
     request: { method: "GET" | "POST" | "PUT"; url: string; payload?: object };
+    headers?: Record<string, string>;
     read: (json: Json) => unknown;
   }[] = [
     { name: "export issues", request: { method: "GET", url: `/v1/orgs/org-a/export/issues?asOf=${CLIENT_NOW}` }, read: (j) => j.exportedAt },
@@ -457,12 +458,12 @@ describe("untrusted client clock", () => {
     },
     { name: "schedule tick", request: { method: "POST", url: "/v1/orgs/org-a/schedule/tick", payload: { now: CLIENT_NOW } }, read: (j) => j.schedule.lastTickAt },
     { name: "offboard", request: { method: "POST", url: "/v1/orgs/org-a/offboard", payload: { confirm: true, exportOffered: true, now: CLIENT_NOW } }, read: (j) => j.deletedAt },
-    { name: "contract", request: { method: "PUT", url: "/v1/orgs/org-a/contract", payload: { plan: "starter", startDate: "2026-01-01", asOf: CLIENT_NOW } }, read: (j) => JSON.stringify(j) },
+    { name: "contract", headers: { "x-farside-operator": "op-token" }, request: { method: "PUT", url: "/v1/orgs/org-a/contract", payload: { plan: "starter", startDate: "2026-01-01T00:00:00.000Z", asOf: CLIENT_NOW } }, read: (j) => JSON.stringify(j) },
   ];
 
-  it.each(cases)("ignores client time on $name", async ({ request, read }) => {
-    const app = buildApp(new MemoryStore(), { clock: () => SERVER_NOW });
-    const response = await app.inject({ ...request, headers: ORG });
+  it.each(cases)("ignores client time on $name", async ({ request, headers, read }) => {
+    const app = buildApp(new MemoryStore(), { clock: () => SERVER_NOW, operatorToken: "op-token" });
+    const response = await app.inject({ ...request, headers: headers ?? ORG });
     expect(response.statusCode).toBe(200);
     const value = String(read(response.json()));
     expect(value).not.toContain(CLIENT_NOW);
