@@ -6,6 +6,7 @@ import { applyScanToIssues, issueIdentity, resourceIdFromFinding } from "./issue
 import { defaultHarvester } from "./scans.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const SCOPE = {
   id: "main:azure-waste-unattached-disks",
@@ -110,6 +111,57 @@ describe("close only if covered", () => {
   });
 });
 
+describe("undetermined results never close an issue", () => {
+  const undeterminedFinding: Finding = {
+    checkId: "azure-waste-unattached-disks",
+    result: "undetermined",
+    closer: "A disk read that includes diskState and managedBy",
+    evidence: { fields: { diskId: "disk-unattached" } },
+    scope: SCOPE,
+  };
+  const passFinding: Finding = {
+    checkId: "azure-waste-unattached-disks",
+    result: "pass",
+    evidence: { fields: { diskId: "disk-unattached", diskState: "Attached" } },
+    scope: SCOPE,
+  };
+
+  function opened() {
+    return applyScanToIssues({
+      issues: [],
+      findings: [failFinding()],
+      coverage: assessed,
+      scanId: "scan-1",
+      observedAt: "1970-01-01T00:00:00.000Z",
+    });
+  }
+
+  it("holds a failing issue as not confirmed with the closer when the next result is undetermined", () => {
+    const held = applyScanToIssues({
+      issues: opened(),
+      findings: [undeterminedFinding],
+      coverage: assessed,
+      scanId: "scan-2",
+      observedAt: "1970-01-02T00:00:00.000Z",
+    });
+    expect(held[0]?.status).toBe("not_confirmed");
+    expect(held[0]?.notConfirmedReason).toBe(undeterminedFinding.closer);
+    expect(held[0]?.closingScanId).toBeUndefined();
+  });
+
+  it("still closes the issue on an explicit pass", () => {
+    const closed = applyScanToIssues({
+      issues: opened(),
+      findings: [passFinding],
+      coverage: assessed,
+      scanId: "scan-2",
+      observedAt: "1970-01-02T00:00:00.000Z",
+    });
+    expect(closed[0]?.status).toBe("closed");
+    expect(closed[0]?.closingScanId).toBe("scan-2");
+  });
+});
+
 describe("replay scans", () => {
   it("replays fixed, unfixed and uncovered scans into the expected states", () => {
     const opened = applyScanToIssues({
@@ -141,8 +193,8 @@ describe("replay scans", () => {
 });
 
 describe("scan into issue store", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store, { harvester: defaultHarvester() });
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: defaultHarvester() });
   const headers = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 
   afterAll(async () => {

@@ -9,6 +9,7 @@ import { estateOverview } from "./estate.js";
 import { applyOwnerTag, filterInventory, groupInventory, inventoryFromManifest, noOwnerTotal, type GroundTruthManifest } from "./inventory.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const MANIFEST = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/ground-truth.json"), "utf8"),
@@ -18,7 +19,7 @@ const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 
 describe("estate overview", () => {
   it("is empty with no health score before a scan", () => {
-    const overview = estateOverview(new MemoryStore().snapshot("org-a"));
+    const overview = estateOverview(new MemoryStore(fixedClock).snapshot("org-a"));
     expect(overview).toEqual({
       empty: true,
       resourceTotal: 0,
@@ -29,7 +30,7 @@ describe("estate overview", () => {
   });
 
   it("shows totals, no-owner count and coverage on seeded inventory", () => {
-    const store = new MemoryStore();
+    const store = new MemoryStore(fixedClock);
     const inventory = inventoryFromManifest(MANIFEST);
     store.putInventory("org-a", inventory);
     store.putCoverage("org-a", [
@@ -60,7 +61,7 @@ describe("estate overview", () => {
   });
 
   it("scores only assessed scopes when findings exist", () => {
-    const store = new MemoryStore();
+    const store = new MemoryStore(fixedClock);
     const inventory = inventoryFromManifest(MANIFEST);
     store.putInventory("org-a", inventory);
     const assessed = recordCoverageScope({
@@ -94,8 +95,8 @@ describe("estate overview", () => {
 });
 
 describe("inventory browse and settings", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store);
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, TEST_APP_OPTIONS);
   const inventory = inventoryFromManifest(MANIFEST);
 
   afterAll(async () => {

@@ -1,4 +1,5 @@
 import { CLOUDS, type Cloud, type Finding, type Inventory } from "@farside/scan-contracts";
+import { systemClock, type Clock } from "./clock.js";
 import type { CoverageEntry } from "./coverage.js";
 import type { ResourceFacts } from "./facts.js";
 import type { StoredIssue } from "./issues.js";
@@ -42,14 +43,14 @@ export type OrgState = {
   contract: Contract | null;
 };
 
-function emptyOrg(): OrgState {
+function emptyOrg(now: string): OrgState {
   return {
     connections: [],
     inventory: null,
     inventories: {},
     coverage: [],
     findings: [],
-    settings: { ...DEFAULT_SETTINGS },
+    settings: { ...DEFAULT_SETTINGS, updatedAt: now },
     scans: [],
     facts: [],
     issues: [],
@@ -65,6 +66,9 @@ function emptyOrg(): OrgState {
 export class MemoryStore {
   #orgs = new Map<string, OrgState>();
   #deletions = new Map<string, DeletionRecord>();
+  #runningScans = new Map<string, Set<AbortController>>();
+
+  constructor(readonly clock: Clock = systemClock) {}
 
   org(orgId: string): OrgState {
     if (this.#deletions.has(orgId)) {
@@ -74,9 +78,25 @@ export class MemoryStore {
     if (existing) {
       return existing;
     }
-    const created = emptyOrg();
+    const created = emptyOrg(this.clock());
     this.#orgs.set(orgId, created);
     return created;
+  }
+
+  trackScan(orgId: string): { signal: AbortSignal; release: () => void } {
+    const controller = new AbortController();
+    const controllers = this.#runningScans.get(orgId) ?? new Set<AbortController>();
+    controllers.add(controller);
+    this.#runningScans.set(orgId, controllers);
+    return {
+      signal: controller.signal,
+      release: () => {
+        controllers.delete(controller);
+        if (controllers.size === 0 && this.#runningScans.get(orgId) === controllers) {
+          this.#runningScans.delete(orgId);
+        }
+      },
+    };
   }
 
   hasOrg(orgId: string): boolean {
@@ -109,7 +129,7 @@ export class MemoryStore {
     );
   }
 
-  offboard(orgId: string, now: string): DeletionRecord {
+  offboard(orgId: string, now: string = this.clock()): DeletionRecord {
     const existing = this.#deletions.get(orgId);
     if (existing) {
       return existing;
@@ -119,11 +139,17 @@ export class MemoryStore {
     const schedulePending = Boolean(
       org && org.settings.scanScheduleEnabled && org.schedule.nextRunAt,
     );
+    const running = this.#runningScans.get(orgId) ?? new Set<AbortController>();
+    const scansStopped = running.size;
+    for (const controller of running) {
+      controller.abort();
+    }
+    this.#runningScans.delete(orgId);
     const record: DeletionRecord = {
       orgId,
       deletedAt: now,
       connectionsRemoved,
-      scansStopped: true,
+      scansStopped,
       scheduleCancelled: schedulePending || Boolean(org?.settings.scanScheduleEnabled),
       accountClosureAt: null,
     };
@@ -167,7 +193,7 @@ export class MemoryStore {
       tenantId: input.tenantId,
       subscriptionId: input.subscriptionId,
       roles: [...REQUIRED_AZURE_ROLES],
-      createdAt: "1970-01-01T00:00:00.000Z",
+      createdAt: this.clock(),
       healthy: true,
     };
     this.org(orgId).connections.push(connection);

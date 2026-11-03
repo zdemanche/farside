@@ -11,6 +11,7 @@ import { factsFromManifest } from "./facts.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const MANIFEST = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/ground-truth.json"), "utf8"),
@@ -102,8 +103,8 @@ describe("waste totals", () => {
 });
 
 describe("cost-waste route", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store, { harvester: fixtureHarvester(inventoryFromManifest(MANIFEST), factsFromManifest(MANIFEST)) });
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: fixtureHarvester(inventoryFromManifest(MANIFEST), factsFromManifest(MANIFEST)) });
 
   afterAll(async () => {
     await app.close();

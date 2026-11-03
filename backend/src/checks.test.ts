@@ -44,8 +44,7 @@ import {
   checkUnattachedDisks,
   runChecks,
 } from "./checks.js";
-import { AZURE_LAUNCH_CHECK_IDS } from "./coverage.js";
-import { toContractCoverage } from "./coverage.js";
+import { AZURE_LAUNCH_CHECK_IDS, blindSpots, toContractCoverage } from "./coverage.js";
 import { factsFromManifest } from "./facts.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
 import {
@@ -61,6 +60,7 @@ import { defaultHarvester } from "./scans.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const MANIFEST = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/ground-truth.json"), "utf8"),
@@ -373,6 +373,20 @@ describe("missing metrics undetermined path", () => {
   });
 });
 
+describe("scope coverage from determinate results", () => {
+  it("marks a scope undetermined with the closer when no finding is pass or fail", () => {
+    const blind = runChecks({ inventory, facts: [], checkIds: [UNATTACHED_DISKS] });
+    const entry = blind.coverage.find((item) => item.subscriptionOrProject === "main");
+    expect(entry).toMatchObject({ state: "undetermined", closer: expect.stringMatching(/diskState/) });
+    expect(blindSpots(blind.coverage).some((spot) => spot.id === entry?.id)).toBe(true);
+  });
+
+  it("keeps a scope assessed when at least one result is determinate", () => {
+    const sighted = runChecks({ inventory, facts, checkIds: [UNATTACHED_DISKS] });
+    expect(sighted.coverage.find((item) => item.subscriptionOrProject === "main")?.state).toBe("assessed");
+  });
+});
+
 describe("production backup coverage", () => {
   it("fails unprotected production VMs and SQL as N of M and passes protected lookalikes", () => {
     const vms = checkProdVmBackup(inventory, facts, DEFAULT_SETTINGS);
@@ -496,8 +510,8 @@ describe("certificate expiry checks", () => {
 });
 
 describe("unattached disk harvest to API", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store, { harvester: defaultHarvester() });
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: defaultHarvester() });
 
   afterAll(async () => {
     await app.close();
@@ -589,8 +603,8 @@ describe("unattached disk harvest to API", () => {
 });
 
 describe("snapshot retention from settings", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store, { harvester: defaultHarvester() });
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: defaultHarvester() });
 
   afterAll(async () => {
     await app.close();

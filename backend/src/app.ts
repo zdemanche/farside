@@ -36,6 +36,7 @@ import {
   harvestCost,
   type CostQueryClient,
 } from "./cost.js";
+import type { Clock } from "./clock.js";
 import { CardDataError, advanceContract, billingView, canScan, parseContract } from "./billing.js";
 import { deletionView } from "./offboard.js";
 import { demoDescriptor, isDemoOrg, seedDemoOrg } from "./demo.js";
@@ -152,14 +153,25 @@ export function buildApp(
     costClient?: CostQueryClient;
     commitmentClient?: CommitmentClient;
     budgetClient?: BudgetClient;
+    clock?: Clock;
+    trustClientClock?: boolean;
   } = {},
 ) {
-  const runner = new ScanRunner(store, options.harvester ?? defaultHarvester(), {
-    costClient: options.costClient ?? defaultCostClient(),
-    commitmentClient: options.commitmentClient ?? defaultCommitmentClient(),
-    budgetClient: options.budgetClient ?? defaultBudgetClient(),
-  });
-  const scheduler = new ScanScheduler(store, runner);
+  const clock = options.clock ?? store.clock;
+  const trustClientClock = options.trustClientClock === true;
+  const clientTime = (candidate: unknown): string =>
+    trustClientClock && typeof candidate === "string" ? candidate : clock();
+  const runner = new ScanRunner(
+    store,
+    options.harvester ?? defaultHarvester(clock),
+    {
+      costClient: options.costClient ?? defaultCostClient(),
+      commitmentClient: options.commitmentClient ?? defaultCommitmentClient(),
+      budgetClient: options.budgetClient ?? defaultBudgetClient(),
+    },
+    clock,
+  );
+  const scheduler = new ScanScheduler(store, runner, clock);
   const app = Fastify({ logger: false });
 
   app.get("/health", async () => ({
@@ -237,10 +249,7 @@ export function buildApp(
       request.body && typeof request.body === "object" && !Array.isArray(request.body)
         ? (request.body as Record<string, unknown>).asOf
         : undefined;
-    scheduler.applySettings(
-      request.params.orgId,
-      typeof asOf === "string" ? asOf : connection.createdAt,
-    );
+    scheduler.applySettings(request.params.orgId, clientTime(asOf));
     if (!canScan(store.snapshot(request.params.orgId).contract)) {
       return sendClean(reply, 201, {
         ...connection,
@@ -443,7 +452,7 @@ export function buildApp(
       return reply;
     }
     const query = request.query as Record<string, unknown>;
-    const exportedAt = typeof query.asOf === "string" ? query.asOf : "1970-01-01T00:00:00.000Z";
+    const exportedAt = clientTime(query.asOf);
     const issues = store
       .snapshot(request.params.orgId)
       .issues.filter((issue) => matchesCloud(issue.cloud, cloud.cloud));
@@ -460,7 +469,7 @@ export function buildApp(
       return reply;
     }
     const query = request.query as Record<string, unknown>;
-    const exportedAt = typeof query.asOf === "string" ? query.asOf : "1970-01-01T00:00:00.000Z";
+    const exportedAt = clientTime(query.asOf);
     const inventories = inventoriesFor(store.snapshot(request.params.orgId), cloud.cloud);
     const inventory = cloud.cloud
       ? inventories[0] ?? null
@@ -474,7 +483,7 @@ export function buildApp(
       return reply;
     }
     const query = request.query as Record<string, unknown>;
-    const exportedAt = typeof query.asOf === "string" ? query.asOf : "1970-01-01T00:00:00.000Z";
+    const exportedAt = clientTime(query.asOf);
     void reply.header("content-disposition", `attachment; filename="${exportFilename("cost")}"`);
     return sendClean(reply, 200, exportCost(request.params.orgId, store.snapshot(request.params.orgId).cost, exportedAt));
   });
@@ -566,6 +575,7 @@ export function buildApp(
       subscriptionId,
       billingScope,
       agreementType,
+      asOf: clock(),
     });
     store.putCoverage(
       request.params.orgId,
@@ -674,6 +684,7 @@ export function buildApp(
     }
     const harvested = await harvestBudgets({
       client: options.budgetClient ?? defaultBudgetClient(),
+      lastConfirmed: clock(),
     });
     store.putCoverage(
       request.params.orgId,
@@ -720,7 +731,11 @@ export function buildApp(
     const analysis = analyzeAlerts({
       recipients,
       previous,
-      ...(typeof body.asOf === "string" ? { asOf: body.asOf } : {}),
+      ...(trustClientClock
+        ? typeof body.asOf === "string"
+          ? { asOf: body.asOf }
+          : {}
+        : { asOf: clock().slice(0, 10) }),
     });
     store.putAlerts(request.params.orgId, analysis);
     return sendClean(reply, 200, analysis);
@@ -765,12 +780,9 @@ export function buildApp(
     const body = (request.body as Record<string, unknown> | null) ?? {};
     const saved = store.putSettings(request.params.orgId, {
       ...parsed,
-      updatedAt: "1970-01-01T00:00:00.000Z",
+      updatedAt: clock(),
     });
-    const schedule = scheduler.applySettings(
-      request.params.orgId,
-      typeof body.asOf === "string" ? body.asOf : saved.updatedAt,
-    );
+    const schedule = scheduler.applySettings(request.params.orgId, clientTime(body.asOf));
     return sendClean(reply, 200, { ...saved, nextRunAt: schedule.nextRunAt });
   });
 
@@ -796,7 +808,7 @@ export function buildApp(
       return reply;
     }
     const body = (request.body as Record<string, unknown> | null) ?? {};
-    const now = typeof body.now === "string" ? body.now : "1970-01-01T00:00:00.000Z";
+    const now = clientTime(body.now);
     if (!canScan(store.snapshot(request.params.orgId).contract)) {
       return sendClean(reply, 200, {
         action: "blocked",
@@ -837,7 +849,7 @@ export function buildApp(
       return reply;
     }
     const body = (request.body as Record<string, unknown> | null) ?? {};
-    const now = typeof body.asOf === "string" ? body.asOf : "1970-01-01T00:00:00.000Z";
+    const now = clientTime(body.asOf);
     try {
       const parsed = parseContract(request.body, now);
       if (!parsed) {
@@ -864,7 +876,11 @@ export function buildApp(
       return problem(reply, 404, "Not found");
     }
     const body = (request.body as Record<string, unknown> | null) ?? {};
-    const now = typeof body.now === "string" ? body.now : current.stateChangedAt;
+    const now = trustClientClock
+      ? typeof body.now === "string"
+        ? body.now
+        : current.stateChangedAt
+      : clock();
     const event =
       body.event === "failed_payment" || body.event === "paid" || body.event === "ended"
         ? body.event
@@ -893,7 +909,7 @@ export function buildApp(
         ],
       });
     }
-    const now = typeof body.now === "string" ? body.now : "1970-01-01T00:00:00.000Z";
+    const now = clientTime(body.now);
     const record = store.offboard(request.params.orgId, now);
     return sendClean(reply, 200, deletionView(record));
   });

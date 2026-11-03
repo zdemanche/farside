@@ -62,13 +62,17 @@ export function applyScanToIssues(input: {
 }): StoredIssue[] {
   const byId = new Map(input.issues.map((issue) => [issue.id, { ...issue }]));
   const seen = new Set<string>();
+  const undetermined = new Map<string, string | undefined>();
 
   for (const finding of input.findings) {
+    const resourceId = resourceIdFromFinding(finding);
+    const id = issueIdentity(finding.checkId, resourceId, finding.scope.id);
+    if (finding.result === "undetermined") {
+      undetermined.set(id, finding.closer);
+    }
     if (finding.result !== "fail") {
       continue;
     }
-    const resourceId = resourceIdFromFinding(finding);
-    const id = issueIdentity(finding.checkId, resourceId, finding.scope.id);
     seen.add(id);
     const current = byId.get(id);
     const next: StoredIssue = {
@@ -95,7 +99,13 @@ export function applyScanToIssues(input: {
       continue;
     }
     const coverage = coverageFor(input.coverage, issue.scopeId);
-    if (coverage?.state === "assessed") {
+    if (undetermined.has(issue.id)) {
+      issue.status = "not_confirmed";
+      issue.coverage = "undetermined";
+      issue.notConfirmedReason =
+        undetermined.get(issue.id) ?? "This scan could not determine the result for this resource.";
+      delete issue.closingScanId;
+    } else if (coverage?.state === "assessed") {
       issue.status = "closed";
       issue.coverage = "assessed";
       issue.closingScanId = input.scanId;
