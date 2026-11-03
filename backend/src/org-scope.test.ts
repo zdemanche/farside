@@ -36,6 +36,8 @@ const ROUTES = [
   { method: "POST" as const, url: "/v1/orgs/org-a/commitments" },
   { method: "GET" as const, url: "/v1/orgs/org-a/budgets" },
   { method: "POST" as const, url: "/v1/orgs/org-a/budgets" },
+  { method: "GET" as const, url: "/v1/orgs/org-a/alerts" },
+  { method: "POST" as const, url: "/v1/orgs/org-a/alerts" },
   { method: "DELETE" as const, url: "/v1/orgs/org-a/connections/conn-1" },
 ];
 

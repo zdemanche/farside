@@ -13,6 +13,9 @@ In-repo Cost Management harvest against a multi-page fake, billing scope and cur
 | E4-S2-T3 | #135 | Empty lists pass as none-found, not zero utilisation. Missing Reservations Reader is unassessed and names the role. |
 | E4-S3-T2 | #138 | Seeded `empty-no-budget` fails; `main` with `farside-test-guard` passes. Findings include subscription, evidence, and lastConfirmed. |
 | E4-S3-T3 | #139 | Unreadable budgets are `undetermined` with a Cost Management Reader closer. |
+| E4-S4-T1 | #141 | Floor is the rolling 14-day minimum; burst is actual minus floor. |
+| E4-S4-T2 | #142 | Org, subscription, service, and new-service rules use relative multiples of the customer's own history. |
+| E4-S4-T3 | #143 | Synthetic replay in `docs/azure/alert-replay.json` pins four new alerts. A quieter series must change that count on purpose. |
 
 ## Leftovers
 
@@ -31,3 +34,7 @@ The test estate will not buy commitments. Fixture utilization in `docs/azure/com
 ### Live budget harvest (#137)
 
 Budget definitions are read from the ground-truth manifest. A live Cost Management budgets list stays leftover.
+
+### Email digest (#144)
+
+Alerts group into one digest with configured recipients and consecutive-day dedupe. Delivery needs a mail path in the tenant account. Live test-subscription history for the backtest is leftover with #143.
