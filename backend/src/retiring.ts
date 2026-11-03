@@ -1,6 +1,4 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import catalogueFile from "../../docs/azure/retiring-skus.json" with { type: "json" };
 
 export type RetiringSku = {
   skuName: string;
@@ -17,13 +15,8 @@ export type RetiringSkuCatalogue = {
   entries: RetiringSku[];
 };
 
-const DEFAULT_PATH = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../docs/azure/retiring-skus.json",
-);
-
-export function loadRetiringSkus(path = DEFAULT_PATH): RetiringSkuCatalogue {
-  return JSON.parse(readFileSync(path, "utf8")) as RetiringSkuCatalogue;
+export function loadRetiringSkus(): RetiringSkuCatalogue {
+  return catalogueFile as RetiringSkuCatalogue;
 }
 
 export function retiringSourceErrors(catalogue: RetiringSkuCatalogue): string[] {

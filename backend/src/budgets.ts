@@ -1,10 +1,8 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { Finding } from "@farside/scan-contracts";
 import { acceptFinding } from "./checks.js";
 import { applyCoverageResult, recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import { rejectUnconfigured } from "./providers.js";
+import docAzureGroundTruth from "../../docs/azure/ground-truth.json" with { type: "json" };
 
 type BudgetManifest = {
   subscriptions: Array<{
@@ -39,9 +37,7 @@ export type BudgetClient = {
   list: () => Promise<BudgetDefinition[]>;
 };
 
-const MANIFEST = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/ground-truth.json"), "utf8"),
-) as BudgetManifest;
+const MANIFEST = docAzureGroundTruth as BudgetManifest;
 
 export function budgetsFromManifest(
   manifest: BudgetManifest = MANIFEST,

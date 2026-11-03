@@ -1,8 +1,6 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { applyCoverageResult, recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import { rejectUnconfigured } from "./providers.js";
+import docAzureCostQueryPages from "../../docs/azure/cost-query-pages.json" with { type: "json" };
 
 export const SPEND_BY_SERVICE = "azure-cost-spend-by-service";
 export const MONTH_ON_MONTH = "azure-cost-month-on-month";
@@ -87,9 +85,7 @@ type PagesFile = {
   pages: Record<string, CostQueryPage>;
 };
 
-const PAGES = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/cost-query-pages.json"), "utf8"),
-) as PagesFile;
+const PAGES = docAzureCostQueryPages as PagesFile;
 
 export function fixtureCostClient(pages: PagesFile = PAGES): CostQueryClient {
   return {
