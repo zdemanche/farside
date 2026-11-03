@@ -10,6 +10,7 @@ import type {
   BlindSpot,
   DataSource,
   EstateOverview,
+  InventoryRow,
   IssueRow,
   IssueStatus,
   OrgSettings,
@@ -369,12 +370,23 @@ const DEFAULT_SETTINGS: OrgSettings = {
   scanRetryLimit: 3,
 };
 
+function inventoryRow(resource: InventoryRecord): InventoryRow {
+  const parts = resource.resourceUri.split("/");
+  const at = parts.findIndex((part) => part === "subscriptions" || part === "projects");
+  return {
+    ...resource,
+    cloud: resource.resourceUri.startsWith("//") ? "gcp" : "azure",
+    subscriptionOrProject: at === -1 ? "" : (parts[at + 1] ?? ""),
+  };
+}
+
 export function demoSource(): DataSource {
   let settings = DEFAULT_SETTINGS;
   return {
     mode: "demo",
+    orgId: "demo",
     overview: async () => OVERVIEW,
-    inventory: async () => DEMO_RESOURCES,
+    inventory: async () => DEMO_RESOURCES.map(inventoryRow),
     issues: async () => ISSUES,
     scans: async () => SCANS,
     scan: async (id) => {

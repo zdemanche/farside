@@ -149,6 +149,8 @@ describe("inventory routes", () => {
     });
     expect(browse.json().total).toBe(1);
     expect(browse.json().resources[0].resourceUri).toBe(gcp.resources[0].resourceUri);
+    expect(browse.json().resources[0].subscriptionOrProject).toBe("p1");
+    expect(browse.json().resources[0].cloud).toBe("gcp");
 
     const miss = await app.inject({
       method: "GET",

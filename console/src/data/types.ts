@@ -1,4 +1,9 @@
-import type { InventoryRecord } from "@farside/scan-contracts";
+import type { Cloud, InventoryRecord } from "@farside/scan-contracts";
+
+export type InventoryRow = InventoryRecord & {
+  subscriptionOrProject: string;
+  cloud?: Cloud;
+};
 
 export type EstateOverview = {
   empty: boolean;
@@ -114,8 +119,9 @@ export type ConnectResult = { scanStarted: boolean; attention: string | null };
 
 export type DataSource = {
   readonly mode: "demo" | "api";
+  readonly orgId: string;
   overview(signal?: AbortSignal): Promise<EstateOverview>;
-  inventory(signal?: AbortSignal): Promise<InventoryRecord[]>;
+  inventory(signal?: AbortSignal): Promise<InventoryRow[]>;
   issues(signal?: AbortSignal): Promise<IssueRow[]>;
   scans(signal?: AbortSignal): Promise<ScanRow[]>;
   scan(id: string, signal?: AbortSignal): Promise<ScanRow>;
