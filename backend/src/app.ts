@@ -36,6 +36,7 @@ import {
   harvestCost,
   type CostQueryClient,
 } from "./cost.js";
+import { demoDescriptor, isDemoOrg, seedDemoOrg } from "./demo.js";
 import { estateOverview } from "./estate.js";
 import { buildHeadline } from "./headline.js";
 import { costWasteView } from "./waste.js";
@@ -68,6 +69,7 @@ function problem(
 function requireOrg(
   request: FastifyRequest<{ Params: OrgParams }>,
   reply: FastifyReply,
+  store: MemoryStore,
 ): Session | null {
   const session = sessionFromHeaders(request);
   if (!session) {
@@ -77,6 +79,9 @@ function requireOrg(
   if (assertOrgAccess(session, request.params.orgId) !== "ok") {
     void problem(reply, 403, "Forbidden");
     return null;
+  }
+  if (isDemoOrg(request.params.orgId)) {
+    seedDemoOrg(store);
   }
   return session;
 }
@@ -132,8 +137,15 @@ export function buildApp(
     service: SERVICE_NAME,
   }));
 
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId", async (request, reply) => {
+    if (!requireOrg(request, reply, store)) {
+      return reply;
+    }
+    return sendClean(reply, 200, demoDescriptor(request.params.orgId));
+  });
+
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/inventory", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     const inventory = store.snapshot(request.params.orgId).inventory;
@@ -144,7 +156,7 @@ export function buildApp(
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/inventory/no-owner", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     const inventory = store.snapshot(request.params.orgId).inventory;
@@ -155,14 +167,14 @@ export function buildApp(
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/connections", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     return sendClean(reply, 200, { connections: store.snapshot(request.params.orgId).connections });
   });
 
   app.put<{ Params: OrgParams }>("/v1/orgs/:orgId/connections", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     if (rejectSecrets(request.body, reply)) {
@@ -186,7 +198,7 @@ export function buildApp(
   app.delete<{ Params: ConnectionParams }>(
     "/v1/orgs/:orgId/connections/:connectionId",
     async (request, reply) => {
-      if (!requireOrg(request, reply)) {
+      if (!requireOrg(request, reply, store)) {
         return reply;
       }
       if (!store.deleteConnection(request.params.orgId, request.params.connectionId)) {
@@ -197,7 +209,7 @@ export function buildApp(
   );
 
   app.put<{ Params: OrgParams }>("/v1/orgs/:orgId/inventory", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     if (rejectSecrets(request.body, reply)) {
@@ -220,7 +232,7 @@ export function buildApp(
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/coverage", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     const org = store.snapshot(request.params.orgId);
@@ -234,7 +246,7 @@ export function buildApp(
   });
 
   app.put<{ Params: OrgParams }>("/v1/orgs/:orgId/coverage", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     if (rejectSecrets(request.body, reply)) {
@@ -252,7 +264,7 @@ export function buildApp(
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/blind-spots", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     const org = store.snapshot(request.params.orgId);
@@ -262,7 +274,7 @@ export function buildApp(
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/scans", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     return sendClean(reply, 200, { scans: toScanViews(store.snapshot(request.params.orgId).scans) });
@@ -271,7 +283,7 @@ export function buildApp(
   app.get<{ Params: { orgId: string; scanId: string } }>(
     "/v1/orgs/:orgId/scans/:scanId",
     async (request, reply) => {
-      if (!requireOrg(request, reply)) {
+      if (!requireOrg(request, reply, store)) {
         return reply;
       }
       const view = toScanViews(store.snapshot(request.params.orgId).scans).find(
@@ -285,7 +297,7 @@ export function buildApp(
   );
 
   app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/scans", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     const body = request.body as Record<string, unknown> | null;
@@ -296,6 +308,13 @@ export function buildApp(
         errors: [{ path: "subscriptionId", message: "required string" }],
       });
     }
+    if (isDemoOrg(request.params.orgId)) {
+      const job = store.snapshot(request.params.orgId).scans[0];
+      if (!job) {
+        return problem(reply, 404, "Not found");
+      }
+      return sendClean(reply, 200, { scan: toScanView(job, true), scanStarted: false });
+    }
     const scan = runner.start({ orgId: request.params.orgId, subscriptionId, actor });
     return sendClean(reply, scan.started ? 202 : 200, {
       scan: toScanView(scan.job, false),
@@ -304,21 +323,21 @@ export function buildApp(
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/findings", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     return sendClean(reply, 200, { findings: store.snapshot(request.params.orgId).findings });
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/issues", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     return sendClean(reply, 200, { issues: store.snapshot(request.params.orgId).issues });
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/cost-waste", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     const org = store.snapshot(request.params.orgId);
@@ -336,7 +355,7 @@ export function buildApp(
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/headline", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     const org = store.snapshot(request.params.orgId);
@@ -352,7 +371,7 @@ export function buildApp(
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/cost", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     const cost = store.snapshot(request.params.orgId).cost;
@@ -363,7 +382,7 @@ export function buildApp(
   });
 
   app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/cost", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     if (rejectSecrets(request.body, reply)) {
@@ -384,6 +403,12 @@ export function buildApp(
       body && typeof body.agreementType === "string" && body.agreementType.length > 0
         ? body.agreementType
         : "payg";
+    if (isDemoOrg(request.params.orgId)) {
+      return sendClean(reply, 200, {
+        harvested: true,
+        cost: store.snapshot(request.params.orgId).cost,
+      });
+    }
     const harvested = await harvestCost({
       client: options.costClient ?? defaultCostClient(),
       subscriptionId,
@@ -407,7 +432,7 @@ export function buildApp(
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/commitments", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     const commitments = store.snapshot(request.params.orgId).commitments;
@@ -418,7 +443,7 @@ export function buildApp(
   });
 
   app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/commitments", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     if (rejectSecrets(request.body, reply)) {
@@ -435,6 +460,14 @@ export function buildApp(
       body && typeof body.billingScope === "string" && body.billingScope.length > 0
         ? body.billingScope
         : `/subscriptions/${subscriptionId}`;
+    if (isDemoOrg(request.params.orgId)) {
+      const org = store.snapshot(request.params.orgId);
+      return sendClean(reply, 200, {
+        harvested: true,
+        commitments: org.commitments,
+        findings: org.findings,
+      });
+    }
     const harvested = await harvestCommitments({
       client: options.commitmentClient ?? defaultCommitmentClient(),
       subscriptionId,
@@ -465,7 +498,7 @@ export function buildApp(
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/budgets", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     const budgets = store.snapshot(request.params.orgId).budgets;
@@ -476,8 +509,16 @@ export function buildApp(
   });
 
   app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/budgets", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
+    }
+    if (isDemoOrg(request.params.orgId)) {
+      const org = store.snapshot(request.params.orgId);
+      return sendClean(reply, 200, {
+        harvested: true,
+        budgets: org.budgets,
+        findings: org.findings,
+      });
     }
     const harvested = await harvestBudgets({
       client: options.budgetClient ?? defaultBudgetClient(),
@@ -499,7 +540,7 @@ export function buildApp(
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/alerts", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     const alerts = store.snapshot(request.params.orgId).alerts;
@@ -510,11 +551,14 @@ export function buildApp(
   });
 
   app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/alerts", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     if (rejectSecrets(request.body, reply)) {
       return reply;
+    }
+    if (isDemoOrg(request.params.orgId)) {
+      return sendClean(reply, 200, store.snapshot(request.params.orgId).alerts);
     }
     const body = (request.body as Record<string, unknown> | null) ?? {};
     const recipients = Array.isArray(body.recipients)
@@ -531,21 +575,21 @@ export function buildApp(
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/estate", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     return sendClean(reply, 200, estateOverview(store.snapshot(request.params.orgId)));
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/settings", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     return sendClean(reply, 200, store.snapshot(request.params.orgId).settings);
   });
 
   app.put<{ Params: OrgParams }>("/v1/orgs/:orgId/settings", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     if (rejectSecrets(request.body, reply)) {
@@ -570,7 +614,7 @@ export function buildApp(
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/inventory/browse", async (request, reply) => {
-    if (!requireOrg(request, reply)) {
+    if (!requireOrg(request, reply, store)) {
       return reply;
     }
     const inventory = store.snapshot(request.params.orgId).inventory;

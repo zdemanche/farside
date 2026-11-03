@@ -13,6 +13,7 @@ const MANIFEST = JSON.parse(
 ) as GroundTruthManifest;
 
 const ROUTES = [
+  { method: "GET" as const, url: "/v1/orgs/org-a" },
   { method: "GET" as const, url: "/v1/orgs/org-a/inventory" },
   { method: "GET" as const, url: "/v1/orgs/org-a/inventory/no-owner" },
   { method: "GET" as const, url: "/v1/orgs/org-a/connections" },

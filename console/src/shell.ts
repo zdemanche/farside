@@ -1,5 +1,7 @@
 export const PRODUCT_NAME = "Farside";
 
+export const DEMO_LABEL = "Demo";
+
 export const EMPTY_STATE =
   "Nothing to show yet. Connect a cloud estate to see inventory, issues, and cost.";
 
