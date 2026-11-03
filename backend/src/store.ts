@@ -88,7 +88,15 @@ export class MemoryStore {
     const controllers = this.#runningScans.get(orgId) ?? new Set<AbortController>();
     controllers.add(controller);
     this.#runningScans.set(orgId, controllers);
-    return { signal: controller.signal, release: () => controllers.delete(controller) };
+    return {
+      signal: controller.signal,
+      release: () => {
+        controllers.delete(controller);
+        if (controllers.size === 0 && this.#runningScans.get(orgId) === controllers) {
+          this.#runningScans.delete(orgId);
+        }
+      },
+    };
   }
 
   hasOrg(orgId: string): boolean {

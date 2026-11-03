@@ -31,6 +31,7 @@ import { applyScanToIssues } from "./issues.js";
 import type { OrgSettings } from "./settings.js";
 import type { MemoryStore } from "./store.js";
 
+// "cancelled" is internal-only: never stored or returned by the API
 export type ScanStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export type ScanCheckOutcome = {
@@ -262,7 +263,9 @@ export class ScanRunner {
       checks: [],
     });
     const done = this.execute(input.orgId, job.id);
-    done.catch(() => undefined);
+    done.catch((error: unknown) => {
+      console.error("scan execution failed", { orgId: input.orgId, jobId: job.id, error });
+    });
     return { job, started: true, done };
   }
 
@@ -292,6 +295,7 @@ export class ScanRunner {
         inventory: result.inventory,
         facts: result.facts,
         checkIds: registeredCheckIds(result.inventory.cloud),
+        scopes: [current.subscriptionId],
         settings,
       });
       const replaceIds = new Set(registeredCheckIds(result.inventory.cloud));
@@ -310,6 +314,9 @@ export class ScanRunner {
       );
       if (result.inventory.cloud === "azure") {
         const harvested = await this.runAzureHarvests(orgId, current.subscriptionId, findings, coverage);
+        if (signal.aborted) {
+          return cancelled();
+        }
         findings = harvested.findings;
         coverage = harvested.coverage;
         coverage = fillUnrunLaunchCoverage(coverage, current.subscriptionId);

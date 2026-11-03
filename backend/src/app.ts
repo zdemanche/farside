@@ -36,7 +36,7 @@ import {
   harvestCost,
   type CostQueryClient,
 } from "./cost.js";
-import { systemClock, type Clock } from "./clock.js";
+import type { Clock } from "./clock.js";
 import { CardDataError, advanceContract, billingView, canScan, parseContract } from "./billing.js";
 import { deletionView } from "./offboard.js";
 import { demoDescriptor, isDemoOrg, seedDemoOrg } from "./demo.js";
@@ -157,7 +157,7 @@ export function buildApp(
     trustClientClock?: boolean;
   } = {},
 ) {
-  const clock = options.clock ?? systemClock;
+  const clock = options.clock ?? store.clock;
   const trustClientClock = options.trustClientClock === true;
   const clientTime = (candidate: unknown): string =>
     trustClientClock && typeof candidate === "string" ? candidate : clock();
@@ -731,7 +731,11 @@ export function buildApp(
     const analysis = analyzeAlerts({
       recipients,
       previous,
-      ...(typeof body.asOf === "string" ? { asOf: body.asOf } : {}),
+      ...(trustClientClock
+        ? typeof body.asOf === "string"
+          ? { asOf: body.asOf }
+          : {}
+        : { asOf: clock().slice(0, 10) }),
     });
     store.putAlerts(request.params.orgId, analysis);
     return sendClean(reply, 200, analysis);

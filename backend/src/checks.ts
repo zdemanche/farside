@@ -1147,14 +1147,16 @@ export function runChecks(input: {
   facts: ResourceFacts[];
   checkIds: string[];
   unreadSubscriptions?: string[];
+  scopes?: string[];
   settings?: OrgSettings;
 }): { findings: Finding[]; coverage: CoverageEntry[] } {
   const findings: Finding[] = [];
   const coverage: CoverageEntry[] = [];
   const subscriptions = [
-    ...new Set(
-      input.inventory.resources.map((resource) => scopeKey(resource.resourceUri, input.inventory.cloud)),
-    ),
+    ...new Set([
+      ...input.inventory.resources.map((resource) => scopeKey(resource.resourceUri, input.inventory.cloud)),
+      ...(input.scopes ?? []),
+    ]),
   ].filter(Boolean);
 
   for (const checkId of input.checkIds) {
