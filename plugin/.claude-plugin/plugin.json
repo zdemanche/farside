@@ -8,5 +8,6 @@
     "name": "Moonaan, LLC"
   },
   "license": "UNLICENSED",
-  "skills": ["./skills"]
+  "skills": ["./skills"],
+  "commands": ["./commands"]
 }

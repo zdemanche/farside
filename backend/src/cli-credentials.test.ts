@@ -39,6 +39,13 @@ describe("cli credentials", () => {
     );
   });
 
+  it("maps missing GCP spec roles onto the checks they block", () => {
+    const gaps = missingRoles("gcp", []);
+    const recommender = gaps.find((gap) => gap.role === "Recommender Viewer");
+    expect(recommender?.required).toBe(true);
+    expect(recommender?.blockedCheckIds).toContain("gcp-waste-idle-vm-and-disk-recommendations");
+  });
+
   it("probes Azure CLI login first and refuses client secrets", () => {
     const home = mkdtempSync(join(tmpdir(), "farside-az-"));
     mkdirSync(join(home, ".azure"));

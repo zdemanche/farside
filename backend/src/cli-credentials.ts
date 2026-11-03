@@ -47,10 +47,24 @@ export function checksForRole(cloud: Cloud, role: string): string[] {
   return SPECS[cloud].checks.filter((check) => check.role === role).map((check) => check.id);
 }
 
+export function specRoles(cloud: Cloud): string[] {
+  const roles: string[] = [];
+  const seen = new Set<string>();
+  for (const check of SPECS[cloud].checks) {
+    if (seen.has(check.role)) {
+      continue;
+    }
+    seen.add(check.role);
+    roles.push(check.role);
+  }
+  return roles;
+}
+
 export function missingRoles(cloud: Cloud, granted: readonly string[]): RoleGap[] {
   const have = new Set(granted);
   const provider = providerFor(cloud);
-  return [
+  const optional = new Set(provider.optionalRoles);
+  const fromProvider = [
     ...provider.requiredRoles
       .filter((role) => !have.has(role))
       .map((role) => ({ role, required: true, blockedCheckIds: checksForRole(cloud, role) })),
@@ -58,6 +72,16 @@ export function missingRoles(cloud: Cloud, granted: readonly string[]): RoleGap[
       .filter((role) => !have.has(role))
       .map((role) => ({ role, required: false, blockedCheckIds: checksForRole(cloud, role) })),
   ];
+  if (fromProvider.length > 0) {
+    return fromProvider;
+  }
+  return specRoles(cloud)
+    .filter((role) => !have.has(role))
+    .map((role) => ({
+      role,
+      required: !optional.has(role),
+      blockedCheckIds: checksForRole(cloud, role),
+    }));
 }
 
 export function probeLocalCredentials(
