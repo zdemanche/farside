@@ -208,6 +208,10 @@ export function generateDemoEstate(): {
       },
     ],
     months: [monthFigure("2026-08-01", "2026-08-31", "70.00"), monthFigure("2026-09-01", "2026-09-30", "84.00")],
+    serviceMonths: [
+      { ...monthFigure("2026-08-01", "2026-08-31", "70.00"), serviceName: "Virtual Machines" },
+      { ...monthFigure("2026-09-01", "2026-09-30", "84.00"), serviceName: "Virtual Machines" },
+    ],
     monthOnMonth: [
       {
         billingScope: `/subscriptions/${DEMO_SUBSCRIPTION}`,
