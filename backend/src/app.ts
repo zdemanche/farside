@@ -37,6 +37,7 @@ import {
   type CostQueryClient,
 } from "./cost.js";
 import { estateOverview } from "./estate.js";
+import { costWasteView } from "./waste.js";
 import { applyOwnerTag, filterInventory, groupInventory, noOwnerTotal } from "./inventory.js";
 import { SecretLeakError, assertNoSecrets } from "./secrets.js";
 import { defaultHarvester, ScanRunner, toScanView, toScanViews, type Harvester } from "./scans.js";
@@ -313,6 +314,24 @@ export function buildApp(
       return reply;
     }
     return sendClean(reply, 200, { issues: store.snapshot(request.params.orgId).issues });
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/cost-waste", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    const org = store.snapshot(request.params.orgId);
+    return sendClean(
+      reply,
+      200,
+      costWasteView({
+        cost: org.cost,
+        alerts: org.alerts,
+        commitments: org.commitments,
+        findings: org.findings,
+        coverage: org.coverage,
+      }),
+    );
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/cost", async (request, reply) => {
