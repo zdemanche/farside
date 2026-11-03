@@ -77,6 +77,33 @@ export function noOwnerTotal(inventory: Inventory): {
   };
 }
 
+export const MAX_TAG_VALUE_LENGTH = 256;
+
+function projectRecord(record: InventoryRecord): InventoryRecord {
+  const tags: Record<string, string> = {};
+  for (const [key, value] of Object.entries(record.tags)) {
+    if (typeof value === "string") {
+      tags[key] = value.slice(0, MAX_TAG_VALUE_LENGTH);
+    }
+  }
+  return {
+    resourceUri: record.resourceUri,
+    resourceType: record.resourceType,
+    region: record.region,
+    displayName: record.displayName,
+    tags,
+    ownerTag: typeof record.ownerTag === "string" ? record.ownerTag : null,
+  };
+}
+
+export function projectInventory(inventory: Inventory): Inventory {
+  return {
+    cloud: inventory.cloud,
+    observedAt: inventory.observedAt,
+    resources: inventory.resources.map(projectRecord),
+  };
+}
+
 export function applyOwnerTag(inventory: Inventory, ownerTagKey: string): Inventory {
   return {
     ...inventory,
