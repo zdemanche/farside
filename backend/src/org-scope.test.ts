@@ -132,6 +132,7 @@ describe("org scoping", () => {
       connections: [
         {
           id: "conn-1",
+          cloud: "azure",
           tenantId: "tenant-org-b",
           subscriptionId: "sub-org-b",
           roles: ["Reader", "Cost Management Reader", "Monitoring Reader", "Reservations Reader"],

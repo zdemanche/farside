@@ -6,7 +6,7 @@ import { scopeOf } from "./scope.js";
 import type { ResourceFacts } from "./facts.js";
 import type { StoredIssue } from "./issues.js";
 import { applyOwnerTag } from "./inventory.js";
-import { REQUIRED_AZURE_ROLES } from "./roles.js";
+import { DEFAULT_CLOUD, providerFor } from "./providers/index.js";
 import { DEMO_ORG_ID } from "./demo.js";
 import type { AlertAnalysis } from "./alerts.js";
 import { retentionElapsed, type Contract } from "./billing.js";
@@ -21,6 +21,7 @@ import { DEFAULT_SETTINGS, type OrgSettings } from "./settings.js";
 
 export type Connection = {
   id: string;
+  cloud: Cloud;
   tenantId: string;
   subscriptionId: string;
   roles: string[];
@@ -246,14 +247,16 @@ export class MemoryStore {
 
   putConnection(
     orgId: string,
-    input: { tenantId: string; subscriptionId: string },
+    input: { tenantId: string; subscriptionId: string; cloud?: Cloud },
   ): Connection {
     assertNoSecrets(input);
+    const cloud = input.cloud ?? DEFAULT_CLOUD;
     const connection: Connection = {
       id: `conn-${this.org(orgId).connections.length + 1}`,
+      cloud,
       tenantId: input.tenantId,
       subscriptionId: input.subscriptionId,
-      roles: [...REQUIRED_AZURE_ROLES],
+      roles: [...providerFor(cloud).requiredRoles],
       createdAt: this.clock(),
       healthy: true,
     };

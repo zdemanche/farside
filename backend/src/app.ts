@@ -14,7 +14,6 @@ import {
   applyCoverageResult,
   blindSpots,
   coverageFromHarvest,
-  launchCheckIds,
   coverageHealth,
   recordCoverageScope,
   toContractCoverage,
@@ -46,7 +45,8 @@ import {
   unconfiguredCostClient,
   type CostQueryClient,
 } from "./cost.js";
-import { ProviderNotConfiguredError } from "./providers.js";
+import { DEFAULT_CLOUD, allProviders, providerFor } from "./providers/index.js";
+import { ProviderNotConfiguredError } from "./providers/unconfigured.js";
 import type { Clock } from "./clock.js";
 import {
   CardDataError,
@@ -198,7 +198,9 @@ function connectedSubscription(store: MemoryStore, orgId: string, subscriptionId
   return match?.subscriptionId ?? null;
 }
 
-function connectionInput(body: unknown): { tenantId: string; subscriptionId: string } | null {
+function connectionInput(
+  body: unknown,
+): { tenantId: string; subscriptionId: string; cloud: Cloud } | null {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return null;
   }
@@ -209,7 +211,11 @@ function connectionInput(body: unknown): { tenantId: string; subscriptionId: str
   if (typeof record.subscriptionId !== "string" || !SUBSCRIPTION_ID_PATTERN.test(record.subscriptionId)) {
     return null;
   }
-  return { tenantId: record.tenantId, subscriptionId: record.subscriptionId };
+  const cloud = record.cloud ?? DEFAULT_CLOUD;
+  if (!allProviders().some((provider) => provider.cloud === cloud)) {
+    return null;
+  }
+  return { tenantId: record.tenantId, subscriptionId: record.subscriptionId, cloud: cloud as Cloud };
 }
 
 export function buildApp(
@@ -458,7 +464,11 @@ export function buildApp(
     const scopes = [
       ...new Set(stored.resources.map((row) => scopeOf(stored.cloud, row.resourceUri))),
     ].filter(Boolean);
-    store.putCoverage(request.params.orgId, coverageFromHarvest(scopes, launchCheckIds(stored.cloud)));
+    const provider = providerFor(stored.cloud);
+    store.putCoverage(
+      request.params.orgId,
+      coverageFromHarvest(scopes, provider.launchCheckIds, provider.harvestAssessedCheckIds),
+    );
     return sendClean(reply, 200, stored);
   });
 

@@ -1,7 +1,8 @@
-import { OPTIONAL_AZURE_ROLES, REQUIRED_AZURE_ROLES } from "./roles.js";
+import type { Cloud } from "@farside/scan-contracts";
+import { allProviders } from "./providers/index.js";
 
 export type GrantToRemove = {
-  kind: "azure-role" | "admin-consent";
+  kind: `${Cloud}-role` | "admin-consent";
   name: string;
   optional?: boolean;
 };
@@ -35,8 +36,10 @@ export type DeletionRecord = {
 };
 
 export const GRANTS_TO_REMOVE: GrantToRemove[] = [
-  ...REQUIRED_AZURE_ROLES.map((name) => ({ kind: "azure-role" as const, name })),
-  ...OPTIONAL_AZURE_ROLES.map((name) => ({ kind: "azure-role" as const, name, optional: true })),
+  ...allProviders().flatMap(({ cloud, requiredRoles, optionalRoles }) => [
+    ...requiredRoles.map((name) => ({ kind: `${cloud}-role` as const, name })),
+    ...optionalRoles.map((name) => ({ kind: `${cloud}-role` as const, name, optional: true })),
+  ]),
   {
     kind: "admin-consent",
     name: "Farside multi-tenant app registration",

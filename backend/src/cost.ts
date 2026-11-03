@@ -1,5 +1,5 @@
 import { applyCoverageResult, recordCoverageScope, type CoverageEntry } from "./coverage.js";
-import { rejectUnconfigured } from "./providers.js";
+import { rejectUnconfigured } from "./providers/unconfigured.js";
 import docAzureCostQueryPages from "../../docs/azure/cost-query-pages.json" with { type: "json" };
 
 export const SPEND_BY_SERVICE = "azure-cost-spend-by-service";

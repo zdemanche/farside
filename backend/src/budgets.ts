@@ -1,7 +1,7 @@
 import type { Finding } from "@farside/scan-contracts";
-import { acceptFinding } from "./checks.js";
+import { acceptFinding } from "./checks/define.js";
 import { applyCoverageResult, recordCoverageScope, type CoverageEntry } from "./coverage.js";
-import { rejectUnconfigured } from "./providers.js";
+import { rejectUnconfigured } from "./providers/unconfigured.js";
 import docAzureGroundTruth from "../../docs/azure/ground-truth.json" with { type: "json" };
 
 type BudgetManifest = {

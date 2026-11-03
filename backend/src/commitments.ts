@@ -1,5 +1,5 @@
 import type { Finding } from "@farside/scan-contracts";
-import { acceptFinding } from "./checks.js";
+import { acceptFinding } from "./checks/define.js";
 import { applyCoverageResult, recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import {
   RESERVATION_SAVINGS_BASIS,
@@ -7,7 +7,7 @@ import {
   unusedReservationSavings,
   unusedSavingsPlanSavings,
 } from "./savings.js";
-import { rejectUnconfigured } from "./providers.js";
+import { rejectUnconfigured } from "./providers/unconfigured.js";
 import docAzureCommitments from "../../docs/azure/commitments.json" with { type: "json" };
 
 export const RESERVATION_USE = "azure-cost-reservation-use";

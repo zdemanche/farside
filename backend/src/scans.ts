@@ -1,37 +1,19 @@
 import { randomUUID } from "node:crypto";
 import type { Cloud, Finding, Inventory } from "@farside/scan-contracts";
-import {
-  applyBudgetCoverage,
-  harvestBudgets,
-  mergeBudgetFindings,
-  type BudgetClient,
-} from "./budgets.js";
-import { registeredCheckIds, runChecks, scopeKey } from "./checks.js";
-import {
-  applyCommitmentCoverage,
-  harvestCommitments,
-  mergeCommitmentFindings,
-  type CommitmentClient,
-} from "./commitments.js";
-import { applyCostCoverage, harvestCost, type CostQueryClient } from "./cost.js";
+import { abortable } from "./abortable.js";
+import { runChecks } from "./checks.js";
 import { systemClock, type Clock } from "./clock.js";
-import {
-  AZURE_LAUNCH_CHECK_IDS,
-  applyCoverageResult,
-  coverageFromHarvest,
-  recordCoverageScope,
-  type CoverageEntry,
-  type CoverageState,
-} from "./coverage.js";
-import { factsFromManifest, type ResourceFacts } from "./facts.js";
-import { applyOwnerTag, inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
+import { applyCoverageResult, type CoverageEntry, type CoverageState } from "./coverage.js";
+import type { ResourceFacts } from "./facts.js";
 import { applyScanToIssues } from "./issues.js";
-import { PROVIDER_NOT_CONFIGURED, ProviderNotConfiguredError, rejectUnconfigured } from "./providers.js";
-import type { OrgSettings } from "./settings.js";
+import { DEFAULT_CLOUD, providerFor, registeredCheckIds } from "./providers/index.js";
+import type { HarvestResult, Harvester, PostHarvest, ScanHarvestClients } from "./providers/types.js";
+import { fixtureHarvester } from "./providers/fixture-harvester.js";
+import { PROVIDER_NOT_CONFIGURED, ProviderNotConfiguredError, rejectUnconfigured } from "./providers/unconfigured.js";
+import { scopeOf } from "./scope.js";
 import { silentLog, type LogSink } from "./observability.js";
 import { addHours, DEFAULT_SCAN_TIMEOUT_MS, RETRY_DELAY_HOURS } from "./scheduler.js";
 import type { MemoryStore } from "./store.js";
-import docAzureGroundTruth from "../../docs/azure/ground-truth.json" with { type: "json" };
 
 // "cancelled" is stored so a cancelled job frees its subscription, but the API never returns it
 export type ScanStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -114,9 +96,10 @@ export function checksFromCoverage(
 export function checksFromFailure(
   coveredScopes: string[],
   subscriptionId: string,
+  cloud: Cloud = DEFAULT_CLOUD,
 ): ScanCheckOutcome[] {
   const covered = new Set(coveredScopes);
-  return AZURE_LAUNCH_CHECK_IDS.map((checkId) => {
+  return providerFor(cloud).launchCheckIds.map((checkId) => {
     if (covered.has(`${subscriptionId}:${checkId}`)) {
       return { checkId, state: "assessed" as const };
     }
@@ -144,26 +127,9 @@ export function toScanViews(jobs: readonly ScanJob[]): ScanView[] {
   return jobs.filter((job) => job.status !== "cancelled").map((job) => toScanView(job, job.id === currentId));
 }
 
-export type HarvestResult = {
-  inventory: Inventory;
-  coverage: CoverageEntry[];
-  coveredScopes: string[];
-  facts: ResourceFacts[];
-};
+export type { HarvestResult, Harvester, ScanHarvestClients };
 
-export type Harvester = {
-  harvest: (input: {
-    orgId: string;
-    subscriptionId: string;
-    settings: OrgSettings;
-  }) => Promise<HarvestResult>;
-};
-
-export type ScanHarvestClients = {
-  costClient?: CostQueryClient;
-  commitmentClient?: CommitmentClient;
-  budgetClient?: BudgetClient;
-};
+export { fixtureHarvester };
 
 export function mergeScanFindings(
   existing: Finding[],
@@ -208,7 +174,7 @@ function failureCode(error: unknown, harvesting: boolean): string {
 
 function scannedScopes(inventory: Inventory, subscriptionId: string): Set<string> {
   return new Set(
-    [subscriptionId, ...inventory.resources.map((resource) => scopeKey(resource.resourceUri, inventory.cloud))]
+    [subscriptionId, ...inventory.resources.map((resource) => scopeOf(inventory.cloud, resource.resourceUri))]
       .filter((key) => key.length > 0)
       .map((key) => key.toLowerCase()),
   );
@@ -227,13 +193,13 @@ export function mergeScanInventory(
     return next;
   }
   const scopes = scannedScopes(next, subscriptionId);
-  const incomingHasEmptyKey = next.resources.some((resource) => scopeKey(resource.resourceUri, next.cloud) === "");
+  const incomingHasEmptyKey = next.resources.some((resource) => scopeOf(next.cloud, resource.resourceUri) === "");
   return {
     ...next,
     resources: [
       ...existing.resources.filter(
         (resource) =>
-          !replacedByScan(scopes, scopeKey(resource.resourceUri, existing.cloud), incomingHasEmptyKey),
+          !replacedByScan(scopes, scopeOf(existing.cloud, resource.resourceUri), incomingHasEmptyKey),
       ),
       ...next.resources,
     ],
@@ -247,10 +213,10 @@ export function mergeScanFacts(
   subscriptionId: string,
 ): ResourceFacts[] {
   const scopes = scannedScopes(inventory, subscriptionId);
-  const incomingHasEmptyKey = next.some((row) => scopeKey(row.resourceUri, inventory.cloud) === "");
+  const incomingHasEmptyKey = next.some((row) => scopeOf(inventory.cloud, row.resourceUri) === "");
   return [
     ...existing.filter(
-      (row) => !replacedByScan(scopes, scopeKey(row.resourceUri, inventory.cloud), incomingHasEmptyKey),
+      (row) => !replacedByScan(scopes, scopeOf(inventory.cloud, row.resourceUri), incomingHasEmptyKey),
     ),
     ...next,
   ];
@@ -266,32 +232,8 @@ export class ScanFailedError extends Error {
   }
 }
 
-export function fixtureHarvester(
-  inventory: Inventory,
-  facts: ResourceFacts[] = [],
-  clock?: Clock,
-): Harvester {
-  return {
-    async harvest(input) {
-      const coverage = coverageFromHarvest([input.subscriptionId], AZURE_LAUNCH_CHECK_IDS);
-      return {
-        inventory: applyOwnerTag(
-          clock ? { ...inventory, observedAt: clock() } : inventory,
-          input.settings.ownerTagKey,
-        ),
-        coverage,
-        coveredScopes: coverage
-          .filter((entry) => entry.state === "assessed")
-          .map((entry) => entry.id),
-        facts,
-      };
-    },
-  };
-}
-
 export function defaultHarvester(clock?: Clock): Harvester {
-  const manifest = docAzureGroundTruth as GroundTruthManifest;
-  return fixtureHarvester(inventoryFromManifest(manifest), factsFromManifest(manifest), clock);
+  return providerFor(DEFAULT_CLOUD).harvester(clock);
 }
 
 export function unconfiguredHarvester(): Harvester {
@@ -302,37 +244,7 @@ export function unconfiguredHarvester(): Harvester {
   };
 }
 
-const MAX_TIMER_MS = 2 ** 31 - 1;
-
-function abortable<T>(signal: AbortSignal, work: Promise<T>, timeoutMs: number): Promise<T> {
-  if (signal.aborted) {
-    return Promise.reject(new Error("scan aborted"));
-  }
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => settle(() => reject(new Error("scan aborted")));
-    const timer = setTimeout(() => {
-      const error = new Error(`harvest exceeded ${timeoutMs}ms`);
-      error.name = "TimeoutError";
-      settle(() => reject(error));
-    }, Math.min(timeoutMs, MAX_TIMER_MS));
-    const settle = (finish: () => void) => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", onAbort);
-      finish();
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-    work.then(
-      (value) => settle(() => resolve(value)),
-      (error: unknown) => settle(() => reject(error)),
-    );
-  });
-}
-
-type AzureHarvests = {
-  cost?: Awaited<ReturnType<typeof harvestCost>>;
-  commitments?: Awaited<ReturnType<typeof harvestCommitments>>;
-  budgets?: Awaited<ReturnType<typeof harvestBudgets>>;
-};
+const NO_POST_HARVEST: PostHarvest = { apply: (outputs) => outputs };
 
 export class ScanRunner {
   #queues = new Map<string, Promise<unknown>>();
@@ -428,7 +340,7 @@ export class ScanRunner {
     startedAt: string,
     failure: { error: unknown; errorCode: string; stored: string; covered: string[] },
   ): ScanJob {
-    const checks = checksFromFailure(failure.covered, job.subscriptionId);
+    const checks = checksFromFailure(failure.covered, job.subscriptionId, job.cloud ?? DEFAULT_CLOUD);
     const finishedAt = this.clock();
     const errorId = randomUUID();
     const failed = this.store.patchJob(orgId, job.id, {
@@ -521,11 +433,19 @@ export class ScanRunner {
         settings,
       });
       const replaceIds = new Set(registeredCheckIds(result.inventory.cloud));
-      const collected =
-        result.inventory.cloud === "azure"
-          ? await this.collectAzureHarvests(current.subscriptionId, signal, remainingMs)
-          : {};
-      if (!collected || signal.aborted) {
+      const provider = providerFor(result.inventory.cloud);
+      const postHarvest = provider.collectHarvests
+        ? await provider.collectHarvests({
+            orgId,
+            subscriptionId: current.subscriptionId,
+            signal,
+            remainingMs,
+            clock: this.clock,
+            clients: this.harvestClients,
+            store: this.store,
+          })
+        : NO_POST_HARVEST;
+      if (!postHarvest || signal.aborted) {
         return cancelled();
       }
       const live = this.store.getJob(orgId, jobId);
@@ -544,13 +464,12 @@ export class ScanRunner {
         orgId,
         mergeScanFacts(fresh.facts, result.facts, result.inventory, current.subscriptionId),
       );
-      let findings = mergeScanFindings(fresh.findings, checked.findings, replaceIds, current.subscriptionId);
-      let coverage = mergeScanCoverage(fresh.coverage, checked.coverage, replaceIds, current.subscriptionId);
-      if (result.inventory.cloud === "azure") {
-        const applied = this.applyAzureHarvests(orgId, current.subscriptionId, collected, findings, coverage);
-        findings = applied.findings;
-        coverage = fillUnrunLaunchCoverage(applied.coverage, current.subscriptionId);
-      }
+      const merged = postHarvest.apply({
+        findings: mergeScanFindings(fresh.findings, checked.findings, replaceIds, current.subscriptionId),
+        coverage: mergeScanCoverage(fresh.coverage, checked.coverage, replaceIds, current.subscriptionId),
+      });
+      const findings = merged.findings;
+      let coverage = merged.coverage;
       this.store.putFindings(orgId, findings);
       this.store.putCoverage(orgId, coverage);
       const written = this.store.snapshot(orgId);
@@ -593,7 +512,7 @@ export class ScanRunner {
         return cancelled();
       }
       const errorCode = failureCode(error, harvesting);
-      return this.recordFailure(orgId, current, startedAt, {
+      return this.recordFailure(orgId, this.store.getJob(orgId, jobId) ?? current, startedAt, {
         error,
         errorCode,
         stored: error instanceof ProviderNotConfiguredError ? PROVIDER_NOT_CONFIGURED : errorCode,
@@ -603,104 +522,4 @@ export class ScanRunner {
       release();
     }
   }
-
-  private async collectAzureHarvests(
-    subscriptionId: string,
-    signal: AbortSignal,
-    remainingMs: () => number,
-  ): Promise<AzureHarvests | null> {
-    const billingScope = `/subscriptions/${subscriptionId}`;
-    const collected: AzureHarvests = {};
-    if (this.harvestClients.costClient) {
-      collected.cost = await abortable(
-        signal,
-        harvestCost({
-        client: this.harvestClients.costClient,
-        subscriptionId,
-        billingScope,
-        agreementType: "payg",
-        asOf: this.clock(),
-        }),
-        remainingMs(),
-      );
-      if (signal.aborted) {
-        return null;
-      }
-    }
-    if (this.harvestClients.commitmentClient) {
-      collected.commitments = await abortable(
-        signal,
-        harvestCommitments({
-        client: this.harvestClients.commitmentClient,
-        subscriptionId,
-        billingScope,
-        }),
-        remainingMs(),
-      );
-      if (signal.aborted) {
-        return null;
-      }
-    }
-    if (this.harvestClients.budgetClient) {
-      collected.budgets = await abortable(
-        signal,
-        harvestBudgets({
-        client: this.harvestClients.budgetClient,
-        lastConfirmed: this.clock(),
-        }),
-        remainingMs(),
-      );
-      if (signal.aborted) {
-        return null;
-      }
-    }
-    return collected;
-  }
-
-  private applyAzureHarvests(
-    orgId: string,
-    subscriptionId: string,
-    collected: AzureHarvests,
-    findings: Finding[],
-    coverage: CoverageEntry[],
-  ): { findings: Finding[]; coverage: CoverageEntry[] } {
-    if (collected.cost) {
-      coverage = applyCostCoverage(coverage, collected.cost.coverage);
-      this.store.putCost(orgId, collected.cost.ok ? collected.cost.snapshot : null, subscriptionId);
-    }
-    if (collected.commitments) {
-      coverage = applyCommitmentCoverage(coverage, collected.commitments.coverage);
-      if (collected.commitments.ok) {
-        this.store.putCommitments(orgId, collected.commitments.snapshot, subscriptionId);
-        findings = mergeCommitmentFindings(findings, collected.commitments.findings, subscriptionId);
-      } else {
-        this.store.putCommitments(orgId, null, subscriptionId);
-      }
-    }
-    if (collected.budgets) {
-      coverage = applyBudgetCoverage(coverage, collected.budgets.coverage);
-      this.store.putBudgets(orgId, collected.budgets.snapshot);
-      findings = mergeBudgetFindings(findings, collected.budgets.findings);
-    }
-    return { findings, coverage };
-  }
-}
-
-function fillUnrunLaunchCoverage(coverage: CoverageEntry[], subscriptionId: string): CoverageEntry[] {
-  let next = coverage;
-  for (const checkId of AZURE_LAUNCH_CHECK_IDS) {
-    if (next.some((entry) => entry.checkId === checkId && entry.subscriptionOrProject === subscriptionId)) {
-      continue;
-    }
-    next = applyCoverageResult(
-      next,
-      recordCoverageScope({
-        subscriptionOrProject: subscriptionId,
-        checkId,
-        state: "unassessed",
-        causeId: "not_run",
-      }),
-    );
-  }
-  return next;
 }

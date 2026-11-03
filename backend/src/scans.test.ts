@@ -4,8 +4,9 @@ import { buildApp } from "./app.js";
 import { fixtureBudgetClient, NO_BUDGETS } from "./budgets.js";
 import { fixtureCommitmentClient, RESERVATION_USE } from "./commitments.js";
 import { fixtureCostClient, SPEND_BY_SERVICE } from "./cost.js";
-import { PROVIDER_NOT_CONFIGURED } from "./providers.js";
-import { AZURE_LAUNCH_CHECK_IDS, recordCoverageScope } from "./coverage.js";
+import { PROVIDER_NOT_CONFIGURED } from "./providers/unconfigured.js";
+import { recordCoverageScope } from "./coverage.js";
+import { AZURE_LAUNCH_CHECK_IDS } from "./providers/launch-ids.js";
 import { factsFromManifest } from "./facts.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
 import {

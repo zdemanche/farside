@@ -56,12 +56,7 @@ export function gcpResourceUri(item: GcpGroundTruthItem): string {
   return `//${service}/projects/${item.project}/regions/${item.region}/${collection}/${item.id}`;
 }
 
-export function projectOf(resourceUri: string): string {
-  const parts = resourceUri.split("/");
-  const index = parts.indexOf("projects");
-  const project = index >= 0 ? parts[index + 1] : undefined;
-  return typeof project === "string" ? project : "";
-}
+export { projectOf } from "./providers/gcp-scope.js";
 
 /** GCP labels sit on InventoryRecord.tags; Settings.ownerTagKey is the owner label key. */
 export const applyOwnerLabel = applyOwnerTag;

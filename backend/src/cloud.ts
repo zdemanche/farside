@@ -1,4 +1,5 @@
 import { CLOUDS, type Cloud } from "@farside/scan-contracts";
+import { DEFAULT_CLOUD } from "./providers/registry.js";
 
 export type { Cloud };
 
@@ -7,7 +8,7 @@ export function isCloud(value: unknown): value is Cloud {
 }
 
 export function cloudFromCheckId(checkId: string): Cloud {
-  return checkId.startsWith("gcp-") ? "gcp" : "azure";
+  return CLOUDS.find((cloud) => checkId.startsWith(`${cloud}-`)) ?? DEFAULT_CLOUD;
 }
 
 export function parseCloudQuery(query: Record<string, unknown>): { cloud?: Cloud; error?: string } {
