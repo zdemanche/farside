@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CLOUDS, type Cloud, type Finding, type Inventory } from "@farside/scan-contracts";
@@ -20,6 +21,7 @@ import {
   probeLocalCredentials,
   TOKEN_FLAG_MESSAGE,
   type CredentialProbe,
+  type RoleGap,
 } from "./cli-credentials.js";
 import { ScanRunner, providerFor, unconfiguredHarvester } from "./lib.js";
 import { asMutable } from "./readonly.js";
@@ -32,22 +34,32 @@ export const EXIT_USAGE = 2;
 
 export const CLI_ORG_ID = "local";
 
+export const DEFAULT_WORKSPACE_DIRNAME = "farside-engagements";
+
+export const ROLE_LISTING_CLOSER = "Live role listing is leftover (#55 / #192)";
+
 export const USAGE = `Usage:
-  farside scan --cloud <azure|gcp> --scope <id> --workspace <dir> [--fixture]
-  farside findings --workspace <dir>
-  farside export --workspace <dir>
+  farside connect --cloud <azure|gcp> [--workspace <dir>] [--fixture]
+  farside scan --cloud <azure|gcp> --scope <id> [--workspace <dir>] [--fixture]
+  farside findings [--workspace <dir>]
+  farside export [--workspace <dir>]
 `;
 
-const COMMANDS = ["scan", "findings", "export"] as const;
+const COMMANDS = ["connect", "scan", "findings", "export"] as const;
 type Command = (typeof COMMANDS)[number];
 
 const WORKSPACE_FILES = {
+  connect: "connect.json",
   findings: "findings.json",
   inventory: "inventory.json",
   coverage: "coverage.json",
   issues: "issues.json",
   cost: "cost.json",
 } as const;
+
+export function defaultWorkspaceDir(home = homedir()): string {
+  return join(home, DEFAULT_WORKSPACE_DIRNAME);
+}
 
 export type CliIo = {
   clock?: Clock;
@@ -140,13 +152,81 @@ function readWorkspaceFile<T>(dir: string, name: string): T {
   return JSON.parse(readFileSync(join(dir, name), "utf8")) as T;
 }
 
-async function runScan(flags: Flags, io: CliIo): Promise<number> {
+function resolveWorkspace(flags: Flags, io: CliIo): string {
+  return flags.workspace ?? defaultWorkspaceDir(io.env?.HOME ?? homedir());
+}
+
+export type ConnectReport = {
+  cloud: Cloud;
+  workspace: string;
+  credentials: CredentialProbe | { present: true; source: "fixture" };
+  missingRoles: RoleGap[];
+  expectedRoles?: RoleGap[];
+  roleListing?: "checked" | "unverified" | "fixture";
+  closer?: string;
+};
+
+function expectedRoleGaps(cloud: Cloud): RoleGap[] {
+  return missingRoles(cloud, []);
+}
+
+function runConnect(flags: Flags, io: CliIo): number {
   const stdout = io.stdout ?? process.stdout;
   const stderr = io.stderr ?? process.stderr;
-  if (!flags.cloud || !flags.scope || !flags.workspace) {
+  if (!flags.cloud) {
     writeLine(stderr, USAGE.trimEnd());
     return EXIT_USAGE;
   }
+  const dir = resolveWorkspace(flags, io);
+  mkdirSync(dir, { recursive: true });
+  if (flags.fixture) {
+    const report: ConnectReport = {
+      cloud: flags.cloud,
+      workspace: dir,
+      credentials: { present: true, source: "fixture" },
+      missingRoles: [],
+      roleListing: "fixture",
+    };
+    writeWorkspaceFile(dir, WORKSPACE_FILES.connect, report);
+    writeLine(stdout, report);
+    return EXIT_OK;
+  }
+  const probe = io.probe?.(flags.cloud) ?? probeLocalCredentials(flags.cloud, io.env ?? process.env);
+  const granted = io.grantedRoles;
+  const report: ConnectReport =
+    granted === undefined
+      ? {
+          cloud: flags.cloud,
+          workspace: dir,
+          credentials: probe,
+          missingRoles: probe.present ? [] : expectedRoleGaps(flags.cloud),
+          expectedRoles: expectedRoleGaps(flags.cloud),
+          roleListing: "unverified",
+          closer: ROLE_LISTING_CLOSER,
+        }
+      : {
+          cloud: flags.cloud,
+          workspace: dir,
+          credentials: probe,
+          missingRoles: missingRoles(flags.cloud, granted),
+          roleListing: "checked",
+        };
+  writeWorkspaceFile(dir, WORKSPACE_FILES.connect, report);
+  writeLine(stdout, report);
+  if (!probe.present || report.missingRoles.some((gap) => gap.required)) {
+    return EXIT_FAILED;
+  }
+  return EXIT_OK;
+}
+
+async function runScan(flags: Flags, io: CliIo): Promise<number> {
+  const stdout = io.stdout ?? process.stdout;
+  const stderr = io.stderr ?? process.stderr;
+  if (!flags.cloud || !flags.scope) {
+    writeLine(stderr, USAGE.trimEnd());
+    return EXIT_USAGE;
+  }
+  const dir = resolveWorkspace(flags, io);
   const clock = io.clock ?? systemClock;
   if (!flags.fixture) {
     const probe = io.probe?.(flags.cloud) ?? probeLocalCredentials(flags.cloud, io.env ?? process.env);
@@ -193,12 +273,12 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
     "cost",
   );
   const inventory = org.inventories[flags.cloud] ?? org.inventory;
-  mkdirSync(flags.workspace, { recursive: true });
-  writeWorkspaceFile(flags.workspace, WORKSPACE_FILES.findings, asMutable(org.findings));
-  writeWorkspaceFile(flags.workspace, WORKSPACE_FILES.inventory, asMutable(inventory));
-  writeWorkspaceFile(flags.workspace, WORKSPACE_FILES.coverage, asMutable(org.coverage));
-  writeWorkspaceFile(flags.workspace, WORKSPACE_FILES.issues, asMutable(org.issues));
-  writeWorkspaceFile(flags.workspace, WORKSPACE_FILES.cost, asMutable(org.cost));
+  mkdirSync(dir, { recursive: true });
+  writeWorkspaceFile(dir, WORKSPACE_FILES.findings, asMutable(org.findings));
+  writeWorkspaceFile(dir, WORKSPACE_FILES.inventory, asMutable(inventory));
+  writeWorkspaceFile(dir, WORKSPACE_FILES.coverage, asMutable(org.coverage));
+  writeWorkspaceFile(dir, WORKSPACE_FILES.issues, asMutable(org.issues));
+  writeWorkspaceFile(dir, WORKSPACE_FILES.cost, asMutable(org.cost));
   writeLine(stdout, {
     status: job.status,
     scanId: job.id,
@@ -212,12 +292,9 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
 function runFindings(flags: Flags, io: CliIo): number {
   const stdout = io.stdout ?? process.stdout;
   const stderr = io.stderr ?? process.stderr;
-  if (!flags.workspace) {
-    writeLine(stderr, USAGE.trimEnd());
-    return EXIT_USAGE;
-  }
+  const dir = resolveWorkspace(flags, io);
   try {
-    const findings = readWorkspaceFile<Finding[]>(flags.workspace, WORKSPACE_FILES.findings);
+    const findings = readWorkspaceFile<Finding[]>(dir, WORKSPACE_FILES.findings);
     assertNoSecrets(findings);
     writeLine(stdout, findings);
     return EXIT_OK;
@@ -230,15 +307,12 @@ function runFindings(flags: Flags, io: CliIo): number {
 function runExport(flags: Flags, io: CliIo): number {
   const stdout = io.stdout ?? process.stdout;
   const stderr = io.stderr ?? process.stderr;
-  if (!flags.workspace) {
-    writeLine(stderr, USAGE.trimEnd());
-    return EXIT_USAGE;
-  }
+  const dir = resolveWorkspace(flags, io);
   const clock = io.clock ?? systemClock;
   try {
-    const issues = readWorkspaceFile<StoredIssue[]>(flags.workspace, WORKSPACE_FILES.issues);
-    const inventory = readWorkspaceFile<Inventory | null>(flags.workspace, WORKSPACE_FILES.inventory);
-    const cost = readWorkspaceFile<CostSnapshot | null>(flags.workspace, WORKSPACE_FILES.cost);
+    const issues = readWorkspaceFile<StoredIssue[]>(dir, WORKSPACE_FILES.issues);
+    const inventory = readWorkspaceFile<Inventory | null>(dir, WORKSPACE_FILES.inventory);
+    const cost = readWorkspaceFile<CostSnapshot | null>(dir, WORKSPACE_FILES.cost);
     assertNoSecrets({ issues, inventory, cost });
     const exportedAt = clock();
     const envelopes = [
@@ -246,13 +320,13 @@ function runExport(flags: Flags, io: CliIo): number {
       exportInventory(CLI_ORG_ID, inventory, exportedAt),
       exportCost(CLI_ORG_ID, cost, exportedAt),
     ];
-    mkdirSync(flags.workspace, { recursive: true });
+    mkdirSync(dir, { recursive: true });
     for (const envelope of envelopes) {
       if (envelope.format !== EXPORT_FORMAT) {
         writeLine(stderr, "export format drifted");
         return EXIT_FAILED;
       }
-      writeWorkspaceFile(flags.workspace, exportFilename(envelope.kind), envelope);
+      writeWorkspaceFile(dir, exportFilename(envelope.kind), envelope);
     }
     writeLine(
       stdout,
@@ -275,6 +349,9 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
   if (parsed.error || !parsed.flags?.command) {
     writeLine(stderr, parsed.error ?? USAGE.trimEnd());
     return EXIT_USAGE;
+  }
+  if (parsed.flags.command === "connect") {
+    return runConnect(parsed.flags, io);
   }
   if (parsed.flags.command === "scan") {
     return runScan(parsed.flags, io);

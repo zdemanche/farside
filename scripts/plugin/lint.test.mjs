@@ -7,6 +7,7 @@ import {
   PLUGIN_LICENSE,
   PLUGIN_NAME,
   lintFindingsMethodSkill,
+  lintPluginCommands,
   lintPluginManifest,
   lintPluginManifestFile,
 } from "./lint.mjs";
@@ -18,6 +19,7 @@ function validManifest(overrides = {}) {
     author: { name: PLUGIN_AUTHOR },
     license: PLUGIN_LICENSE,
     skills: ["./skills"],
+    commands: ["./commands"],
     ...overrides,
   };
 }
@@ -64,5 +66,9 @@ describe("plugin manifest lint", () => {
 
   it("fails when the findings-method skill drops a required phrase", () => {
     expect(lintFindingsMethodSkill("# empty").some((error) => error.includes("issue id"))).toBe(true);
+  });
+
+  it("accepts connect, scan and findings command wrappers", () => {
+    expect(lintPluginCommands()).toEqual([]);
   });
 });

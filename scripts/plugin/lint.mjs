@@ -7,6 +7,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_MANIFEST = join(ROOT, "plugin/.claude-plugin/plugin.json");
 const DEFAULT_PACKAGE = join(ROOT, "package.json");
 const DEFAULT_SKILL = join(ROOT, "plugin/skills/findings-method/SKILL.md");
+const DEFAULT_COMMANDS = join(ROOT, "plugin/commands");
+const COMMAND_NAMES = ["connect", "scan", "findings"];
+const DEFAULT_WORKSPACE_PHRASE = "farside-engagements";
 
 export const FINDINGS_SKILL_PHRASES = [
   "issue id",
@@ -41,10 +44,40 @@ export function lintPluginManifest(manifest, productVersion) {
   if (!Array.isArray(skills) || !skills.some((skill) => skill === "./skills" || skill === "./skills/findings-method")) {
     errors.push("skills must include './skills'");
   }
+  const commands = manifest.commands;
+  if (!Array.isArray(commands) || !commands.includes("./commands")) {
+    errors.push("commands must include './commands'");
+  }
   if (typeof productVersion !== "string" || productVersion.length === 0) {
     errors.push("product version is required");
   } else if (manifest.version !== productVersion) {
     errors.push(`version must match the product version '${productVersion}'`);
+  }
+  return errors;
+}
+
+export function lintPluginCommands(commandsDir = DEFAULT_COMMANDS) {
+  const errors = [];
+  for (const name of COMMAND_NAMES) {
+    let markdown;
+    try {
+      markdown = readFileSync(join(commandsDir, `${name}.md`), "utf8");
+    } catch (error) {
+      errors.push(`command '${name}' is missing: ${error instanceof Error ? error.message : error}`);
+      continue;
+    }
+    if (!markdown.startsWith("---")) {
+      errors.push(`command '${name}' must have YAML frontmatter`);
+    }
+    if (!/^description:\s.+/m.test(markdown)) {
+      errors.push(`command '${name}' must set description frontmatter`);
+    }
+    if (!markdown.includes(DEFAULT_WORKSPACE_PHRASE)) {
+      errors.push(`command '${name}' must default the workspace to ${DEFAULT_WORKSPACE_PHRASE}`);
+    }
+    if (!markdown.includes(`bin/farside.mjs ${name}`)) {
+      errors.push(`command '${name}' must wrap one CLI call`);
+    }
   }
   return errors;
 }
@@ -89,7 +122,11 @@ export function lintPluginManifestFile(
   } catch (error) {
     return [`findings-method skill is missing: ${error instanceof Error ? error.message : error}`];
   }
-  return [...lintPluginManifest(manifest, product.version), ...lintFindingsMethodSkill(skill)];
+  return [
+    ...lintPluginManifest(manifest, product.version),
+    ...lintFindingsMethodSkill(skill),
+    ...lintPluginCommands(),
+  ];
 }
 
 function isMain() {

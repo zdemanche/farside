@@ -6,10 +6,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { Finding } from "@farside/scan-contracts";
 import {
   CLI_ORG_ID,
+  DEFAULT_WORKSPACE_DIRNAME,
   EXIT_FAILED,
   EXIT_OK,
   EXIT_USAGE,
+  ROLE_LISTING_CLOSER,
+  defaultWorkspaceDir,
   runCli,
+  type ConnectReport,
 } from "./cli.js";
 import { TOKEN_FLAG_MESSAGE } from "./cli-credentials.js";
 import { EXPORT_FORMAT, exportFilename, validateExport } from "./export.js";
@@ -190,6 +194,49 @@ describe("farside CLI", () => {
       "azure-cost-spend-by-service",
     );
     expect(io.text(io.stderr.chunks)).toContain(PROVIDER_NOT_CONFIGURED);
+  });
+
+  it("connects with fixture credentials and names missing roles", async () => {
+    const home = workspace();
+    const io = capture();
+    expect(
+      await runCli(["connect", "--cloud", "azure", "--fixture"], { ...io, env: { HOME: home } }),
+    ).toBe(EXIT_OK);
+    const dir = defaultWorkspaceDir(home);
+    const report = JSON.parse(readFileSync(join(dir, "connect.json"), "utf8")) as ConnectReport;
+    expect(report.workspace).toBe(dir);
+    expect(dir.endsWith(DEFAULT_WORKSPACE_DIRNAME)).toBe(true);
+    expect(report.credentials).toEqual({ present: true, source: "fixture" });
+    expect(report.missingRoles).toEqual([]);
+    io.stdout.chunks.length = 0;
+    expect(
+      await runCli(["connect", "--cloud", "azure", "--workspace", home], {
+        ...io,
+        env: { HOME: home },
+        probe: () => ({ present: true, source: "azure-cli" }),
+        grantedRoles: ["Reader"],
+      }),
+    ).toBe(EXIT_FAILED);
+    const checked = JSON.parse(io.text(io.stdout.chunks)) as ConnectReport;
+    expect(checked.missingRoles.some((gap) => gap.role === "Cost Management Reader" && gap.required)).toBe(true);
+    expect(checked.missingRoles.find((gap) => gap.role === "Cost Management Reader")?.blockedCheckIds).toContain(
+      "azure-cost-spend-by-service",
+    );
+    io.stdout.chunks.length = 0;
+    expect(
+      await runCli(["connect", "--cloud", "gcp"], {
+        ...io,
+        env: { HOME: home },
+        probe: () => ({ present: true, source: "gcp-adc" }),
+      }),
+    ).toBe(EXIT_OK);
+    const unverified = JSON.parse(io.text(io.stdout.chunks)) as ConnectReport;
+    expect(unverified.roleListing).toBe("unverified");
+    expect(unverified.closer).toBe(ROLE_LISTING_CLOSER);
+    expect(unverified.expectedRoles?.some((gap) => gap.role === "Recommender Viewer")).toBe(true);
+    expect(unverified.expectedRoles?.find((gap) => gap.role === "Recommender Viewer")?.blockedCheckIds).toContain(
+      "gcp-waste-idle-vm-and-disk-recommendations",
+    );
   });
 
   it("does not import Fastify or the AWS SDK", () => {
