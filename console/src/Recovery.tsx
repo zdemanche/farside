@@ -3,6 +3,7 @@ import { useOverview, useSource } from "./data/context";
 import type { RecoveryView } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { ScreenState, gapsMessage } from "./ScreenState";
+import { TERMS, coverageStateLabel } from "./terms";
 
 function backupSummary({ unprotected, checked, undetermined }: RecoveryView): string {
   if (undetermined === 0) {
@@ -32,7 +33,10 @@ export function Recovery() {
         partial
         empty={(data) =>
           data.rows.length === 0
-            ? gapsMessage(overview, "No backup or redundancy gaps were found on the scopes that were assessed.")
+            ? gapsMessage(
+                overview,
+                `No backup or redundancy gaps were found on the scopes that were ${TERMS.assessed}.`,
+              )
             : null
         }
       >
@@ -64,7 +68,7 @@ export function Recovery() {
                       <td>{row.checkId}</td>
                       <td>{row.evidence}</td>
                       <td>
-                        <Chip tone={coverageTone(row.coverage)}>{row.coverage}</Chip>
+                        <Chip tone={coverageTone(row.coverage)}>{coverageStateLabel(row.coverage)}</Chip>
                       </td>
                     </tr>
                   ))}

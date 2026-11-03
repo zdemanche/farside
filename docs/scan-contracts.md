@@ -38,9 +38,19 @@ Each addition is implemented in `@farside/scan-contracts`. A later change to das
 | Coverage `assessed: boolean` per scope | Unassessed scopes contribute nothing to the score. |
 | `scoreHealth` in this package | One formula; screens do not reimplement it. |
 
+## Coverage glossary
+
+| Term | Means | Not |
+|---|---|---|
+| **assessed** | The check ran on this scope and produced a pass or fail. Coverage is a boolean. | “covered”, “proven” |
+| **not assessed** | The check has not run on this scope (or stopped short). Left out of the health score. | “unassessed” as a third coverage kind |
+| **undetermined** | The check ran but could not decide. That is a **result**, not a coverage state. Always carries a closer. | A coverage flag |
+
+Console screens import these words from `console/src/terms.ts`. Blind spots list both “not assessed” and “undetermined” in a State column so the reader can tell “not run” from “ran but could not decide”.
+
 ## Health score
 
-See `HEALTH_SCORE_FORMULA` in `@farside/scan-contracts`. Unassessed scopes are omitted from the score. A fixture with no findings yields **coverage only and `score: null`**.
+See `HEALTH_SCORE_FORMULA` in `@farside/scan-contracts`. Scopes that were not assessed are omitted from the score. A fixture with no findings yields **coverage only and `score: null`**.
 
 ## Leftover
 

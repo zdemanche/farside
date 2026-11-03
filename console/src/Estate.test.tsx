@@ -44,8 +44,8 @@ describe("Estate, Inventory and Settings", () => {
     expect(await screen.findByText("Resources 4")).toBeTruthy();
     expect(screen.getByText("No owner 1")).toBeTruthy();
     expect(screen.getByText("Assessed scopes 15")).toBeTruthy();
-    expect(screen.getByText("Unassessed scopes 4")).toBeTruthy();
-    expect(screen.getByText("Undetermined scopes 1")).toBeTruthy();
+    expect(screen.getByText("Not assessed scopes 4")).toBeTruthy();
+    expect(screen.getByText("Undetermined results 1")).toBeTruthy();
     expect(screen.getByText("Health score 13")).toBeTruthy();
     const failing = {
       checkId: "check",

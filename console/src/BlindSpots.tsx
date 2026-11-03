@@ -1,6 +1,7 @@
 import { useSource } from "./data/context";
 import { useResource } from "./data/use-resource";
 import { ScreenState } from "./ScreenState";
+import { TERMS, coverageStateLabel } from "./terms";
 
 export function BlindSpots() {
   const source = useSource();
@@ -11,7 +12,8 @@ export function BlindSpots() {
         Blind spots
       </h1>
       <p className="page-description">
-        Farside does not treat silence as health. Unassessed scopes are left out of the score.
+        Farside does not treat silence as health. Scopes that were {TERMS.notAssessed} are left out
+        of the score.
       </p>
       <ScreenState
         label="blind spots"
@@ -20,7 +22,7 @@ export function BlindSpots() {
           data.total === 0
             ? "No scopes have been checked yet. Connect a cloud estate and run a scan."
             : data.spots.length === 0
-              ? "Every scope was assessed. Nothing was left out of the score."
+              ? `Every scope was ${TERMS.assessed}. Nothing was left out of the score.`
               : null
         }
       >
@@ -41,6 +43,7 @@ export function BlindSpots() {
                 <thead>
                   <tr>
                     <th scope="col">Check</th>
+                    <th scope="col">State</th>
                     <th scope="col">Why it was not checked</th>
                     <th scope="col">What would close it</th>
                   </tr>
@@ -49,6 +52,7 @@ export function BlindSpots() {
                   {data.spots.map((spot) => (
                     <tr key={spot.id}>
                       <th scope="row">{spot.checkId}</th>
+                      <td>{coverageStateLabel(spot.state)}</td>
                       <td>{spot.reason}</td>
                       <td>{spot.closer}</td>
                     </tr>

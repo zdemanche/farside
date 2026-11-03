@@ -4,6 +4,7 @@ import { useSource } from "./data/context";
 import type { IssueRow, IssueStatus } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { ScreenState } from "./ScreenState";
+import { TERMS, coverageStateLabel } from "./terms";
 
 const STATUS_TONE: Record<IssueStatus, Tone> = {
   open: "warn",
@@ -150,7 +151,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
                     </Chip>
                   </td>
                   <td>
-                    <Chip tone={coverageTone(issue.coverage)}>{issue.coverage}</Chip>
+                    <Chip tone={coverageTone(issue.coverage)}>{coverageStateLabel(issue.coverage)}</Chip>
                   </td>
                   <td>{issue.savings}</td>
                 </tr>
@@ -165,7 +166,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
           <p>Check {selected.checkId}</p>
           <p>Evidence {selected.evidence}</p>
           <p>Savings {selected.savings}</p>
-          <p>Coverage {selected.coverage}</p>
+          <p>Coverage {coverageStateLabel(selected.coverage)}</p>
           <p>First seen {selected.firstSeen}</p>
           <p>Last confirmed {selected.lastConfirmed}</p>
           {selected.closingScanId ? <p>Closing scan {selected.closingScanId}</p> : null}
@@ -185,7 +186,8 @@ export function Issues({ hash = currentHash() }: { hash?: string }) {
         Issues
       </h1>
       <p className="page-description">
-        Stored issues with proof of coverage. An issue closes only when its scope was covered.
+        Stored issues with proof the scope was {TERMS.assessed}. An issue closes only when its
+        scope was {TERMS.assessed}.
       </p>
       <ScreenState
         label="issues"
