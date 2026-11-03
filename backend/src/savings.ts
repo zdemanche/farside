@@ -119,3 +119,15 @@ export function gcpDiskMonthlySavings(sizeGb: number): NamedSavingsRange {
 export function gcpIpMonthlySavings(): NamedSavingsRange {
   return savingsRange({ min: 2.5, max: 4, currency: "USD", basis: GCP_IP_SAVINGS_BASIS });
 }
+
+export const GCP_SNAPSHOT_IMAGE_SAVINGS_BASIS =
+  "Monthly storage list price of the old snapshot or image, as a range";
+
+export function gcpSnapshotImageMonthlySavings(sizeGb: number): NamedSavingsRange {
+  return savingsRange({
+    min: sizeGb * 0.026,
+    max: sizeGb * 0.04,
+    currency: "USD",
+    basis: GCP_SNAPSHOT_IMAGE_SAVINGS_BASIS,
+  });
+}

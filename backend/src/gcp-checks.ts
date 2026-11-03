@@ -1,15 +1,18 @@
 import { assertValid, validateFinding, type Finding, type Inventory } from "@farside/scan-contracts";
 import type { ResourceFacts } from "./facts.js";
 import { projectOf } from "./gcp-inventory.js";
-import { gcpDiskMonthlySavings, gcpIpMonthlySavings } from "./savings.js";
+import { gcpDiskMonthlySavings, gcpIpMonthlySavings, gcpSnapshotImageMonthlySavings } from "./savings.js";
 import type { OrgSettings } from "./settings.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
 
 export const GCP_UNATTACHED_DISKS = "gcp-waste-unattached-disks";
 export const GCP_UNUSED_IPS = "gcp-waste-unused-external-ips";
+export const GCP_OLD_SNAPSHOTS_AND_IMAGES = "gcp-waste-old-snapshots-and-images";
 
 const DISK_TYPE = "compute.googleapis.com/Disk";
 const ADDRESS_TYPE = "compute.googleapis.com/Address";
+const SNAPSHOT_TYPE = "compute.googleapis.com/Snapshot";
+const IMAGE_TYPE = "compute.googleapis.com/Image";
 
 function acceptFinding(finding: Finding): Finding {
   assertValid(validateFinding(finding));
@@ -155,6 +158,85 @@ export function checkGcpUnusedIps(
         result: "pass",
         evidence: {
           fields: { addressId, address: ip, status, usersCount, region },
+        },
+        scope,
+      });
+    });
+}
+
+export function checkGcpOldSnapshotsAndImages(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+  settings: OrgSettings = DEFAULT_SETTINGS,
+): Finding[] {
+  const byUri = new Map(facts.map((row) => [row.resourceUri, row]));
+  const threshold = settings.snapshotRetentionDays;
+  return inventory.resources
+    .filter((resource) => resource.resourceType === SNAPSHOT_TYPE || resource.resourceType === IMAGE_TYPE)
+    .map((item) => {
+      const row = byUri.get(item.resourceUri);
+      const scope = gcpScope(item.resourceUri, GCP_OLD_SNAPSHOTS_AND_IMAGES);
+      const snapshotOrImageId = fieldString(row?.fields, "snapshotOrImageId", item.displayName);
+      const creationTimestamp =
+        typeof row?.fields.creationTimestamp === "string" ? row.fields.creationTimestamp : null;
+      if (!(threshold > 0)) {
+        return acceptFinding({
+          checkId: GCP_OLD_SNAPSHOTS_AND_IMAGES,
+          result: "undetermined",
+          closer: "Set snapshot retention days in Settings",
+          evidence: {
+            fields: { snapshotOrImageId, creationTimestamp, ageDays: null, retentionDays: null },
+          },
+          scope,
+        });
+      }
+      const ageDays = row?.fields.ageDays;
+      if (typeof ageDays !== "number") {
+        return acceptFinding({
+          checkId: GCP_OLD_SNAPSHOTS_AND_IMAGES,
+          result: "undetermined",
+          closer: "A snapshot or image read that includes creationTimestamp",
+          evidence: {
+            fields: { snapshotOrImageId, creationTimestamp, ageDays: null, retentionDays: threshold },
+          },
+          scope,
+        });
+      }
+      if (ageDays > threshold) {
+        const sizeGb = row?.fields.sizeGb;
+        if (typeof sizeGb !== "number" || sizeGb <= 0) {
+          return acceptFinding({
+            checkId: GCP_OLD_SNAPSHOTS_AND_IMAGES,
+            result: "undetermined",
+            closer: "A snapshot or image read that includes sizeGb",
+            evidence: {
+              fields: { snapshotOrImageId, creationTimestamp, ageDays, retentionDays: threshold },
+            },
+            scope,
+          });
+        }
+        const savings = gcpSnapshotImageMonthlySavings(sizeGb);
+        return acceptFinding({
+          checkId: GCP_OLD_SNAPSHOTS_AND_IMAGES,
+          result: "fail",
+          evidence: {
+            fields: {
+              snapshotOrImageId,
+              creationTimestamp,
+              ageDays,
+              retentionDays: threshold,
+              savingsBasis: savings.basis,
+            },
+          },
+          scope,
+          savings: { min: savings.min, max: savings.max, currency: savings.currency },
+        });
+      }
+      return acceptFinding({
+        checkId: GCP_OLD_SNAPSHOTS_AND_IMAGES,
+        result: "pass",
+        evidence: {
+          fields: { snapshotOrImageId, creationTimestamp, ageDays, retentionDays: threshold },
         },
         scope,
       });
