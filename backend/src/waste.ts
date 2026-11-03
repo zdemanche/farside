@@ -38,7 +38,18 @@ function addDecimal(left: string, right: string): string {
 
 export function wasteResourceId(finding: Finding): string {
   const fields = finding.evidence.fields;
-  for (const key of ["diskId", "snapshotId", "publicIpId", "vmId", "planId", "loadBalancerId", "natGatewayId"]) {
+  for (const key of [
+    "diskId",
+    "snapshotId",
+    "snapshotOrImageId",
+    "publicIpId",
+    "addressId",
+    "vmId",
+    "planId",
+    "loadBalancerId",
+    "natGatewayId",
+    "recommendationId",
+  ]) {
     const value = fields[key];
     if (typeof value === "string" && value.length > 0) {
       return value;
@@ -48,7 +59,7 @@ export function wasteResourceId(finding: Finding): string {
 }
 
 export function isWasteFinding(finding: Finding): boolean {
-  return finding.checkId.startsWith("azure-waste-") && finding.result === "fail" && finding.savings != null;
+  return /^(azure|gcp)-waste-/.test(finding.checkId) && finding.result === "fail" && finding.savings != null;
 }
 
 export function isAssessedFinding(coverage: CoverageEntry[], finding: Finding): boolean {
@@ -62,7 +73,7 @@ export function wasteTotals(
 ): WasteTotals {
   const assessed = findings.filter((finding) => isWasteFinding(finding) && isAssessedFinding(coverage, finding));
   const unassessedScopes = coverage.filter(
-    (entry) => entry.checkId.startsWith("azure-waste-") && entry.state !== "assessed",
+    (entry) => /^(azure|gcp)-waste-/.test(entry.checkId) && entry.state !== "assessed",
   ).length;
   const currency = assessed[0]?.savings?.currency ?? "USD";
   return {

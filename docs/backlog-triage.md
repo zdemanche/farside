@@ -45,8 +45,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 28. **E6-S1-T5** — merged (#255). GCP control spec. Live project is D7 / #189.
 29. **E6-S2-T3** — merged (#256). GCP owner-label gaps against fixtures. Cloud Asset harvest is #197.
 30. **E6-S3-T1** — merged (#257). GCP unattached disks and unused IPs against fixtures.
-31. **E6-S3-T2** — this change: GCP old snapshots and images against fixtures.
-32. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+31. **E6-S3-T2** — merged (#258). GCP old snapshots and images against fixtures.
+32. **E6-S3-T4** — this change: savings ranges and honest empty Recommender wording. Live harvest is #202.
+33. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -300,7 +301,7 @@ Entire GCP epic needs D7 (#7) and a live project. Collectors also (d) AIF.
 | `E6-S3-T1` | #200 | Implement unattached disk and unused IP checks | (a) done | Fixture positives/negatives. Live Compute Viewer is (c). |
 | `E6-S3-T2` | #201 | Implement old snapshot and image checks | (a) this change | Fixture positives/negatives vs `Settings.snapshotRetentionDays`. |
 | `E6-S3-T3` | #202 | Turn idle VM and disk recommendations into findings | (c) live Azure / GCP / test tenant | Idle VM/disk recommendations from Recommender. |
-| `E6-S3-T4` | #203 | Add savings ranges and the empty-result wording | (a) doable in code now | Savings ranges and empty-result wording. |
+| `E6-S3-T4` | #203 | Add savings ranges and the empty-result wording | (a) this change | Empty-result wording and range-only savings. Live harvest is #202. |
 | `E6-S4` | #204 | GCP resilience and lifecycle checks | (a) doable in code now | SQL HA/backup, support data, cert expiry. Seeded live proof is (c). |
 | `E6-S4-T1` | #205 | Implement Cloud SQL high availability and backup checks | (c) live Azure / GCP / test tenant | Cloud SQL HA/backup against seeded instances. |
 | `E6-S4-T2` | #206 | Build SQL and GKE support data and checks | (a) doable in code now | SQL/GKE support data and checks. |
