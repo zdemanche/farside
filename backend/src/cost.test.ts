@@ -145,7 +145,7 @@ describe("cost harvest", () => {
 
 describe("cost routes", () => {
   const store = new MemoryStore(fixedClock);
-  const app = buildApp(store, TEST_APP_OPTIONS);
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, costClient: fixtureCostClient() });
 
   afterAll(async () => {
     await app.close();

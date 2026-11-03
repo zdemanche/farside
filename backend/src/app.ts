@@ -15,31 +15,32 @@ import {
   type CoverageState,
 } from "./coverage.js";
 import type { CoverageCauseId } from "./causes.js";
-import { analyzeAlerts, type SpendAlert } from "./alerts.js";
+import { analyzeAlerts, type DailyCost, type SpendAlert } from "./alerts.js";
 import {
   applyBudgetCoverage,
-  defaultBudgetClient,
   harvestBudgets,
   mergeBudgetFindings,
   NO_BUDGETS,
+  unconfiguredBudgetClient,
   type BudgetClient,
 } from "./budgets.js";
 import {
   applyCommitmentCoverage,
-  defaultCommitmentClient,
   harvestCommitments,
   mergeCommitmentFindings,
   RESERVATION_USE,
   SAVINGS_PLAN_USE,
+  unconfiguredCommitmentClient,
   type CommitmentClient,
 } from "./commitments.js";
 import { applyScanToIssues } from "./issues.js";
 import {
   applyCostCoverage,
-  defaultCostClient,
   harvestCost,
+  unconfiguredCostClient,
   type CostQueryClient,
 } from "./cost.js";
+import { ProviderNotConfiguredError } from "./providers.js";
 import type { Clock } from "./clock.js";
 import {
   CardDataError,
@@ -59,7 +60,7 @@ import { matchesCloud, parseCloudQuery, type Cloud } from "./cloud.js";
 import { applyOwnerTag, browseInventories, groupInventory, noOwnerTotal } from "./inventory.js";
 import { scopeOf } from "./scope.js";
 import { SecretLeakError, assertNoSecrets } from "./secrets.js";
-import { defaultHarvester, ScanRunner, toScanView, toScanViews, type Harvester } from "./scans.js";
+import { ScanRunner, toScanView, toScanViews, unconfiguredHarvester, type Harvester } from "./scans.js";
 import { ScanScheduler } from "./scheduler.js";
 import { parseSettings } from "./settings.js";
 import { assertOrgAccess, isOperator, sessionFromHeaders, type Session } from "./session.js";
@@ -155,6 +156,21 @@ function sendClean(reply: FastifyReply, status: number, body: unknown) {
   return reply.code(status).send(body);
 }
 
+async function withProvider<T>(
+  reply: FastifyReply,
+  run: () => Promise<T>,
+): Promise<{ ok: true; value: T } | { ok: false }> {
+  try {
+    return { ok: true, value: await run() };
+  } catch (error) {
+    if (error instanceof ProviderNotConfiguredError) {
+      void problem(reply, 503, error.message);
+      return { ok: false };
+    }
+    throw error;
+  }
+}
+
 function connectionInput(body: unknown): { tenantId: string; subscriptionId: string } | null {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return null;
@@ -187,11 +203,11 @@ export function buildApp(
     trustClientClock && typeof candidate === "string" ? candidate : clock();
   const runner = new ScanRunner(
     store,
-    guardHarvester(options.harvester ?? defaultHarvester(clock)),
+    guardHarvester(options.harvester ?? unconfiguredHarvester()),
     {
-      costClient: options.costClient ?? defaultCostClient(),
-      commitmentClient: options.commitmentClient ?? defaultCommitmentClient(),
-      budgetClient: options.budgetClient ?? defaultBudgetClient(),
+      ...(options.costClient ? { costClient: options.costClient } : {}),
+      ...(options.commitmentClient ? { commitmentClient: options.commitmentClient } : {}),
+      ...(options.budgetClient ? { budgetClient: options.budgetClient } : {}),
     },
     clock,
   );
@@ -633,27 +649,33 @@ export function buildApp(
         cost: store.snapshot(request.params.orgId).cost,
       });
     }
-    const harvested = await harvestCost({
-      client: guardProviderClient(request.params.orgId, options.costClient ?? defaultCostClient()),
-      subscriptionId,
-      billingScope,
-      agreementType,
-      asOf: clock(),
-    });
-    store.putCoverage(
-      request.params.orgId,
-      applyCostCoverage(store.snapshot(request.params.orgId).coverage, harvested.coverage),
+    const harvested = await withProvider(reply, () =>
+      harvestCost({
+        client: guardProviderClient(request.params.orgId, options.costClient ?? unconfiguredCostClient()),
+        subscriptionId,
+        billingScope,
+        agreementType,
+        asOf: clock(),
+      }),
     );
     if (!harvested.ok) {
+      return reply;
+    }
+    const costHarvest = harvested.value;
+    store.putCoverage(
+      request.params.orgId,
+      applyCostCoverage(store.snapshot(request.params.orgId).coverage, costHarvest.coverage),
+    );
+    if (!costHarvest.ok) {
       store.putCost(request.params.orgId, null);
       return sendClean(reply, 200, {
         harvested: false,
-        reason: harvested.reason,
-        closer: harvested.coverage[0]?.closer,
+        reason: costHarvest.reason,
+        closer: costHarvest.coverage[0]?.closer,
       });
     }
-    store.putCost(request.params.orgId, harvested.snapshot);
-    return sendClean(reply, 200, { harvested: true, cost: harvested.snapshot });
+    store.putCost(request.params.orgId, costHarvest.snapshot);
+    return sendClean(reply, 200, { harvested: true, cost: costHarvest.snapshot });
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/commitments", async (request, reply) => {
@@ -693,44 +715,53 @@ export function buildApp(
         findings: org.findings,
       });
     }
-    const harvested = await harvestCommitments({
-      client: guardProviderClient(request.params.orgId, options.commitmentClient ?? defaultCommitmentClient()),
-      subscriptionId,
-      billingScope,
-    });
-    store.putCoverage(
-      request.params.orgId,
-      applyCommitmentCoverage(store.snapshot(request.params.orgId).coverage, harvested.coverage),
+    const harvested = await withProvider(reply, () =>
+      harvestCommitments({
+        client: guardProviderClient(
+          request.params.orgId,
+          options.commitmentClient ?? unconfiguredCommitmentClient(),
+        ),
+        subscriptionId,
+        billingScope,
+      }),
     );
     if (!harvested.ok) {
+      return reply;
+    }
+    const commitmentHarvest = harvested.value;
+    store.putCoverage(
+      request.params.orgId,
+      applyCommitmentCoverage(store.snapshot(request.params.orgId).coverage, commitmentHarvest.coverage),
+    );
+    if (!commitmentHarvest.ok) {
       store.putCommitments(request.params.orgId, null);
       return sendClean(reply, 200, {
         harvested: false,
-        reason: harvested.reason,
-        closer: harvested.coverage[0]?.closer,
+        reason: commitmentHarvest.reason,
+        closer: commitmentHarvest.coverage[0]?.closer,
       });
     }
-    store.putCommitments(request.params.orgId, harvested.snapshot);
+    store.putCommitments(request.params.orgId, commitmentHarvest.snapshot);
     const commitmentFindings = mergeCommitmentFindings(
       store.snapshot(request.params.orgId).findings,
-      harvested.findings,
+      commitmentHarvest.findings,
     );
     store.putFindings(request.params.orgId, commitmentFindings);
     store.putIssues(
       request.params.orgId,
       applyScanToIssues({
         issues: store.snapshot(request.params.orgId).issues,
-        findings: harvested.findings,
+        findings: commitmentHarvest.findings,
         coverage: store.snapshot(request.params.orgId).coverage,
         scanId: "harvest-commitments",
-        observedAt: harvested.snapshot.periodEnd,
+        observedAt: commitmentHarvest.snapshot.periodEnd,
         checkIds: [RESERVATION_USE, SAVINGS_PLAN_USE],
       }),
     );
     return sendClean(reply, 200, {
       harvested: true,
-      commitments: harvested.snapshot,
-      findings: harvested.findings,
+      commitments: commitmentHarvest.snapshot,
+      findings: commitmentHarvest.findings,
     });
   });
 
@@ -757,34 +788,40 @@ export function buildApp(
         findings: org.findings,
       });
     }
-    const harvested = await harvestBudgets({
-      client: guardProviderClient(request.params.orgId, options.budgetClient ?? defaultBudgetClient()),
-      lastConfirmed: clock(),
-    });
+    const harvested = await withProvider(reply, () =>
+      harvestBudgets({
+        client: guardProviderClient(request.params.orgId, options.budgetClient ?? unconfiguredBudgetClient()),
+        lastConfirmed: clock(),
+      }),
+    );
+    if (!harvested.ok) {
+      return reply;
+    }
+    const budgetHarvest = harvested.value;
     store.putCoverage(
       request.params.orgId,
-      applyBudgetCoverage(store.snapshot(request.params.orgId).coverage, harvested.coverage),
+      applyBudgetCoverage(store.snapshot(request.params.orgId).coverage, budgetHarvest.coverage),
     );
-    store.putBudgets(request.params.orgId, harvested.snapshot);
+    store.putBudgets(request.params.orgId, budgetHarvest.snapshot);
     store.putFindings(
       request.params.orgId,
-      mergeBudgetFindings(store.snapshot(request.params.orgId).findings, harvested.findings),
+      mergeBudgetFindings(store.snapshot(request.params.orgId).findings, budgetHarvest.findings),
     );
     store.putIssues(
       request.params.orgId,
       applyScanToIssues({
         issues: store.snapshot(request.params.orgId).issues,
-        findings: harvested.findings,
+        findings: budgetHarvest.findings,
         coverage: store.snapshot(request.params.orgId).coverage,
         scanId: "harvest-budgets",
-        observedAt: harvested.snapshot.lastConfirmed,
+        observedAt: budgetHarvest.snapshot.lastConfirmed,
         checkIds: [NO_BUDGETS],
       }),
     );
     return sendClean(reply, 200, {
       harvested: true,
-      budgets: harvested.snapshot,
-      findings: harvested.findings,
+      budgets: budgetHarvest.snapshot,
+      findings: budgetHarvest.findings,
     });
   });
 
@@ -810,18 +847,21 @@ export function buildApp(
       return sendClean(reply, 200, store.snapshot(request.params.orgId).alerts);
     }
     const body = (request.body as Record<string, unknown> | null) ?? {};
+    const rows = Array.isArray(body.rows) ? (body.rows as DailyCost[]) : null;
+    if (!rows) {
+      return problem(reply, 409, "No cost series");
+    }
     const recipients = Array.isArray(body.recipients)
       ? body.recipients.filter((item): item is string => typeof item === "string")
       : [];
     const previous = Array.isArray(body.previous) ? (body.previous as SpendAlert[]) : [];
+    const asOf =
+      trustClientClock && typeof body.asOf === "string" ? body.asOf : clock().slice(0, 10);
     const analysis = analyzeAlerts({
+      rows,
+      asOf,
       recipients,
       previous,
-      ...(trustClientClock
-        ? typeof body.asOf === "string"
-          ? { asOf: body.asOf }
-          : {}
-        : { asOf: clock().slice(0, 10) }),
     });
     store.putAlerts(request.params.orgId, analysis);
     return sendClean(reply, 200, analysis);
