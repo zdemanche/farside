@@ -91,6 +91,13 @@ describe("no-secrets guard", () => {
       "Entra secret value",
       { note: "Abc8Q~aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
     ],
+    ["numeric password", { password: 12345678 }],
+    ["numeric apiKey", { apiKey: 4242424242 }],
+    ["tag value PEM", { tags: { owner: "-----BEGIN PRIVATE KEY-----" } }],
+    [
+      "underscore-prefixed Entra value",
+      { note: "_bc8Q~aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    ],
     ["JWT value", { note: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaaaaaaaaa" }],
   ])("rejects %s", (_name, payload) => {
     expect(() => assertNoSecrets(payload)).toThrow(SecretLeakError);
@@ -100,10 +107,21 @@ describe("no-secrets guard", () => {
     ["ownerTagKey", { ownerTagKey: "owner" }],
     ["tokenCount", { tokenCount: 3 }],
     ["budgetCount", { budgetCount: 2 }],
+    ["SASWorkload tag", { tags: { SASWorkload: "prod" } }],
+    ["secret-rotation tag", { tags: { "secret-rotation": "90d" } }],
+    ["TokenBudget tag", { tags: { TokenBudget: "x" } }],
+    ["nested tags", { inventory: [{ tags: { sasOwner: "x" } }] }],
+    ["sasOwner key", { sasOwner: "team" }],
     ["tenantId", { tenantId: "t", subscriptionId: "s" }],
     ["plain prose", { note: "rotate the secret store quarterly" }],
     ["short sig text", { note: "sig=abc" }],
   ])("accepts %s", (_name, payload) => {
     expect(secretPaths(payload)).toEqual([]);
+  });
+
+  it("evaluates a long eyJ run quickly", () => {
+    const started = performance.now();
+    secretPaths({ note: "eyJ".repeat(100_000) });
+    expect(performance.now() - started).toBeLessThan(200);
   });
 });

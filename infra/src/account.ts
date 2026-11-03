@@ -18,25 +18,27 @@ export function parseAccountRegistry(raw: string): AccountRegistry {
   const parsed = JSON.parse(raw) as Partial<AccountRegistry>;
   const productDev = parsed.productDev;
   const customers = parsed.customers;
-  if (!productDev || !customers || typeof customers !== "object") {
-    throw new Error("account registry needs productDev and customers");
+  if (
+    !productDev ||
+    typeof productDev.customer !== "string" ||
+    !customers ||
+    typeof customers !== "object" ||
+    Array.isArray(customers)
+  ) {
+    throw new Error("account registry needs productDev and a customers object");
   }
-  const entries: [string, string][] = [
-    [productDev.customer, productDev.accountId],
-    ...Object.entries(customers),
-  ];
+  if (Object.hasOwn(customers, productDev.customer)) {
+    throw new SharedAccountError(`Customer ${productDev.customer} is the product-dev slug and cannot also be a customer.`);
+  }
+  const entries: [string, unknown][] = [[productDev.customer, productDev.accountId], ...Object.entries(customers)];
   const owners = new Map<string, string>();
   for (const [customer, accountId] of entries) {
-    if (!ACCOUNT_ID.test(accountId)) {
-      throw new Error(
-        `account registry entry for ${customer} must be a 12-digit AWS account id`,
-      );
+    if (typeof accountId !== "string" || !ACCOUNT_ID.test(accountId)) {
+      throw new Error(`account registry entry for ${customer} must be a 12-digit AWS account id`);
     }
     const other = owners.get(accountId);
     if (other !== undefined) {
-      throw new SharedAccountError(
-        `Account ${accountId} is registered to both ${other} and ${customer}.`,
-      );
+      throw new SharedAccountError(`Account ${accountId} is registered to both ${other} and ${customer}.`);
     }
     owners.set(accountId, customer);
   }

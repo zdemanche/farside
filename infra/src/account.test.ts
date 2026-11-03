@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   SharedAccountError,
@@ -103,8 +104,23 @@ describe("account registry", () => {
 
   it("loads the committed registry", () => {
     const committed = loadAccountRegistry(
-      new URL("../accounts.json", import.meta.url).pathname,
+      fileURLToPath(new URL("../accounts.json", import.meta.url)),
     );
     expect(committed.productDev.customer).toBe("moonaan-dev");
+  });
+
+  it.each([
+    ["numeric accountId", { productDev: { customer: "moonaan-dev", accountId: 100000000000 }, customers: {} }],
+    ["array customers", { productDev: { customer: "moonaan-dev", accountId: "100000000000" }, customers: [] }],
+    ["null customers", { productDev: { customer: "moonaan-dev", accountId: "100000000000" }, customers: null }],
+    [
+      "customer equal to productDev slug",
+      {
+        productDev: { customer: "moonaan-dev", accountId: "100000000000" },
+        customers: { "moonaan-dev": "123456789012" },
+      },
+    ],
+  ])("rejects %s", (_name, registryJson) => {
+    expect(() => parseAccountRegistry(JSON.stringify(registryJson))).toThrow();
   });
 });

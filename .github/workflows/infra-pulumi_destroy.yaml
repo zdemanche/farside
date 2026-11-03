@@ -29,25 +29,38 @@ permissions:
 jobs:
   destroy:
     runs-on: ubuntu-latest
-    if: inputs.destroy
     environment: customer
     permissions:
       contents: read
       id-token: write
     steps:
-      - name: Validate confirmation and accountId
+      - uses: actions/checkout@v4
+      - name: Validate destroy confirmation and accountId
         env:
           CUSTOMER_NAME: ${{ inputs.customerName }}
-          CONFIRM: ${{ inputs.confirm }}
           ACCOUNT_ID: ${{ inputs.accountId }}
+          DESTROY: ${{ inputs.destroy }}
+          CONFIRM: ${{ inputs.confirm }}
         run: |
           set -euo pipefail
-          if ! [[ "$ACCOUNT_ID" =~ ^[0-9]{12}$ ]]; then
-            echo "::error::accountId must be a 12-digit AWS account id."
+          if [ "$DESTROY" != "true" ]; then
+            echo "::error::destroy is not true; nothing destroyed."
+            echo "Destroy refused: the destroy input was not true." >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
           if [ "$CONFIRM" != "$CUSTOMER_NAME" ]; then
             echo "::error::confirm must equal the customer slug."
+            echo "Destroy refused: confirm did not equal the customer slug." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          set -euo pipefail
+          if ! [[ "${ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]]; then
+            echo "::error::accountId must be a 12-digit AWS account id."
+            exit 1
+          fi
+          REGISTERED=$(jq -r --arg c "$CUSTOMER_NAME" 'if .productDev.customer == $c then .productDev.accountId else (.customers[$c] // "") end' infra/accounts.json)
+          if [ "$REGISTERED" != "$ACCOUNT_ID" ]; then
+            echo "::error::accountId is not the registered dedicated account for $CUSTOMER_NAME in infra/accounts.json."
             exit 1
           fi
       - name: Report that destroy is not wired

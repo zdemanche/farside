@@ -30,16 +30,22 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate accountId
+      - uses: actions/checkout@v4
+      - name: Validate accountId against the registry
         env:
+          CUSTOMER_NAME: ${{ inputs.customerName }}
           ACCOUNT_ID: ${{ inputs.accountId }}
         run: |
           set -euo pipefail
-          if ! [[ "$ACCOUNT_ID" =~ ^[0-9]{12}$ ]]; then
+          if ! [[ "${ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]]; then
             echo "::error::accountId must be a 12-digit AWS account id."
             exit 1
           fi
-      - uses: actions/checkout@v4
+          REGISTERED=$(jq -r --arg c "$CUSTOMER_NAME" 'if .productDev.customer == $c then .productDev.accountId else (.customers[$c] // "") end' infra/accounts.json)
+          if [ "$REGISTERED" != "$ACCOUNT_ID" ]; then
+            echo "::error::accountId is not the registered dedicated account for $CUSTOMER_NAME in infra/accounts.json."
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc

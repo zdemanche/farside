@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SharedAccountError } from "./account.js";
-import { parseAccountRegistry } from "./account.js";
+import { SharedAccountError, parseAccountRegistry } from "./account.js";
 import { materializeDevStack } from "./index.js";
 
 const registry = parseAccountRegistry(
