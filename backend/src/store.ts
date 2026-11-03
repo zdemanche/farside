@@ -1,6 +1,7 @@
 import type { Finding, Inventory } from "@farside/scan-contracts";
 import type { CoverageEntry } from "./coverage.js";
 import type { ResourceFacts } from "./facts.js";
+import type { StoredIssue } from "./issues.js";
 import { applyOwnerTag } from "./inventory.js";
 import { REQUIRED_AZURE_ROLES } from "./roles.js";
 import type { ScanJob } from "./scans.js";
@@ -23,6 +24,7 @@ export type OrgState = {
   settings: OrgSettings;
   scans: ScanJob[];
   facts: ResourceFacts[];
+  issues: StoredIssue[];
 };
 
 function emptyOrg(): OrgState {
@@ -34,6 +36,7 @@ function emptyOrg(): OrgState {
     settings: { ...DEFAULT_SETTINGS },
     scans: [],
     facts: [],
+    issues: [],
   };
 }
 
@@ -94,6 +97,12 @@ export class MemoryStore {
     assertNoSecrets(facts);
     this.org(orgId).facts = facts;
     return facts;
+  }
+
+  putIssues(orgId: string, issues: StoredIssue[]): StoredIssue[] {
+    assertNoSecrets(issues);
+    this.org(orgId).issues = issues;
+    return issues;
   }
 
   putSettings(orgId: string, settings: OrgSettings): OrgSettings {

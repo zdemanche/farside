@@ -5,7 +5,7 @@ export type EstateOverview = {
   resourceTotal: number;
   noOwnerTotal: number;
   coverage: { assessed: number; unassessed: number; undetermined: number };
-  healthScore: null;
+  healthScore: number | null;
 };
 
 export const EMPTY_OVERVIEW: EstateOverview = {
@@ -60,7 +60,7 @@ export const SEEDED_OVERVIEW: EstateOverview = {
   resourceTotal: SEEDED_RESOURCES.length,
   noOwnerTotal: 1,
   coverage: { assessed: 2, unassessed: 17, undetermined: 1 },
-  healthScore: null,
+  healthScore: 50,
 };
 
 export function applyOwnerTagKey(

@@ -20,7 +20,14 @@ export function Estate({ overview = EMPTY_OVERVIEW }: { overview?: EstateOvervie
             <li>Unassessed scopes {overview.coverage.unassessed}</li>
             <li>Undetermined scopes {overview.coverage.undetermined}</li>
           </ul>
-          <p>Phase 1 shows coverage only. There is no health score until checks produce findings.</p>
+          {overview.healthScore == null ? (
+            <p>There is no health score until checks produce findings on assessed scopes.</p>
+          ) : (
+            <>
+              <p>Health score {overview.healthScore}</p>
+              <p>Score uses only assessed scopes. Unassessed scopes are left out of the score.</p>
+            </>
+          )}
           <p>
             <a href="#blind-spots">Blind spots summary</a>
           </p>

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
@@ -16,21 +16,37 @@ describe("Issues screen", () => {
     window.location.hash = "";
   });
 
-  it("lists waste findings including idle plan, load balancer and NAT with evidence and savings", async () => {
+  it("filters stored issues and opens detail with coverage proof", async () => {
     const { container } = render(<App />);
     expect(screen.getByRole("heading", { name: "Issues" })).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toBe("7 open issues");
-    const table = screen.getByRole("table", { name: "Open waste issues" });
-    for (const issue of ISSUE_ROWS) {
-      const row = screen.getByRole("row", { name: new RegExp(issue.resourceId) });
-      expect(row.textContent).toContain(issue.checkId);
-      expect(row.textContent).toContain(issue.evidence);
-      expect(row.textContent).toMatch(/\$\d+\.\d{2}–\$\d+\.\d{2} USD/);
-      expect(table.textContent).toContain(issue.savings);
-    }
-    const results = await axe.run(container, {
+    const open = ISSUE_ROWS.filter((issue) => issue.status === "open");
+    expect(screen.getByRole("status").textContent).toBe(`${open.length} issues`);
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "closed" } });
+    expect(screen.getByRole("status").textContent).toBe("1 issues");
+    expect(screen.getByRole("row", { name: /disk-fixed/ })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "not_confirmed" } });
+    expect(screen.getByRole("row", { name: /disk-unconfirmed/ }).textContent).toMatch(/not confirmed/);
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "open" } });
+    fireEvent.change(screen.getByLabelText("Check"), {
+      target: { value: "azure-waste-unattached-disks" },
+    });
+    fireEvent.change(screen.getByLabelText("Subscription"), { target: { value: "main" } });
+    expect(screen.getByRole("link", { name: "disk-unattached" })).toBeTruthy();
+    const listResults = await axe.run(container, {
       rules: { "color-contrast": { enabled: false } },
     });
-    expect(results.violations).toEqual([]);
+    expect(listResults.violations).toEqual([]);
+    cleanup();
+    window.location.hash = "#issues/disk-unattached";
+    const detail = render(<App />);
+    expect(screen.getByRole("heading", { name: "disk-unattached" })).toBeTruthy();
+    expect(screen.getByText(/Evidence diskState Unattached/)).toBeTruthy();
+    expect(screen.getByText(/First seen/)).toBeTruthy();
+    expect(screen.getByText(/Last confirmed/)).toBeTruthy();
+    expect(screen.getByText(/Coverage assessed/)).toBeTruthy();
+    const detailResults = await axe.run(detail.container, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(detailResults.violations).toEqual([]);
   });
 });

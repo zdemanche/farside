@@ -27,8 +27,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 10. **E3-S2** — merged (#236).
 11. **E3-S3** — merged (#237).
 12. **E3-S4** — merged (#238).
-13. **E3-S5** — this change: retiring SKU catalogue, cert expiry, Lifecycle page against fixtures. Live near-expiry proof is (c).
-14. **E3+ remaining** — Issues store, Scans screens against fixtures.
+13. **E3-S5** — merged (#239).
+14. **E3-S6** — this change: issue store, close-only-if-covered, Issues queue, health score.
+15. **E3+ remaining** — Scans screens against fixtures.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -169,12 +170,12 @@ Phase 2 findings must be proven live. Engine and UI can be built against fixture
 | `E3-S5-T2` | #108 | Implement retiring SKU check | (a) this change | Retiring SKU check. |
 | `E3-S5-T3` | #109 | Implement certificate expiry check | (a) this change | Fixture near-expiry certs. Live proof is (c). |
 | `E3-S5-T4` | #110 | Build the Lifecycle page | (a) this change | Lifecycle page. |
-| `E3-S6` | #111 | Issues queue that closes only when covered | (a) doable in code now | Issue store, close-only-if-covered, Issues screen, health score. No live Azure required for the rule. |
-| `E3-S6-T1` | #112 | Create the issue store and identity rule | (a) doable in code now | Issue identity rule. |
-| `E3-S6-T2` | #113 | Implement close-only-if-covered logic | (a) doable in code now | Close-only-if-covered. |
-| `E3-S6-T3` | #114 | Build the Issues screen | (a) doable in code now | Issues screen. |
-| `E3-S6-T4` | #115 | Replay scans to test the lifecycle | (a) doable in code now | Replay scans through the store. |
-| `E3-S6-T5` | #116 | Add the health score to the Estate overview | (a) doable in code now | Health score on the overview via the shared helper. |
+| `E3-S6` | #111 | Issues queue that closes only when covered | (a) this change | Issue store, close-only-if-covered, Issues screen, health score. |
+| `E3-S6-T1` | #112 | Create the issue store and identity rule | (a) this change | Issue identity rule. |
+| `E3-S6-T2` | #113 | Implement close-only-if-covered logic | (a) this change | Close-only-if-covered. |
+| `E3-S6-T3` | #114 | Build the Issues screen | (a) this change | Issues screen. |
+| `E3-S6-T4` | #115 | Replay scans to test the lifecycle | (a) this change | Replay scans through the store. |
+| `E3-S6-T5` | #116 | Add the health score to the Estate overview | (a) this change | Health score on the overview via the shared helper. |
 | `E3-S7` | #117 | Scans screen with history and per-check results | (a) doable in code now | Scans API and screens over stored jobs. |
 | `E3-S7-T1` | #118 | Expose scan history and per-check results in the API | (a) doable in code now | Scan history API. |
 | `E3-S7-T2` | #119 | Build the Scans list and detail screens | (a) doable in code now | Scans list and detail. |

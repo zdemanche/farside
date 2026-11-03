@@ -277,6 +277,13 @@ export function buildApp(
     return sendClean(reply, 200, { findings: store.snapshot(request.params.orgId).findings });
   });
 
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/issues", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    return sendClean(reply, 200, { issues: store.snapshot(request.params.orgId).issues });
+  });
+
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/estate", async (request, reply) => {
     if (!requireOrg(request, reply)) {
       return reply;
