@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from "react";
-import { CONNECT_STEPS, REQUIRED_AZURE_ROLES } from "./connect";
+import { CONNECT_STEPS, REQUIRED_AZURE_ROLES } from "./connect-data";
 
 export function Connect() {
   const tenantFieldId = useId();

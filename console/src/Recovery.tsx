@@ -1,4 +1,4 @@
-import { RECOVERY_BACKUP, RECOVERY_ROWS, type RecoveryRow } from "./recovery";
+import { RECOVERY_BACKUP, RECOVERY_ROWS, type RecoveryRow } from "./recovery-data";
 
 export function Recovery({
   rows = RECOVERY_ROWS,

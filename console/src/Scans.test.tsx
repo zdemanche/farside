@@ -3,7 +3,7 @@ import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { Scans } from "./Scans";
-import { RUNNING_SCAN, SCAN_ROWS } from "./scans";
+import { RUNNING_SCAN, SCAN_ROWS } from "./scans-data";
 
 describe("Scans screen", () => {
   beforeEach(() => {

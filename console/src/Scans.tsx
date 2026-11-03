@@ -5,7 +5,7 @@ import {
   formatCoverage,
   formatDuration,
   type ScanRow,
-} from "./scans";
+} from "./scans-data";
 
 function selectedId(hash: string): string {
   const match = hash.match(/^scans\/(.+)$/);

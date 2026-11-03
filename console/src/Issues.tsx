@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { ISSUE_ROWS, type IssueRow, type IssueStatus } from "./issues";
+import { ISSUE_ROWS, type IssueRow, type IssueStatus } from "./issues-data";
 
 function selectedId(hash: string): string {
   const match = hash.match(/^issues\/(.+)$/);

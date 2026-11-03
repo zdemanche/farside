@@ -1,4 +1,4 @@
-import { LIFECYCLE_ROWS, LIFECYCLE_WITHIN_90, type LifecycleRow } from "./lifecycle";
+import { LIFECYCLE_ROWS, LIFECYCLE_WITHIN_90, type LifecycleRow } from "./lifecycle-data";
 
 export function Lifecycle({
   rows = LIFECYCLE_ROWS,
