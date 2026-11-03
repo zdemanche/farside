@@ -67,14 +67,16 @@ describe("Issues screen", () => {
     ).toBeNull();
   });
 
-  it("links the closing scan and the not-confirmed reason", async () => {
+  it("links a closed issue to the scan that closed it", async () => {
     renderScreen(<Issues hash="issues/disk-fixed" />);
     expect(
       (await screen.findByRole("link", { name: "scan-1" })).getAttribute(
         "href",
       ),
     ).toBe("#scans/scan-1");
-    cleanup();
+  });
+
+  it("links a not-confirmed issue to blind spots", async () => {
     renderScreen(<Issues hash="issues/sub-no-budget" />);
     const article = (
       await screen.findByRole("heading", { name: "sub-no-budget" })

@@ -1,8 +1,8 @@
 import { cleanup, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { HEALTH_SCORE_FORMULA } from "@farside/scan-contracts";
 import { BlindSpots } from "./BlindSpots";
-import { expectAxeClean, renderScreen } from "./test-utils";
+import { demoSource } from "./data/demo";
+import { expectAxeClean, renderScreen, sourceWith } from "./test-utils";
 
 describe("Blind spots screen", () => {
   beforeEach(() => {
@@ -15,9 +15,14 @@ describe("Blind spots screen", () => {
   });
 
   it("lists what could not be checked, why, and what would close it", async () => {
-    renderScreen(<BlindSpots />);
+    renderScreen(
+      <BlindSpots />,
+      sourceWith({
+        blindSpots: async () => ({ ...(await demoSource().blindSpots()), formula: "Score is passes over assessed scopes" }),
+      }),
+    );
     expect(screen.getByRole("heading", { name: "Blind spots" })).toBeTruthy();
-    expect(await screen.findByText(HEALTH_SCORE_FORMULA)).toBeTruthy();
+    expect(await screen.findByText("Score is passes over assessed scopes")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe(
       "5 of 20 scopes were left out of the score.",
     );
