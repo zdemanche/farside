@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Inventory } from "@farside/scan-contracts";
+import type { Cloud, Inventory } from "@farside/scan-contracts";
 import {
   AZURE_LAUNCH_CHECK_IDS,
   coverageFromHarvest,
@@ -41,6 +41,7 @@ export type ScanJob = {
   id: string;
   orgId: string;
   subscriptionId: string;
+  cloud: Cloud | null;
   actor: "user" | "system";
   status: ScanStatus;
   complete: boolean;
@@ -190,6 +191,7 @@ export class ScanRunner {
     const job = this.store.putJob({
       orgId: input.orgId,
       subscriptionId: input.subscriptionId,
+      cloud: null,
       actor: input.actor,
       status: "queued",
       complete: false,
@@ -223,6 +225,7 @@ export class ScanRunner {
       });
       this.store.putInventory(orgId, result.inventory);
       this.store.putFacts(orgId, result.facts);
+      this.store.patchJob(orgId, jobId, { cloud: result.inventory.cloud });
       let coverage = result.coverage;
       const checked = runChecks({
         inventory: result.inventory,

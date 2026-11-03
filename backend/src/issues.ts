@@ -1,4 +1,4 @@
-import type { Finding } from "@farside/scan-contracts";
+import type { Cloud, Finding } from "@farside/scan-contracts";
 import type { CoverageEntry, CoverageState } from "./coverage.js";
 
 export type IssueStatus = "open" | "closed" | "not_confirmed";
@@ -8,6 +8,7 @@ export type StoredIssue = {
   checkId: string;
   resourceId: string;
   scopeId: string;
+  cloud: Cloud;
   subscriptionOrProject: string;
   status: IssueStatus;
   evidence: Record<string, string | number | boolean | null>;
@@ -75,6 +76,7 @@ export function applyScanToIssues(input: {
       checkId: finding.checkId,
       resourceId,
       scopeId: finding.scope.id,
+      cloud: finding.scope.cloud,
       subscriptionOrProject: finding.scope.subscriptionOrProject,
       status: "open",
       evidence: { ...finding.evidence.fields },

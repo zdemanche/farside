@@ -2,11 +2,13 @@ import {
   assertValid,
   scoreHealth,
   validateCoverage,
+  type Cloud,
   type Coverage,
   type Finding,
   type HealthScore,
 } from "@farside/scan-contracts";
 import { COVERAGE_CAUSES, type CoverageCauseId } from "./causes.js";
+import { cloudFromCheckId } from "./cloud.js";
 
 export const AZURE_LAUNCH_CHECK_IDS = [
   "azure-inventory-all-resources",
@@ -41,6 +43,7 @@ export type CoverageState = "assessed" | "unassessed" | "undetermined";
 export type CoverageEntry = {
   id: string;
   checkId: string;
+  cloud: Cloud;
   subscriptionOrProject: string;
   state: CoverageState;
   causeId?: CoverageCauseId;
@@ -71,6 +74,7 @@ export function recordCoverageScope(input: {
   const entry: CoverageEntry = {
     id: scopeId(input.subscriptionOrProject, input.checkId),
     checkId: input.checkId,
+    cloud: cloudFromCheckId(input.checkId),
     subscriptionOrProject: input.subscriptionOrProject,
     state: input.state,
   };

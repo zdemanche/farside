@@ -1,4 +1,4 @@
-import type { Finding } from "@farside/scan-contracts";
+import type { Cloud, Finding } from "@farside/scan-contracts";
 import type { AlertAnalysis } from "./alerts.js";
 import type { CommitmentSnapshot } from "./commitments.js";
 import type { CostSnapshot } from "./cost.js";
@@ -8,6 +8,7 @@ import { scopeId } from "./coverage.js";
 export type WasteItem = {
   checkId: string;
   resourceId: string;
+  cloud: Cloud;
   subscriptionId: string;
   evidence: Finding["evidence"]["fields"];
   savings: { min: string; max: string; currency: string };
@@ -101,6 +102,7 @@ export function costWasteView(input: {
       {
         checkId: finding.checkId,
         resourceId,
+        cloud: finding.scope.cloud,
         subscriptionId: finding.scope.subscriptionOrProject,
         evidence: finding.evidence.fields,
         savings: finding.savings,

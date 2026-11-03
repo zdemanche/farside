@@ -49,8 +49,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 32. **E6-S3-T4** — merged (#296). Savings ranges and honest empty Recommender wording. Live harvest is #202.
 33. **E6-S4-T2** — merged (#297). SQL/GKE support catalogue and check against fixtures.
 34. **E6-S5-T3** — merged (#298). History-day gating of alerts. Empty-first-day UI is #210 / #243.
-35. **E6-S6-T3** — this change: floor/burst/alerts replay on a GCP series.
-36. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+35. **E6-S6-T3** — merged (#299). Floor/burst/alerts replay on a GCP series.
+36. **E6-S7-T1** — this change: cloud dimension on list APIs. Console leftover #243.
+37. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -318,7 +319,7 @@ Entire GCP epic needs D7 (#7) and a live project. Collectors also (d) AIF.
 | `E6-S6-T2` | #214 | Implement committed-use discount check | (c) live Azure / GCP / test tenant | Committed-use discount check live, or mark unverified. |
 | `E6-S6-T3` | #215 | Run floor, burst and alerts on GCP data | (a) this change | Replay fixture. Live BigQuery harvest is #213. |
 | `E6-S7` | #216 | GCP in the console and every GCP check run live | (c) live Azure / GCP / test tenant | Two-cloud console plus every GCP check live. Scheduler unattended is (c). |
-| `E6-S7-T1` | #217 | Add cloud as a dimension across screens and APIs | (a) doable in code now | Cloud dimension on screens and APIs. |
+| `E6-S7-T1` | #217 | Add cloud as a dimension across screens and APIs | (a) this change | API `?cloud=` filter and labels. Screens leftover #243. |
 | `E6-S7-T2` | #218 | Extend the headline to two clouds | (a) doable in code now | Headline across two clouds, no cross-currency sums. |
 | `E6-S7-T3` | #219 | Run all GCP checks live and diff against the manifest | (c) live Azure / GCP / test tenant | Run all GCP checks live and diff the manifest. |
 | `E6-S7-T4` | #220 | Fix defects and update the support matrix | (a) doable in code now | Fix defects and regenerate the support matrix; rerun is (c). |

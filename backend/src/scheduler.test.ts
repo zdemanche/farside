@@ -163,6 +163,7 @@ describe("schedule routes", () => {
     store.putJob({
       orgId: "org-a",
       subscriptionId: "main",
+      cloud: null,
       actor: "system",
       status: "running",
       complete: false,

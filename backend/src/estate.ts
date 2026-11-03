@@ -1,3 +1,5 @@
+import { CLOUDS, type Cloud } from "@farside/scan-contracts";
+import { matchesCloud } from "./cloud.js";
 import type { CoverageEntry } from "./coverage.js";
 import { coverageHealth } from "./coverage.js";
 import { noOwnerTotal } from "./inventory.js";
@@ -19,8 +21,20 @@ export function coverageCounts(entries: CoverageEntry[]): EstateOverview["covera
   };
 }
 
-export function estateOverview(org: OrgState): EstateOverview {
-  if (!org.inventory) {
+export function inventoriesFor(org: OrgState, cloud?: Cloud) {
+  const stored = CLOUDS.flatMap((name) => {
+    const inventory = org.inventories[name];
+    return inventory ? [inventory] : [];
+  });
+  const pool = stored.length > 0 ? stored : org.inventory ? [org.inventory] : [];
+  return pool.filter((inventory) => matchesCloud(inventory.cloud, cloud));
+}
+
+export function estateOverview(org: OrgState, cloud?: Cloud): EstateOverview {
+  const inventories = inventoriesFor(org, cloud);
+  const coverage = org.coverage.filter((entry) => matchesCloud(entry.cloud, cloud));
+  const findings = org.findings.filter((finding) => matchesCloud(finding.scope.cloud, cloud));
+  if (inventories.length === 0) {
     return {
       empty: true,
       resourceTotal: 0,
@@ -31,9 +45,9 @@ export function estateOverview(org: OrgState): EstateOverview {
   }
   return {
     empty: false,
-    resourceTotal: org.inventory.resources.length,
-    noOwnerTotal: noOwnerTotal(org.inventory).total,
-    coverage: coverageCounts(org.coverage),
-    healthScore: coverageHealth(org.coverage, org.findings).score,
+    resourceTotal: inventories.reduce((total, inventory) => total + inventory.resources.length, 0),
+    noOwnerTotal: inventories.reduce((total, inventory) => total + noOwnerTotal(inventory).total, 0),
+    coverage: coverageCounts(coverage),
+    healthScore: coverageHealth(coverage, findings).score,
   };
 }

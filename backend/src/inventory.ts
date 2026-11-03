@@ -1,6 +1,7 @@
 import {
   assertValid,
   validateInventory,
+  type Cloud,
   type Inventory,
   type InventoryRecord,
 } from "@farside/scan-contracts";
@@ -93,33 +94,46 @@ export type InventoryFilters = {
   service?: string;
   subscription?: string;
   region?: string;
+  cloud?: Cloud;
 };
+
+export type BrowsableResource = InventoryRecord & { cloud: Cloud };
 
 export function filterInventory(
   inventory: Inventory,
   filters: InventoryFilters,
-): InventoryRecord[] {
-  return inventory.resources.filter((resource) => {
+): BrowsableResource[] {
+  if (filters.cloud && inventory.cloud !== filters.cloud) {
+    return [];
+  }
+  return inventory.resources.flatMap((resource) => {
     if (filters.owner === "none" && resource.ownerTag) {
-      return false;
+      return [];
     }
     if (filters.owner && filters.owner !== "none" && resource.ownerTag !== filters.owner) {
-      return false;
+      return [];
     }
     if (filters.service && resource.resourceType !== filters.service) {
-      return false;
+      return [];
     }
     if (
       filters.subscription &&
       !resource.resourceUri.includes(`/subscriptions/${filters.subscription}/`)
     ) {
-      return false;
+      return [];
     }
     if (filters.region && resource.region !== filters.region) {
-      return false;
+      return [];
     }
-    return true;
+    return [{ ...resource, cloud: inventory.cloud }];
   });
+}
+
+export function browseInventories(
+  inventories: Inventory[],
+  filters: InventoryFilters,
+): BrowsableResource[] {
+  return inventories.flatMap((inventory) => filterInventory(inventory, filters));
 }
 
 export function groupInventory(resources: InventoryRecord[]): {
