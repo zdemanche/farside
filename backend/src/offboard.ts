@@ -6,9 +6,27 @@ export type GrantToRemove = {
   optional?: boolean;
 };
 
+export type RowsPurged = {
+  connections: number;
+  inventoryResources: number;
+  facts: number;
+  findings: number;
+  coverage: number;
+  issues: number;
+  scans: number;
+  costSnapshots: number;
+  commitments: number;
+  budgets: number;
+  alerts: number;
+  settings: number;
+  contract: number;
+};
+
 export type DeletionRecord = {
   orgId: string;
+  requestedBy: string;
   deletedAt: string;
+  rowsPurged: RowsPurged;
   connectionsRemoved: number;
   scansStopped: number;
   scheduleCancelled: boolean;

@@ -1,4 +1,5 @@
 import { buildApp } from "./app.js";
+import { loggerFromEnv } from "./observability.js";
 
 type HttpMethod = "DELETE" | "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
 
@@ -20,7 +21,10 @@ type ProxyResult = {
 
 const METHODS = new Set<HttpMethod>(["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]);
 
-const app = buildApp(undefined, { operatorToken: process.env.FARSIDE_OPERATOR_TOKEN || undefined });
+const app = buildApp(undefined, {
+  operatorToken: process.env.FARSIDE_OPERATOR_TOKEN || undefined,
+  logger: loggerFromEnv(),
+});
 const ready = app.ready();
 
 function methodOf(event: ProxyEvent): HttpMethod {

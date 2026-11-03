@@ -1,5 +1,6 @@
 import { buildApp } from "./app.js";
 import { systemClock } from "./clock.js";
+import { auditRetention, loggerFromEnv } from "./observability.js";
 import { MemoryStore, runRetentionSweep } from "./store.js";
 
 const port = Number.parseInt(process.env.PORT ?? "8080", 10);
@@ -9,12 +10,13 @@ const RETENTION_SWEEP_MS = 3_600_000;
 const store = new MemoryStore(systemClock);
 const app = buildApp(store, {
   clock: systemClock,
+  logger: loggerFromEnv(),
   operatorToken: process.env.FARSIDE_OPERATOR_TOKEN || undefined,
 });
 
 setInterval(() => {
   try {
-    runRetentionSweep(store, systemClock);
+    auditRetention(app.log, runRetentionSweep(store, systemClock));
   } catch (error) {
     app.log.error({ err: error }, "retention sweep failed");
   }

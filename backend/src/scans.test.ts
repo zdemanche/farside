@@ -125,7 +125,8 @@ describe("scan job runner", () => {
     const finished = await done;
     expect(finished.status).toBe("failed");
     expect(finished.complete).toBe(false);
-    expect(finished.error).toBe("Resource Graph call failed");
+    expect(finished.error).toBe("harvest_failed");
+    expect(finished.errorId).toEqual(expect.any(String));
     expect(finished.coveredScopes).toEqual(["main:azure-inventory-all-resources"]);
     expect(store.snapshot("org-a").inventory).toBeNull();
   });
@@ -280,7 +281,8 @@ describe("scan history API", () => {
     const failed = await waitForScan(app, "scan-1", "failed");
     expect(failed.current).toBe(false);
     expect(failed.complete).toBe(false);
-    expect(failed.error).toBe("Resource Graph call failed");
+    expect(failed.error).toBe("harvest_failed");
+    expect(failed.errorId).toEqual(expect.any(String));
     expect(failed.checks.find((check) => check.checkId === "azure-inventory-all-resources")?.state).toBe(
       "assessed",
     );

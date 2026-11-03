@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@farside/scan-contracts": "*",
-    "fastify": "^5.6.1"
+    "fastify": "^5.12.8"
   },
   "devDependencies": {
     "tsx": "^4.20.6"

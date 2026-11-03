@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,8 +29,9 @@ import {
 import { factsFromManifest, type ResourceFacts } from "./facts.js";
 import { applyOwnerTag, inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
 import { applyScanToIssues } from "./issues.js";
-import { rejectUnconfigured } from "./providers.js";
+import { PROVIDER_NOT_CONFIGURED, ProviderNotConfiguredError, rejectUnconfigured } from "./providers.js";
 import type { OrgSettings } from "./settings.js";
+import { silentLog, type LogSink } from "./observability.js";
 import type { MemoryStore } from "./store.js";
 
 // "cancelled" is internal-only: never stored or returned by the API
@@ -67,6 +69,7 @@ export type ScanJob = {
   startedAt: string | null;
   finishedAt: string | null;
   error: string | null;
+  errorId?: string;
   durationMs: number | null;
   coverageSummary: ScanCoverageSummary;
   checks: ScanCheckOutcome[];
@@ -190,6 +193,13 @@ export function mergeScanCoverage(
   return next.reduce((coverage, entry) => applyCoverageResult(coverage, entry), kept);
 }
 
+function failureCode(error: unknown, harvesting: boolean): string {
+  if (error instanceof Error && error.name === "TimeoutError") {
+    return "harvest_timeout";
+  }
+  return error instanceof ScanFailedError || harvesting ? "harvest_failed" : "scan_failed";
+}
+
 export class ScanFailedError extends Error {
   constructor(
     message: string,
@@ -244,6 +254,7 @@ export class ScanRunner {
     private readonly harvester: Harvester,
     private readonly harvestClients: ScanHarvestClients = {},
     private readonly clock: Clock = systemClock,
+    private readonly log: LogSink = silentLog,
   ) {}
 
   start(input: { orgId: string; subscriptionId: string; actor: "user" | "system" }): {
@@ -273,7 +284,10 @@ export class ScanRunner {
     });
     const done = this.execute(input.orgId, job.id);
     done.catch((error: unknown) => {
-      console.error("scan execution failed", { orgId: input.orgId, jobId: job.id, error });
+      this.log.error(
+        { event: "scan.execution_failed", orgId: input.orgId, scanId: job.id, err: error },
+        "scan execution failed",
+      );
     });
     return { job, started: true, done };
   }
@@ -286,7 +300,13 @@ export class ScanRunner {
     const startedAt = this.clock();
     this.store.patchJob(orgId, jobId, { status: "running", startedAt });
     const { signal, release } = this.store.trackScan(orgId);
-    const cancelled = (): ScanJob => ({ ...current, status: "cancelled", startedAt });
+    const scanFields = { orgId, scanId: jobId };
+    this.log.info({ event: "scan.start", ...scanFields }, "scan.start");
+    const cancelled = (): ScanJob => {
+      this.log.info({ event: "scan.cancelled", ...scanFields }, "scan.cancelled");
+      return { ...current, status: "cancelled", startedAt };
+    };
+    let harvesting = true;
     try {
       const settings = this.store.snapshot(orgId).settings;
       const result = await this.harvester.harvest({
@@ -294,6 +314,7 @@ export class ScanRunner {
         subscriptionId: current.subscriptionId,
         settings,
       });
+      harvesting = false;
       if (signal.aborted) {
         return cancelled();
       }
@@ -344,7 +365,7 @@ export class ScanRunner {
       );
       const checks = checksFromCoverage(coverage, current.subscriptionId);
       const finishedAt = this.clock();
-      return this.store.patchJob(orgId, jobId, {
+      const succeeded = this.store.patchJob(orgId, jobId, {
         status: "succeeded",
         complete: true,
         coveredScopes: result.coveredScopes,
@@ -354,6 +375,17 @@ export class ScanRunner {
         coverageSummary: coverageSummaryFrom(checks),
         checks,
       });
+      this.log.info(
+        {
+          event: "scan.finish",
+          ...scanFields,
+          durationMs: succeeded.durationMs,
+          checkCount: checks.length,
+          coverageSummary: succeeded.coverageSummary,
+        },
+        "scan.finish",
+      );
+      return succeeded;
     } catch (error) {
       if (signal.aborted) {
         return cancelled();
@@ -361,16 +393,33 @@ export class ScanRunner {
       const covered = error instanceof ScanFailedError ? error.coveredScopes : [];
       const checks = checksFromFailure(covered, current.subscriptionId);
       const finishedAt = this.clock();
-      return this.store.patchJob(orgId, jobId, {
+      const errorCode = failureCode(error, harvesting);
+      const errorId = randomUUID();
+      const failed = this.store.patchJob(orgId, jobId, {
         status: "failed",
         complete: false,
         coveredScopes: covered,
         finishedAt,
-        error: error instanceof Error ? error.message : "scan failed",
+        error: error instanceof ProviderNotConfiguredError ? PROVIDER_NOT_CONFIGURED : errorCode,
+        errorId,
         durationMs: durationMsFrom(startedAt, finishedAt),
         coverageSummary: coverageSummaryFrom(checks),
         checks,
       });
+      this.log.error(
+        {
+          event: "scan.failed",
+          ...scanFields,
+          durationMs: failed.durationMs,
+          checkCount: checks.length,
+          coverageSummary: failed.coverageSummary,
+          errorCode,
+          errorId,
+          err: error,
+        },
+        "scan.failed",
+      );
+      return failed;
     } finally {
       release();
     }
