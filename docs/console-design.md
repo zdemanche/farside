@@ -25,6 +25,20 @@ Only the first comment line of the two vendored CSS files differs from Identity'
 - Do not redefine `:focus-visible`; `tokens.css` owns it.
 - `console/src/styles/tokens.test.ts` enforces the rules above, pins the sha256 of the three vendored files, and checks theme parity.
 
+## Data source and screen states
+
+Every screen reads from one `DataSource` (`console/src/data/`), passed down by React context. No screen has a fixture default.
+
+| Build env | Source |
+|---|---|
+| `VITE_FARSIDE_DEMO=1` | `demoSource()`: one seeded estate; every screen's numbers are derived from its rows. Only this mode shows the Demo label. |
+| `VITE_FARSIDE_API_URL` and `VITE_FARSIDE_ORG` | `apiSource()`: `fetch` against `/v1/orgs/:orgId/...` with the `x-farside-org` header. |
+| neither | "Not connected to a Farside API". No data is shown. |
+
+Fixtures are imported only by `data/demo.ts` and tests. Recovery and Lifecycle have no backend route of their own; both are derived from `GET /findings`.
+
+`useResource` gives `loading | error | ready`, and `<ScreenState>` renders each: `role="status"` while loading, `role="alert"` with Retry on failure, an explanatory empty message, a "Partial: N scopes not assessed" notice on screens that list assessed-scope results, and a permission message that names the role to request on 401/403.
+
 ## Upgrading the vendored files
 
 1. Copy the newer files from `moonaan-identity` (`ui/packages/tokens/`) over `evergreen-theme.css`, `tokens.css` and `theme-guard.js`; keep the Farside provenance comment as the first line of the two CSS files.
