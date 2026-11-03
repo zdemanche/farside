@@ -1,0 +1,260 @@
+/* Vendored unchanged from Moonaan/moonaan-identity ui/packages/tokens/tokens.css (originally Moonaan/moonaan-reflow @ 981d5cbc0a3ba17b791c031524011ee241a35e8b). Do not edit; see docs/console-design.md. */
+/* Reflow tokens, layered on Evergreen (evergreen-theme.css) the way Prism layers its own.
+
+   Layer 0 is Evergreen's generated base set: --bg, --panel, --surface*, --ink, --muted,
+   --faint, --line*, the six accents and their alpha steps, radii, motion. Its default
+   (moonaan) palette sits on bare :root and is Prism's one palette; `daylight` is
+   Evergreen's own light mode, offered as Reflow's light theme. Nothing here restates a
+   base value.
+
+   Layer 1 is Prism's derived set (elevation, hairlines, glows, control and surface
+   radii, the accent ink), copied from Prism's styles.css so a panel, button or table
+   here reads exactly like one there. Daylight overrides only the pieces Prism draws
+   with white-on-dark alpha, which would vanish on a light ground.
+
+   Layer 2 is Reflow's semantic --color-* set, the only colour names components and the
+   Tailwind theme consume. */
+
+:root,
+:root[data-theme='moonaan'] {
+  color-scheme: dark;
+
+  --good: var(--ever);
+  --warn: var(--amber);
+  --crit: var(--coral);
+  --link: var(--fed);
+
+  /* Evergreen's --faint is under 4.5:1 on a panel, so it stays a border colour; quiet
+     text uses this step instead (Prism's own --faint-text). */
+  --faint-text: #8890a0;
+  /* A form control's edge is its only boundary, so it needs 3:1 (WCAG 1.4.11):
+     --faint is 4:1 on --bg. */
+  --control-edge: var(--faint);
+
+  --elev-1-bg: color-mix(in srgb, var(--surface) 62%, var(--bg));
+  --elev-1-border: rgba(255, 255, 255, 0.065);
+  --elev-1-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --elev-2-bg: var(--surface-2);
+  --elev-2-border: rgba(255, 255, 255, 0.09);
+  --elev-2-shadow: 0 16px 48px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --hairline: rgba(255, 255, 255, 0.06);
+  --hover-wash: rgba(255, 255, 255, 0.04);
+  --row-hover: rgba(106, 124, 247, 0.06);
+  --glow-live: 0 0 10px color-mix(in srgb, var(--ever) 55%, transparent);
+  --glow-primary: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 4px 16px var(--indigo-30);
+  --glow-primary-hover: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 6px 24px var(--indigo-50);
+  --on-accent: var(--bg);
+
+  /* The ground: near-black with a faint indigo/pink aurora at the top edge and a fine
+     star field, fixed behind every route (Prism's #root::before). */
+  --ground:
+    radial-gradient(1100px 520px at 18% -12%, var(--indigo-14), transparent 70%),
+    radial-gradient(900px 480px at 88% -18%, var(--pink-8), transparent 70%),
+    radial-gradient(1px 1px at 12% 22%, rgba(255, 255, 255, 0.35), transparent),
+    radial-gradient(1px 1px at 27% 61%, rgba(255, 255, 255, 0.22), transparent),
+    radial-gradient(1px 1px at 46% 14%, rgba(255, 255, 255, 0.28), transparent),
+    radial-gradient(1px 1px at 63% 78%, rgba(255, 255, 255, 0.18), transparent),
+    radial-gradient(1px 1px at 79% 33%, rgba(255, 255, 255, 0.3), transparent),
+    radial-gradient(1px 1px at 91% 67%, rgba(255, 255, 255, 0.2), transparent);
+  --topbar-bg: color-mix(in srgb, var(--bg) 72%, transparent);
+  --topbar-rule: linear-gradient(
+    90deg,
+    transparent,
+    var(--indigo-40) 22%,
+    var(--pink-30) 62%,
+    transparent
+  );
+  --topbar-rule-vertical: linear-gradient(
+    180deg,
+    var(--indigo-40),
+    var(--pink-30) 55%,
+    transparent
+  );
+}
+
+:root[data-theme='daylight'] {
+  color-scheme: light;
+  /* Evergreen's daylight amber, coral and fed sit near 4.2:1 on their own washes; status
+     and link text need a darker step. */
+  --warn: #6b4b00;
+  --crit: #b3362b;
+  --link: #3f4fb8;
+  --faint-text: #5f6677;
+  --control-edge: #80879a;
+  --elev-1-bg: var(--surface);
+  --elev-1-border: var(--line);
+  --elev-1-highlight: 0 1px 2px var(--shadow-med);
+  --elev-2-border: var(--line-2);
+  --elev-2-shadow: var(--shadow-card-light);
+  --hairline: var(--line);
+  --hover-wash: var(--indigo-5);
+  --row-hover: var(--indigo-5);
+  --glow-primary: 0 2px 8px var(--indigo-22);
+  --glow-primary-hover: 0 4px 14px var(--indigo-30);
+  --ground:
+    radial-gradient(1100px 520px at 18% -12%, var(--indigo-8), transparent 70%),
+    radial-gradient(900px 480px at 88% -18%, var(--pink-5), transparent 70%);
+  --topbar-bg: color-mix(in srgb, var(--bg) 82%, transparent);
+}
+
+:root {
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Prism's type scale: body text at 13px for data density, one display size per page. */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-base: 14px;
+  --text-lg: 15px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-display: 650;
+  --weight-bold: 700;
+  --leading-none: 1;
+  --leading-tight: 1.15;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.55;
+  --tracking-display: -0.025em;
+  --tracking-tight: -0.015em;
+  --tracking-wide: 0.06em;
+  --tracking-wider: 0.08em;
+  --tracking-eyebrow: 0.08em;
+  --tracking-caps: 0.06em;
+
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-10: 10px;
+  --space-12: 12px;
+  --space-14: 14px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-28: 28px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-48: 48px;
+
+  /* One radius for controls and one for surfaces, from Evergreen's geometry scale. Pills
+     are for status badges only. */
+  --radius-control: var(--radius-miniBtn);
+  --radius-surface: var(--radius-doctrine);
+  --radius-focus: var(--focus-radius);
+  --radius-round: 50%;
+  --radius-none: 0;
+  --rule-width: var(--border-hairline);
+  --rail-width: 2px;
+  --rail-width-lg: var(--border-rail);
+
+  --page-pad-top: var(--space-24);
+  --page-pad-x: var(--space-32);
+  --page-pad-x-compact: var(--space-16);
+  --page-pad-bottom: var(--space-48);
+  /* Reflow keeps its 44px target minimum (approved design, C1) at Prism's look. */
+  --target-min: 44px;
+  --target-gap: var(--space-8);
+  --content-max: 1440px;
+  --chip-height: 22px;
+  --icon-size: 16px;
+  --progress-height: 8px;
+  --topbar-min: 52px;
+  --sidebar-width: 16rem;
+  --focus-room: var(--space-4);
+  --mark-size-sm: 22px;
+  --field-date-width: calc(14ch + var(--space-48) + var(--space-12));
+  --field-time-width: calc(11ch + var(--space-48) + var(--space-12));
+  --measure-field-note: 14rem;
+  --measure-gate: 28rem;
+  --measure-prose: 70ch;
+  --field-max: 32rem;
+  --card-pad-x: var(--space-16);
+  --card-pad-y: var(--space-16);
+  --dialog-max-width: 32rem;
+  --listbox-max-height: 18rem;
+  --z-popover: 10;
+  --z-topbar: 20;
+  --measure-cell: 20rem;
+
+  --duration-fast: var(--dur-hover);
+  --duration-base: 200ms;
+  --duration-entrance: var(--dur-view-in);
+  --ease-standard: var(--ease-motion);
+}
+
+:root {
+  --color-bg-canvas: var(--bg);
+  --color-bg-subtle: var(--panel);
+  --color-bg-raised: var(--elev-1-bg);
+  --color-bg-overlay: var(--elev-2-bg);
+  --color-bg-code: var(--surface);
+  --color-bg-row-hover: var(--row-hover);
+  --color-bg-hover: var(--hover-wash);
+  --color-bg-disabled: var(--surface-2);
+  --color-text-primary: var(--ink);
+  --color-text-secondary: var(--muted);
+  --color-text-disabled: var(--faint-text);
+  --color-text-faint: var(--faint-text);
+  --color-accent: var(--link);
+  --color-danger: var(--coral);
+  --color-border-strong: var(--control-edge);
+  --color-border-subtle: var(--elev-1-border);
+  --color-border-overlay: var(--elev-2-border);
+  --color-rule: var(--elev-1-border);
+  --color-rule-soft: var(--hairline);
+  --color-rule-strong: var(--ink);
+  --color-record: var(--indigo);
+  --color-record-text: var(--fed);
+  --color-record-wash: var(--indigo-12);
+  --color-record-edge: var(--indigo-30);
+  --color-proof: var(--ever);
+  --color-proof-text: var(--good);
+  --color-proof-wash: var(--ever-10);
+  --color-proof-edge: var(--ever-30);
+  --color-hold: var(--amber);
+  --color-hold-text: var(--warn);
+  --color-hold-wash: var(--amber-10);
+  --color-hold-edge: var(--amber-30);
+  --color-alert: var(--coral);
+  --color-alert-text: var(--crit);
+  --color-alert-wash: var(--coral-10);
+  --color-alert-edge: var(--coral-30);
+  --color-btn-primary-bg: var(--indigo);
+  --color-btn-primary-ink: var(--on-accent);
+  --color-btn-primary-off: var(--surface-2);
+  --color-btn-danger-bg: var(--coral-10);
+  --color-btn-danger-ink: var(--crit);
+  --color-btn-danger-edge: var(--coral-30);
+  --color-focus-ring: var(--indigo);
+  --color-skeleton: var(--surface-2);
+  --color-track: var(--surface-3);
+  --color-progress-fill: var(--indigo);
+  --color-meter-track: var(--surface-3);
+  --color-nav-current: var(--hover-wash);
+  --color-nav-active: var(--ever);
+  --color-scrim: var(--overlay);
+  --color-json-key: var(--fed);
+  --color-json-string: var(--ink);
+  --color-json-number: var(--amber);
+  --color-json-literal: var(--pink);
+  --color-json-punct: var(--muted);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+  transition: none;
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+}
