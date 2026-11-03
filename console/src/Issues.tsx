@@ -3,9 +3,12 @@ import { Chip, coverageTone, type Tone } from "./Chip";
 import { useSource } from "./data/context";
 import type { IssueRow, IssueStatus } from "./data/types";
 import { useResource } from "./data/use-resource";
+import { formatMoney, Time } from "./format";
+import { LastScan } from "./LastScan";
+import { inventoryHref, scanHref } from "./links";
 import { ScreenState } from "./ScreenState";
 import { plural } from "./plural";
-import { TERMS, coverageStateLabel } from "./terms";
+import { TERMS, coverageStateLabel, shortName } from "./terms";
 
 const STATUS_TONE: Record<IssueStatus, Tone> = {
   open: "warn",
@@ -13,9 +16,17 @@ const STATUS_TONE: Record<IssueStatus, Tone> = {
   not_confirmed: "neutral",
 };
 
-type Filters = { check: string; status: IssueStatus | ""; subscription: string };
+type Filters = {
+  check: string;
+  status: IssueStatus | "";
+  subscription: string;
+};
 
-const DEFAULT_FILTERS: Filters = { check: "", status: "open", subscription: "" };
+const DEFAULT_FILTERS: Filters = {
+  check: "",
+  status: "open",
+  subscription: "",
+};
 const NO_FILTERS: Filters = { check: "", status: "", subscription: "" };
 
 function selectedId(hash: string): string {
@@ -24,7 +35,9 @@ function selectedId(hash: string): string {
 }
 
 function currentHash(): string {
-  return typeof window === "undefined" ? "issues" : window.location.hash.replace(/^#\/?/, "");
+  return typeof window === "undefined"
+    ? "issues"
+    : window.location.hash.replace(/^#\/?/, "");
 }
 
 function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
@@ -32,19 +45,22 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
   const statusId = useId();
   const subscriptionId = useId();
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const selected = issues.find((issue) => issue.id === selectedId(hash));
+  const detailId = selectedId(hash);
+  const selected = issues.find((issue) => issue.id === detailId);
   useEffect(() => {
-    if (selected) {
+    if (detailId) {
       document.getElementById("issue-detail-title")?.focus();
     }
-  }, [selected?.id]);
+  }, [detailId, selected?.id]);
   const passes = (issue: IssueRow, skipStatus: boolean) =>
     (!filters.check || issue.checkId === filters.check) &&
     (skipStatus || !filters.status || issue.status === filters.status) &&
     (!filters.subscription || issue.subscription === filters.subscription);
   const visible = issues.filter((issue) => passes(issue, false));
   const hiddenByStatus = filters.status
-    ? issues.filter((issue) => passes(issue, true) && issue.status !== filters.status).length
+    ? issues.filter(
+        (issue) => passes(issue, true) && issue.status !== filters.status,
+      ).length
     : 0;
   const checks = [...new Set(issues.map((issue) => issue.checkId))];
   const subscriptions = [...new Set(issues.map((issue) => issue.subscription))];
@@ -59,7 +75,9 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
             id={checkId}
             name="check"
             value={filters.check}
-            onChange={(event) => setFilters({ ...filters, check: event.target.value })}
+            onChange={(event) =>
+              setFilters({ ...filters, check: event.target.value })
+            }
           >
             <option value="">All checks</option>
             {checks.map((id) => (
@@ -77,7 +95,10 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
             name="status"
             value={filters.status}
             onChange={(event) =>
-              setFilters({ ...filters, status: event.target.value as IssueStatus | "" })
+              setFilters({
+                ...filters,
+                status: event.target.value as IssueStatus | "",
+              })
             }
           >
             <option value="">All statuses</option>
@@ -93,7 +114,9 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
             id={subscriptionId}
             name="subscription"
             value={filters.subscription}
-            onChange={(event) => setFilters({ ...filters, subscription: event.target.value })}
+            onChange={(event) =>
+              setFilters({ ...filters, subscription: event.target.value })
+            }
           >
             <option value="">All subscriptions</option>
             {subscriptions.map((id) => (
@@ -109,8 +132,10 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
       </p>
       {hiddenByStatus > 0 ? (
         <p className="notice">
-          Showing {filters.status.replace("_", " ")} issues only. {hiddenByStatus} more{" "}
-          {hiddenByStatus === 1 ? "issue is" : "issues are"} hidden by the status filter.{" "}
+          Showing {filters.status.replace("_", " ")} issues only.{" "}
+          {hiddenByStatus} more{" "}
+          {hiddenByStatus === 1 ? "issue is" : "issues are"} hidden by the
+          status filter.{" "}
           <button
             className="action action-secondary"
             type="button"
@@ -132,7 +157,12 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
           </button>
         </p>
       ) : (
-        <div className="table-wrap" role="region" aria-labelledby="issues-caption" tabIndex={0}>
+        <div
+          className="table-wrap"
+          role="region"
+          aria-labelledby="issues-caption"
+          tabIndex={0}
+        >
           <table>
             <caption id="issues-caption">Issue queue</caption>
             <thead>
@@ -148,18 +178,24 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
               {visible.map((issue) => (
                 <tr key={issue.id}>
                   <th scope="row">
-                    <a href={`#issues/${issue.id}`}>{issue.resourceId}</a>
+                    <a href={`#issues/${issue.id}`} title={issue.resourceId}>
+                      {shortName(issue.resourceId)}
+                    </a>
                   </th>
                   <td>{issue.checkId}</td>
                   <td>
                     <Chip tone={STATUS_TONE[issue.status]}>
-                      {issue.status === "not_confirmed" ? "not confirmed" : issue.status}
+                      {issue.status === "not_confirmed"
+                        ? "not confirmed"
+                        : issue.status}
                     </Chip>
                   </td>
                   <td>
-                    <Chip tone={coverageTone(issue.coverage)}>{coverageStateLabel(issue.coverage)}</Chip>
+                    <Chip tone={coverageTone(issue.coverage)}>
+                      {coverageStateLabel(issue.coverage)}
+                    </Chip>
                   </td>
-                  <td>{issue.savings}</td>
+                  <td>{formatMoney(issue.savings)}</td>
                 </tr>
               ))}
             </tbody>
@@ -168,17 +204,46 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
       )}
       {selected ? (
         <article className="panel detail" aria-labelledby="issue-detail-title">
-          <h2 id="issue-detail-title" tabIndex={-1}>
-            {selected.resourceId}
+          <h2 id="issue-detail-title" tabIndex={-1} title={selected.resourceId}>
+            {shortName(selected.resourceId)}
           </h2>
+          <p>
+            Resource{" "}
+            <a href={inventoryHref(selected.resourceId)}>Find in Inventory</a>
+          </p>
           <p>Check {selected.checkId}</p>
           <p>Evidence {selected.evidence}</p>
-          <p>Savings {selected.savings}</p>
+          <p>Savings {formatMoney(selected.savings)}</p>
           <p>Coverage {coverageStateLabel(selected.coverage)}</p>
-          <p>First seen {selected.firstSeen}</p>
-          <p>Last confirmed {selected.lastConfirmed}</p>
-          {selected.closingScanId ? <p>Closing scan {selected.closingScanId}</p> : null}
-          {selected.notConfirmedReason ? <p>Not confirmed {selected.notConfirmedReason}</p> : null}
+          <p>
+            First seen <Time value={selected.firstSeen} />
+          </p>
+          <p>
+            Last confirmed <Time value={selected.lastConfirmed} />
+          </p>
+          {selected.closingScanId ? (
+            <p>
+              Closing scan{" "}
+              <a href={scanHref(selected.closingScanId)}>
+                {selected.closingScanId}
+              </a>
+            </p>
+          ) : null}
+          {selected.notConfirmedReason ? (
+            <p>
+              Not confirmed {selected.notConfirmedReason}{" "}
+              <a href="#blind-spots">See blind spots</a>
+            </p>
+          ) : null}
+        </article>
+      ) : detailId ? (
+        <article className="panel detail" aria-labelledby="issue-detail-title">
+          <h2 id="issue-detail-title" tabIndex={-1}>
+            Issue {detailId} was not found
+          </h2>
+          <p>
+            <a href="#issues">Back to all issues</a>
+          </p>
         </article>
       ) : null}
     </>
@@ -194,9 +259,10 @@ export function Issues({ hash = currentHash() }: { hash?: string }) {
         Issues
       </h1>
       <p className="page-description">
-        Stored issues with proof the scope was {TERMS.assessed}. An issue closes only when its
-        scope was {TERMS.assessed}.
+        Stored issues with proof the scope was {TERMS.assessed}. An issue closes
+        only when its scope was {TERMS.assessed}.
       </p>
+      <LastScan />
       <ScreenState
         label="issues"
         resource={issues}

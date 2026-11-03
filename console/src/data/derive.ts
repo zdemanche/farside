@@ -1,5 +1,5 @@
 import type { Finding } from "@farside/scan-contracts";
-import type { LifecycleView, RecoveryView } from "./types";
+import type { LifecycleRow, LifecycleView, Money, RecoveryView } from "./types";
 
 type Fields = Finding["evidence"]["fields"];
 
@@ -39,13 +39,35 @@ export function formatEvidence(fields: Fields): string {
     .join(", ");
 }
 
-export function formatSavings(savings?: { min: string; max: string; currency: string }): string {
-  return savings ? `${savings.min}–${savings.max} ${savings.currency}` : "no estimate";
+export function toMoney(savings?: {
+  min: string;
+  max: string;
+  currency: string;
+}): Money | null {
+  return savings ? { ...savings, period: "month" } : null;
+}
+
+const VENDORS: Record<string, string> = {
+  azure: "Microsoft Azure",
+  gcp: "Google Cloud",
+};
+
+function sourceOf(fields: Fields, checkId: string): LifecycleRow["source"] {
+  const vendor = VENDORS[checkId.split("-")[0] ?? ""] ?? checkId;
+  const link = [fields.sourceUrl, fields.source].find(
+    (value): value is string =>
+      typeof value === "string" && /^https:\/\//.test(value),
+  );
+  return link ? { vendor, href: link } : { vendor };
 }
 
 export function recoveryFrom(findings: Finding[]): RecoveryView {
-  const resilience = findings.filter((finding) => finding.checkId.includes("-resilience-"));
-  const backup = resilience.filter((finding) => finding.checkId.endsWith("-outside-backup"));
+  const resilience = findings.filter((finding) =>
+    finding.checkId.includes("-resilience-"),
+  );
+  const backup = resilience.filter((finding) =>
+    finding.checkId.endsWith("-outside-backup"),
+  );
   const rows = resilience
     .filter((finding) => finding.result !== "pass")
     .map((finding) => {
@@ -55,10 +77,15 @@ export function recoveryFrom(findings: Finding[]): RecoveryView {
         system,
         checkId: finding.checkId,
         evidence: formatEvidence(finding.evidence.fields),
-        coverage: finding.result === "fail" ? ("assessed" as const) : ("undetermined" as const),
+        coverage:
+          finding.result === "fail"
+            ? ("assessed" as const)
+            : ("undetermined" as const),
       };
     });
-  const undetermined = backup.filter((finding) => finding.result === "undetermined").length;
+  const undetermined = backup.filter(
+    (finding) => finding.result === "undetermined",
+  ).length;
   return {
     rows,
     unprotected: backup.filter((finding) => finding.result === "fail").length,
@@ -74,27 +101,40 @@ function lifecycleKind(checkId: string): string {
   return checkId.endsWith("-support") ? "support" : "certificate";
 }
 
-export function lifecycleFrom(findings: Finding[], asOf: string): LifecycleView {
+export function lifecycleFrom(
+  findings: Finding[],
+  asOf: string,
+): LifecycleView {
   const horizon = Date.parse(asOf) + LIFECYCLE_WINDOW_DAYS * DAY_MS;
   const rows = findings
-    .filter((finding) => finding.checkId.includes("-lifecycle-") && finding.result === "fail")
+    .filter(
+      (finding) =>
+        finding.checkId.includes("-lifecycle-") && finding.result === "fail",
+    )
     .flatMap((finding) => {
       const fields = finding.evidence.fields;
-      const dated = fields.retirementDate ?? fields.expirationDate ?? fields.supportEnd;
+      const dated =
+        fields.retirementDate ??
+        fields.expirationDate ??
+        fields.supportEnd ??
+        fields.expireTime;
       if (typeof dated !== "string") {
         return [];
       }
       const resourceId = resourceIdOf(fields, finding.scope.id);
-      const title = [fields.skuName, fields.hostName, fields.certificateName].find(
-        (value): value is string => typeof value === "string",
-      );
+      const title = [
+        fields.skuName,
+        fields.hostName,
+        fields.certificateName,
+      ].find((value): value is string => typeof value === "string");
       return [
         {
           id: `${finding.checkId}:${resourceId}`,
+          resourceId,
           date: dated.slice(0, 10),
           kind: lifecycleKind(finding.checkId),
           title: title ?? resourceId,
-          source: typeof fields.source === "string" ? fields.source : finding.checkId,
+          source: sourceOf(fields, finding.checkId),
         },
       ];
     })

@@ -114,6 +114,16 @@ p {
   transition: background-color var(--duration-fast) var(--ease-standard);
 }
 
+.nav-soon {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: var(--target-min);
+  padding: 0 var(--space-12);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
 .sidenav a:hover {
   color: var(--color-text-primary);
   background: var(--color-bg-hover);
@@ -379,9 +389,14 @@ tbody tr:last-child > * {
   font-weight: var(--weight-medium);
   line-height: var(--leading-none);
   max-width: 100%;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
   border: var(--rule-width) solid transparent;
   border-radius: var(--radius-pill);
+}
+
+.tag-list .chip {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .chip-good {
@@ -511,6 +526,12 @@ legend {
   background: var(--color-record-wash);
   border: var(--rule-width) solid var(--color-record-edge);
   border-radius: var(--radius-control);
+}
+
+.field-error {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-alert-text);
 }
 
 .notice-alert {

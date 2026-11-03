@@ -102,7 +102,7 @@ describe("App against the API source", () => {
       />,
     );
     await waitFor(() => expect(container.textContent).not.toMatch(/Loading /));
-    const text = container.textContent ?? "";
+    const text = (container.textContent ?? "").replace(hash.split("/")[1] ?? "", "");
     for (const name of await fixtureSentinels()) {
       expect(text).not.toContain(name);
     }
@@ -198,7 +198,7 @@ describe("apiSource", () => {
         id: "i-1",
         subscription: "sub-1",
         evidence: "sizeGb 8",
-        savings: "1.00–2.00 USD",
+        savings: { min: "1.00", max: "2.00", currency: "USD", period: "month" },
       }),
     ]);
     expect(await source.recovery()).toEqual({

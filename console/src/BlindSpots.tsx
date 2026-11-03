@@ -1,5 +1,6 @@
 import { useSource } from "./data/context";
 import { useResource } from "./data/use-resource";
+import { LastScan } from "./LastScan";
 import { ScreenState } from "./ScreenState";
 import { TERMS, coverageStateLabel } from "./terms";
 
@@ -15,6 +16,7 @@ export function BlindSpots() {
         Farside does not treat silence as health. Scopes that were {TERMS.notAssessed} are left out
         of the score.
       </p>
+      <LastScan />
       <ScreenState
         label="blind spots"
         resource={view}
@@ -54,7 +56,9 @@ export function BlindSpots() {
                       <th scope="row">{spot.checkId}</th>
                       <td>{coverageStateLabel(spot.state)}</td>
                       <td>{spot.reason}</td>
-                      <td>{spot.closer}</td>
+                      <td>
+                        {spot.closer} <a href="#connect">Open Connect</a>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

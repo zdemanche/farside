@@ -1,11 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Chip, coverageTone, type Tone } from "./Chip";
 import { useSource } from "./data/context";
 import type { ScanCoverageSummary, ScanRow, ScanStatus } from "./data/types";
 import { useResource } from "./data/use-resource";
+import { Time } from "./format";
 import { ScreenState } from "./ScreenState";
 import { plural } from "./plural";
-import { TERMS, coverageStateLabel } from "./terms";
+import { TERMS, coverageStateLabel, scanErrorText } from "./terms";
 
 const STATUS_TONE: Record<ScanStatus, Tone> = {
   queued: "neutral",
@@ -17,7 +18,8 @@ const STATUS_TONE: Record<ScanStatus, Tone> = {
 const MAX_POLLS = 100;
 const MAX_DELAY_MS = 60_000;
 
-const isInFlight = (scan: ScanRow) => scan.status === "queued" || scan.status === "running";
+const isInFlight = (scan: ScanRow) =>
+  scan.status === "queued" || scan.status === "running";
 
 function selectedId(hash: string): string {
   const match = hash.match(/^scans\/(.+)$/);
@@ -38,11 +40,29 @@ function formatCoverage(summary: ScanCoverageSummary): string {
   return `${summary.assessed} ${TERMS.assessed}, ${summary.unassessed} ${TERMS.notAssessed}, ${summary.undetermined} ${TERMS.undetermined}`;
 }
 
+function ScanError({ scan }: { scan: ScanRow }) {
+  return scan.error ? (
+    <>
+      {scanErrorText(scan.error)}
+      {scan.errorId ? ` (Reference ${scan.errorId})` : ""}
+    </>
+  ) : null;
+}
+
+function outcomeText(scan: ScanRow): string {
+  return scan.status === "failed"
+    ? `${scan.id} failed${scan.error ? `: ${scanErrorText(scan.error)}` : ""}`
+    : `${scan.id} ${scan.status}`;
+}
+
 function ScanDetail({ id }: { id: string }) {
   const source = useSource();
-  const resource = useResource((signal) => source.scan(id, signal), [source, id]);
+  const resource = useResource(
+    (signal) => source.scan(id, signal),
+    [source, id],
+  );
   useEffect(() => {
-    if (resource.status === "ready") {
+    if (resource.status === "ready" || resource.status === "error") {
       document.getElementById("scan-detail-title")?.focus();
     }
   }, [resource.status, id]);
@@ -50,21 +70,36 @@ function ScanDetail({ id }: { id: string }) {
     <ScreenState
       label={`scan ${id}`}
       resource={resource}
-      missing="That scan does not exist."
+      missing={
+        <>
+          <h2 id="scan-detail-title" tabIndex={-1}>
+            Scan {id} was not found
+          </h2>
+          <p>
+            <a href="#scans">Back to all scans</a>
+          </p>
+        </>
+      }
     >
       {(scan) => (
         <article className="panel detail" aria-labelledby="scan-detail-title">
           <h2 id="scan-detail-title" tabIndex={-1}>
             {scan.id}
           </h2>
-          <p>Start {scan.startedAt ?? "Not started"}</p>
+          <p>
+            Start <Time value={scan.startedAt} fallback="Not started" />
+          </p>
           <p>Duration {formatDuration(scan.durationMs)}</p>
           <p>
             Status {scan.status}
             {scan.current ? " current" : ""}
           </p>
           <p>Coverage {formatCoverage(scan.coverageSummary)}</p>
-          {scan.error ? <p>Failed {scan.error}</p> : null}
+          {scan.error ? (
+            <p>
+              Failed <ScanError scan={scan} />
+            </p>
+          ) : null}
           <div
             className="table-wrap"
             role="region"
@@ -85,7 +120,9 @@ function ScanDetail({ id }: { id: string }) {
                   <tr key={check.checkId}>
                     <th scope="row">{check.checkId}</th>
                     <td>
-                      <Chip tone={coverageTone(check.state)}>{coverageStateLabel(check.state)}</Chip>
+                      <Chip tone={coverageTone(check.state)}>
+                        {coverageStateLabel(check.state)}
+                      </Chip>
                     </td>
                     <td>
                       {check.reason ?? ""}
@@ -103,7 +140,9 @@ function ScanDetail({ id }: { id: string }) {
 }
 
 export function Scans({
-  hash = typeof window === "undefined" ? "scans" : window.location.hash.replace(/^#\/?/, ""),
+  hash = typeof window === "undefined"
+    ? "scans"
+    : window.location.hash.replace(/^#\/?/, ""),
   pollMs = 3000,
 }: {
   hash?: string;
@@ -117,6 +156,17 @@ export function Scans({
   const detailId = selectedId(hash);
 
   const polls = useRef(0);
+  const watched = useRef<ScanRow | undefined>(undefined);
+  const [finished, setFinished] = useState("");
+
+  useEffect(() => {
+    const before = watched.current;
+    const after = before && rows?.find((scan) => scan.id === before.id);
+    if (after && !isInFlight(after)) {
+      setFinished(outcomeText(after));
+    }
+    watched.current = inFlight;
+  }, [rows, inFlight]);
 
   useEffect(() => {
     if (!inFlight) {
@@ -126,7 +176,10 @@ export function Scans({
     if (polls.current >= MAX_POLLS) {
       return;
     }
-    const delay = Math.min(pollMs * 2 ** Math.min(polls.current, 16), MAX_DELAY_MS);
+    const delay = Math.min(
+      pollMs * 2 ** Math.min(polls.current, 16),
+      MAX_DELAY_MS,
+    );
     const timer = window.setTimeout(() => {
       polls.current += 1;
       refresh();
@@ -140,8 +193,8 @@ export function Scans({
         Scans
       </h1>
       <p className="page-description">
-        Each scan, when it ran, and which scopes were assessed. A failed scan is never the current
-        one.
+        Each scan, when it ran, and which scopes were assessed. A failed scan is
+        never the current one.
       </p>
       <ScreenState
         label="scan history"
@@ -160,12 +213,15 @@ export function Scans({
               aria-live="polite"
               data-busy={inFlight ? "true" : undefined}
             >
-              {inFlight ? (inFlight.status === "queued" ? "Queued" : "Running") : plural(data.length, "scan")}
+              {inFlight
+                ? outcomeText(inFlight)
+                : finished || plural(data.length, "scan")}
             </p>
             <div
               className="table-wrap"
               role="region"
               aria-labelledby="scans-caption"
+              aria-busy={inFlight ? true : undefined}
               tabIndex={0}
             >
               <table>
@@ -187,12 +243,17 @@ export function Scans({
                       <th scope="row">
                         <a href={`#scans/${scan.id}`}>{scan.id}</a>
                       </th>
-                      <td>{scan.startedAt ?? "not started"}</td>
+                      <td>
+                        <Time value={scan.startedAt} fallback="not started" />
+                      </td>
                       <td className="num">{formatDuration(scan.durationMs)}</td>
                       <td>
-                        <Chip tone={STATUS_TONE[scan.status]}>{scan.status}</Chip>
+                        <Chip tone={STATUS_TONE[scan.status]}>
+                          {scan.status}
+                        </Chip>
                         {scan.current ? " current" : ""}
-                        {scan.error ? ` ${scan.error}` : ""}
+                        {scan.error ? " " : ""}
+                        <ScanError scan={scan} />
                       </td>
                       <td>{formatCoverage(scan.coverageSummary)}</td>
                     </tr>
