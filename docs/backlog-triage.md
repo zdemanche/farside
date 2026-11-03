@@ -43,8 +43,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 26. **E5-S5** — merged (#253). Offboarding screen waits on #243. Account retire is (c) #182.
 27. **E5-S6** — merged (#254). Buttons wait on #243.
 28. **E6-S1-T5** — merged (#255). GCP control spec. Live project is D7 / #189.
-29. **E6-S2-T3** — this change: GCP owner-label gaps against fixtures. Cloud Asset harvest is #197.
-30. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+29. **E6-S2-T3** — merged (#256). GCP owner-label gaps against fixtures. Cloud Asset harvest is #197.
+30. **E6-S3-T1** — this change: GCP unattached disks and unused IPs against fixtures.
+31. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -295,7 +296,7 @@ Entire GCP epic needs D7 (#7) and a live project. Collectors also (d) AIF.
 | `E6-S2-T2` | #197 | Implement the Cloud Asset harvest | (c) live Azure / GCP / test tenant | Cloud Asset harvest live. Port from AIF (d). |
 | `E6-S2-T3` | #198 | Compute owner label gaps | (a) this change | Owner-label gaps from stored GCP inventory. Live harvest is #197. |
 | `E6-S3` | #199 | GCP waste found | (a) doable in code now | GCP waste checks against fixtures; recommender live run is (c). |
-| `E6-S3-T1` | #200 | Implement unattached disk and unused IP checks | (a) doable in code now | Unattached disk and unused IP checks. |
+| `E6-S3-T1` | #200 | Implement unattached disk and unused IP checks | (a) this change | Fixture positives/negatives. Live Compute Viewer is (c). |
 | `E6-S3-T2` | #201 | Implement old snapshot and image checks | (a) doable in code now | Old snapshot and image checks. |
 | `E6-S3-T3` | #202 | Turn idle VM and disk recommendations into findings | (c) live Azure / GCP / test tenant | Idle VM/disk recommendations from Recommender. |
 | `E6-S3-T4` | #203 | Add savings ranges and the empty-result wording | (a) doable in code now | Savings ranges and empty-result wording. |

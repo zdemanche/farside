@@ -4,8 +4,10 @@ import {
   type Finding,
   type Inventory,
 } from "@farside/scan-contracts";
-import { AZURE_LAUNCH_CHECK_IDS, recordCoverageScope, type CoverageEntry } from "./coverage.js";
+import { recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import type { ResourceFacts } from "./facts.js";
+import { checkGcpUnattachedDisks, checkGcpUnusedIps, GCP_UNATTACHED_DISKS, GCP_UNUSED_IPS } from "./gcp-checks.js";
+import { projectOf } from "./gcp-inventory.js";
 import { loadRetiringSkus } from "./retiring.js";
 import type { OrgSettings } from "./settings.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
@@ -63,6 +65,10 @@ export function acceptFinding(finding: Finding): Finding {
 
 function subscriptionOf(resourceUri: string): string {
   return resourceUri.split("/")[2] ?? "";
+}
+
+export function scopeKey(resourceUri: string, cloud: Inventory["cloud"]): string {
+  return cloud === "gcp" ? projectOf(resourceUri) : subscriptionOf(resourceUri);
 }
 
 export function checkUnattachedDisks(
@@ -947,7 +953,14 @@ export const CHECK_REGISTRY: Record<string, CheckFn> = {
   [RETIRING_SKUS]: checkRetiringSkus,
   [EXPIRING_APP_CERTS]: checkExpiringAppCerts,
   [EXPIRING_GATEWAY_CERTS]: checkExpiringGatewayCerts,
+  [GCP_UNATTACHED_DISKS]: checkGcpUnattachedDisks,
+  [GCP_UNUSED_IPS]: checkGcpUnusedIps,
 };
+
+export function registeredCheckIds(cloud: Inventory["cloud"]): string[] {
+  const prefix = cloud === "gcp" ? "gcp-" : "azure-";
+  return Object.keys(CHECK_REGISTRY).filter((id) => id.startsWith(prefix));
+}
 
 export function runChecks(input: {
   inventory: Inventory;
@@ -959,13 +972,12 @@ export function runChecks(input: {
   const findings: Finding[] = [];
   const coverage: CoverageEntry[] = [];
   const subscriptions = [
-    ...new Set(input.inventory.resources.map((resource) => subscriptionOf(resource.resourceUri))),
+    ...new Set(
+      input.inventory.resources.map((resource) => scopeKey(resource.resourceUri, input.inventory.cloud)),
+    ),
   ].filter(Boolean);
 
   for (const checkId of input.checkIds) {
-    if (!(AZURE_LAUNCH_CHECK_IDS as readonly string[]).includes(checkId)) {
-      throw new UnregisteredCheckError(checkId);
-    }
     const impl = CHECK_REGISTRY[checkId];
     if (!impl) {
       throw new UnregisteredCheckError(checkId);

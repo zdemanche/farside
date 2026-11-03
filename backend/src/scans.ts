@@ -11,7 +11,7 @@ import {
 import { applyCoverageResult } from "./coverage.js";
 import { factsFromManifest, type ResourceFacts } from "./facts.js";
 import { applyOwnerTag, inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
-import { CHECK_REGISTRY, runChecks } from "./checks.js";
+import { registeredCheckIds, runChecks } from "./checks.js";
 import { applyScanToIssues } from "./issues.js";
 import type { OrgSettings } from "./settings.js";
 import type { MemoryStore } from "./store.js";
@@ -227,7 +227,7 @@ export class ScanRunner {
       const checked = runChecks({
         inventory: result.inventory,
         facts: result.facts,
-        checkIds: Object.keys(CHECK_REGISTRY),
+        checkIds: registeredCheckIds(result.inventory.cloud),
         settings,
       });
       this.store.putFindings(orgId, checked.findings);
