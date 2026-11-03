@@ -21,6 +21,7 @@ import { DEFAULT_SETTINGS, type OrgSettings } from "./settings.js";
 
 export type Connection = {
   id: string;
+  cloud: Cloud;
   tenantId: string;
   subscriptionId: string;
   roles: string[];
@@ -249,11 +250,13 @@ export class MemoryStore {
     input: { tenantId: string; subscriptionId: string; cloud?: Cloud },
   ): Connection {
     assertNoSecrets(input);
+    const cloud = input.cloud ?? DEFAULT_CLOUD;
     const connection: Connection = {
       id: `conn-${this.org(orgId).connections.length + 1}`,
+      cloud,
       tenantId: input.tenantId,
       subscriptionId: input.subscriptionId,
-      roles: [...providerFor(input.cloud ?? DEFAULT_CLOUD).requiredRoles],
+      roles: [...providerFor(cloud).requiredRoles],
       createdAt: this.clock(),
       healthy: true,
     };

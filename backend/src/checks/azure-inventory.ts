@@ -20,15 +20,12 @@ function countByTypeField(resources: InventoryRecord[]): string {
     .join(",");
 }
 
-export const checkAllResources = checkDefinition({ checkId: ALL_RESOURCES, cloud: "azure" }, (inventory, facts) => {
-  const incomplete = new Set(
-    facts
-      .filter((row) => row.fields.argIncomplete === true)
-      .map((row) => subscriptionOf(row.resourceUri))
-      .filter(Boolean),
-  );
+function groupBySubscription(
+  resources: InventoryRecord[],
+  incomplete: ReadonlySet<string>,
+): Map<string, InventoryRecord[]> {
   const bySubscription = new Map<string, InventoryRecord[]>();
-  for (const resource of inventory.resources) {
+  for (const resource of resources) {
     const subscription = subscriptionOf(resource.resourceUri);
     if (subscription) {
       const group = bySubscription.get(subscription) ?? [];
@@ -41,7 +38,17 @@ export const checkAllResources = checkDefinition({ checkId: ALL_RESOURCES, cloud
       bySubscription.set(subscription, []);
     }
   }
-  return [...bySubscription.entries()].map(([subscription, resources]) => {
+  return bySubscription;
+}
+
+export const checkAllResources = checkDefinition({ checkId: ALL_RESOURCES, cloud: "azure" }, (inventory, facts) => {
+  const incomplete = new Set(
+    facts
+      .filter((row) => row.fields.argIncomplete === true)
+      .map((row) => subscriptionOf(row.resourceUri))
+      .filter(Boolean),
+  );
+  return [...groupBySubscription(inventory.resources, incomplete).entries()].map(([subscription, resources]) => {
     const meta = { checkId: ALL_RESOURCES, cloud: "azure" as const };
     if (incomplete.has(subscription)) {
       return buildFinding(
@@ -99,12 +106,17 @@ export const checkNoOwnerTag = defineAzureCheck({
         ownerTagValue: null,
       });
     }
-    const identity = { resourceId: resource.resourceUri, type: resource.resourceType, ownerTagKey };
+    const evidence = (tagsPresent: boolean, ownerTagValue: string | null) => ({
+      resourceId: resource.resourceUri,
+      type: resource.resourceType,
+      tagsPresent,
+      ownerTagKey,
+      ownerTagValue,
+    });
     if (tagsAbsent) {
-      return undetermined(TAGS_CLOSER, { ...identity, tagsPresent: false, ownerTagValue: null });
+      return undetermined(TAGS_CLOSER, evidence(false, null));
     }
     const owner = resource.ownerTag;
-    const evidence = { ...identity, tagsPresent: true, ownerTagValue: owner ?? null };
-    return owner ? pass(evidence) : fail(evidence);
+    return owner ? pass(evidence(true, owner)) : fail(evidence(true, owner ?? null));
   },
 });

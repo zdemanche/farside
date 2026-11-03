@@ -1,19 +1,22 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { Inventory } from "@farside/scan-contracts";
+import { buildApp } from "./app.js";
 import { runChecks } from "./checks.js";
 import { defineCheck, fail, indexFacts, num, pass, str, undetermined } from "./checks/define.js";
 import { coverageFromHarvest } from "./coverage.js";
 import type { ResourceFacts } from "./facts.js";
-import { allProviders, providerFor, registerProvider, registeredCheckIds } from "./providers/index.js";
+import { providerFor, registerProvider, registeredCheckIds } from "./providers/index.js";
 import { fixtureHarvester } from "./providers/fixture-harvester.js";
 import type { CloudProvider, PostHarvest } from "./providers/types.js";
 import { ScanRunner } from "./scans.js";
 import { scopeOf } from "./scope.js";
 import { MemoryStore } from "./store.js";
-import { fixedClock } from "./test-clock.js";
+import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const REAL_GCP = providerFor("gcp");
 const FAKE_CHECK_ID = "gcp-fake-things";
+const FAKE_SAVINGS = { min: "1.00", max: "2.00", currency: "USD", basis: "fake basis" };
 const fakeScope = (resourceUri: string) => resourceUri.split("/")[2] ?? "";
 
 const fakeCheck = defineCheck({
@@ -27,7 +30,7 @@ const fakeCheck = defineCheck({
     if (state === null) {
       return undetermined("Read the thing", evidence);
     }
-    return state === "bad" ? fail(evidence) : pass(evidence);
+    return state === "bad" ? fail(evidence, FAKE_SAVINGS) : pass(evidence);
   },
 });
 
@@ -96,12 +99,53 @@ describe("cloud provider registration", () => {
       [FAKE_CHECK_ID, "pass", "scope-a"],
     ]);
     expect(job.checks.map((check) => check.checkId)).toContain(FAKE_CHECK_ID);
+    const failing = stored.findings.find((finding) => finding.result === "fail");
+    expect(failing?.savings).toEqual({ min: "1.00", max: "2.00", currency: "USD" });
+    expect(failing?.evidence.fields.savingsBasis).toBe("fake basis");
     expect(coverageFromHarvest(["scope-a"], fakeProvider.launchCheckIds, fakeProvider.harvestAssessedCheckIds)).toHaveLength(2);
   });
 
-  it("restores the real provider after a test replaces it", () => {
-    expect(allProviders().map((provider) => provider.cloud).sort()).toEqual(["azure", "gcp"]);
-    expect(registeredCheckIds("gcp")).toEqual(REAL_GCP.checks.map((check) => check.checkId));
+  it("records the failing cloud's launch checks when a scan fails after harvest", async () => {
+    const throwing = defineCheck({
+      checkId: "gcp-fake-throws",
+      cloud: "gcp",
+      scopeOf: fakeScope,
+      resourceType: "fake/Thing",
+      readFacts: () => null,
+      decide: () => {
+        throw new Error("boom");
+      },
+    });
+    registerProvider({ ...fakeProvider, checks: [throwing] });
+    const store = new MemoryStore(fixedClock);
+    store.putConnection("org-a", { tenantId: "t", subscriptionId: "scope-a", cloud: "gcp" });
+    const runner = new ScanRunner(store, fakeProvider.harvester(fixedClock), {}, fixedClock);
+    const job = await runner.start({ orgId: "org-a", subscriptionId: "scope-a", actor: "user" }).done;
+    expect(job.status).toBe("failed");
+    expect(job.checks.map((check) => check.checkId)).toEqual([...fakeProvider.launchCheckIds]);
+  });
+
+  it("accepts a registered cloud on connect and rejects an unknown one", async () => {
+    const app = buildApp(new MemoryStore(fixedClock), TEST_APP_OPTIONS);
+    const headers = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
+    const connect = (cloud: string) =>
+      app.inject({
+        method: "PUT",
+        url: "/v1/orgs/org-a/connections",
+        headers,
+        payload: { tenantId: "tenant-1", subscriptionId: "main", cloud },
+      });
+    const accepted = await connect("gcp");
+    expect(accepted.statusCode).toBe(201);
+    expect(accepted.json().cloud).toBe("gcp");
+    expect((await connect("aws")).statusCode).toBe(400);
+    await app.close();
+  });
+
+  it("stores the connection cloud", () => {
+    const store = new MemoryStore(fixedClock);
+    expect(store.putConnection("org-a", { tenantId: "t", subscriptionId: "s" }).cloud).toBe("azure");
+    expect(store.putConnection("org-a", { tenantId: "t", subscriptionId: "p", cloud: "gcp" }).cloud).toBe("gcp");
   });
 });
 

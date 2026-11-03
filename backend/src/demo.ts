@@ -313,6 +313,6 @@ export function seedDemoOrg(store: MemoryStore): void {
   store.putCommitments(DEMO_ORG_ID, estate.commitments);
   store.putBudgets(DEMO_ORG_ID, estate.budgets);
   store.putAlerts(DEMO_ORG_ID, estate.alerts);
-  store.putConnection(DEMO_ORG_ID, { tenantId: DEMO_TENANT, subscriptionId: DEMO_SUBSCRIPTION });
+  store.putConnection(DEMO_ORG_ID, { tenantId: DEMO_TENANT, subscriptionId: DEMO_SUBSCRIPTION, cloud: "azure" });
   store.putJob(estate.scan);
 }

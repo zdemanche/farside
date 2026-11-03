@@ -96,9 +96,10 @@ export function checksFromCoverage(
 export function checksFromFailure(
   coveredScopes: string[],
   subscriptionId: string,
+  cloud: Cloud = DEFAULT_CLOUD,
 ): ScanCheckOutcome[] {
   const covered = new Set(coveredScopes);
-  return providerFor(DEFAULT_CLOUD).launchCheckIds.map((checkId) => {
+  return providerFor(cloud).launchCheckIds.map((checkId) => {
     if (covered.has(`${subscriptionId}:${checkId}`)) {
       return { checkId, state: "assessed" as const };
     }
@@ -339,7 +340,7 @@ export class ScanRunner {
     startedAt: string,
     failure: { error: unknown; errorCode: string; stored: string; covered: string[] },
   ): ScanJob {
-    const checks = checksFromFailure(failure.covered, job.subscriptionId);
+    const checks = checksFromFailure(failure.covered, job.subscriptionId, job.cloud ?? DEFAULT_CLOUD);
     const finishedAt = this.clock();
     const errorId = randomUUID();
     const failed = this.store.patchJob(orgId, job.id, {
@@ -511,7 +512,7 @@ export class ScanRunner {
         return cancelled();
       }
       const errorCode = failureCode(error, harvesting);
-      return this.recordFailure(orgId, current, startedAt, {
+      return this.recordFailure(orgId, this.store.getJob(orgId, jobId) ?? current, startedAt, {
         error,
         errorCode,
         stored: error instanceof ProviderNotConfiguredError ? PROVIDER_NOT_CONFIGURED : errorCode,

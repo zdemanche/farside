@@ -149,6 +149,7 @@ function idleTrafficCheck(spec: {
   resourceType: string;
   idField: "loadBalancerId" | "natGatewayId";
   countField: "backendAddressCount" | "attachedSubnetCount";
+  countBeforeSku?: boolean;
   countCloser: string;
   savings: () => NamedSavingsRange;
 }) {
@@ -166,8 +167,9 @@ function idleTrafficCheck(spec: {
       const evidence = (seenCount: number | null, window: string | null) => ({
         resourceUri: resource.resourceUri,
         [spec.idField]: id,
-        skuName,
-        [spec.countField]: seenCount,
+        ...(spec.countBeforeSku
+          ? { [spec.countField]: seenCount, skuName }
+          : { skuName, [spec.countField]: seenCount }),
         metricWindow: window,
       });
       if (count === null) {
@@ -196,6 +198,7 @@ export const checkIdleNatGateways = idleTrafficCheck({
   resourceType: "Microsoft.Network/natGateways",
   idField: "natGatewayId",
   countField: "attachedSubnetCount",
+  countBeforeSku: true,
   countCloser: "A NAT gateway read that includes subnets",
   savings: idleNatMonthlySavings,
 });

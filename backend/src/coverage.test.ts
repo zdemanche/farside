@@ -14,7 +14,7 @@ import {
   toContractCoverage,
 } from "./coverage.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
-import { AZURE_LAUNCH_CHECK_IDS, GCP_LAUNCH_CHECK_IDS } from "./providers/launch-ids.js";
+import { AZURE_HARVEST_ASSESSED_CHECK_IDS, AZURE_LAUNCH_CHECK_IDS, GCP_LAUNCH_CHECK_IDS } from "./providers/launch-ids.js";
 import { secretPaths } from "./secrets.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
@@ -87,7 +87,7 @@ describe("coverage states", () => {
   });
 
   it("marks inventory checks assessed on harvest and the rest unassessed", () => {
-    const entries = coverageFromHarvest(["main"]);
+    const entries = coverageFromHarvest(["main"], AZURE_LAUNCH_CHECK_IDS, AZURE_HARVEST_ASSESSED_CHECK_IDS);
     expect(entries).toHaveLength(AZURE_LAUNCH_CHECK_IDS.length);
     expect(
       entries.find((entry) => entry.checkId === "azure-inventory-all-resources")?.state,
@@ -109,7 +109,7 @@ describe("coverage states", () => {
   });
 
   it("lists undetermined and unassessed rows on Blind spots with a closer", () => {
-    const entries = applyCoverageResult(coverageFromHarvest(["main"]), {
+    const entries = applyCoverageResult(coverageFromHarvest(["main"], AZURE_LAUNCH_CHECK_IDS, AZURE_HARVEST_ASSESSED_CHECK_IDS), {
       subscriptionOrProject: "main",
       checkId: "azure-resilience-prod-vms-outside-backup",
       state: "undetermined",

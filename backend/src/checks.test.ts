@@ -7,9 +7,7 @@ import { buildApp } from "./app.js";
 import {
   ALL_RESOURCES,
   ARG_CLOSER,
-  CHECK_REGISTRY,
   EMPTY_PLANS,
-  HARVEST_DRIVEN_CHECK_IDS,
   IDLE_LOAD_BALANCERS,
   DB_ZONE_OR_GEO,
   EXPIRING_APP_CERTS,
@@ -56,7 +54,8 @@ import {
   SNAPSHOT_SAVINGS_BASIS,
   STOPPED_VM_SAVINGS_BASIS,
 } from "./savings.js";
-import { AZURE_LAUNCH_CHECK_IDS } from "./providers/launch-ids.js";
+import { findCheck } from "./providers/index.js";
+import { AZURE_LAUNCH_CHECK_IDS, HARVEST_DRIVEN_CHECK_IDS } from "./providers/launch-ids.js";
 import { defaultHarvester } from "./scans.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
@@ -71,6 +70,41 @@ const inventory = inventoryFromManifest(MANIFEST);
 const facts = factsFromManifest(MANIFEST);
 const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 
+describe("evidence key order", () => {
+  const record = (resourceType: string, name: string) => ({
+    resourceUri: `/subscriptions/s/resourceGroups/g/providers/${resourceType}/${name}`,
+    resourceType,
+    region: "eastus",
+    displayName: name,
+    tags: {},
+  });
+  const traffic = { skuName: "Standard", metricWindow: "7d", byteCount: 0 };
+
+  it("keeps owner-tag, NAT and load balancer field order stable for the console", () => {
+    const owner = record("Microsoft.Compute/disks", "d1");
+    const nat = record("Microsoft.Network/natGateways", "n1");
+    const lb = record("Microsoft.Network/loadBalancers", "l1");
+    const inv = { cloud: "azure" as const, observedAt: "1970-01-01T00:00:00.000Z", resources: [owner, nat, lb] };
+    const rows = [
+      { resourceUri: nat.resourceUri, fields: { ...traffic, natGatewayId: "n1", attachedSubnetCount: 0 } },
+      { resourceUri: lb.resourceUri, fields: { ...traffic, loadBalancerId: "l1", backendAddressCount: 0 } },
+    ];
+    const keys = (findings: { evidence: { fields: object } }[]) => Object.keys(findings[0]!.evidence.fields);
+    expect(keys(checkNoOwnerTag(inv, rows))).toEqual([
+      "resourceId", "type", "tagsPresent", "ownerTagKey", "ownerTagValue",
+    ]);
+    expect(keys(checkNoOwnerTag(inv, [{ resourceUri: owner.resourceUri, fields: { tagsPresent: false } }]))).toEqual([
+      "resourceId", "type", "tagsPresent", "ownerTagKey", "ownerTagValue",
+    ]);
+    expect(keys(checkIdleNatGateways(inv, rows))).toEqual([
+      "resourceUri", "natGatewayId", "attachedSubnetCount", "skuName", "metricWindow", "savingsBasis",
+    ]);
+    expect(keys(checkIdleLoadBalancers(inv, rows))).toEqual([
+      "resourceUri", "loadBalancerId", "skuName", "backendAddressCount", "metricWindow", "savingsBasis",
+    ]);
+  });
+});
+
 describe("check registry and rules", () => {
   it("refuses an unregistered check", () => {
     expect(() =>
@@ -81,7 +115,7 @@ describe("check registry and rules", () => {
   it("registers every Azure launch check as a CheckFn or harvest-driven", () => {
     const harvestDriven = new Set<string>(HARVEST_DRIVEN_CHECK_IDS);
     expect(
-      AZURE_LAUNCH_CHECK_IDS.every((checkId) => checkId in CHECK_REGISTRY || harvestDriven.has(checkId)),
+      AZURE_LAUNCH_CHECK_IDS.every((checkId) => findCheck(checkId) !== undefined || harvestDriven.has(checkId)),
     ).toBe(true);
   });
 

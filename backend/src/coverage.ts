@@ -9,7 +9,6 @@ import {
 } from "@farside/scan-contracts";
 import { COVERAGE_CAUSES, type CoverageCauseId } from "./causes.js";
 import { cloudFromCheckId } from "./cloud.js";
-import { AZURE_HARVEST_ASSESSED_CHECK_IDS, AZURE_LAUNCH_CHECK_IDS } from "./providers/launch-ids.js";
 
 export type CoverageState = "assessed" | "unassessed" | "undetermined";
 
@@ -76,8 +75,8 @@ export function toContractCoverage(entries: CoverageEntry[]): Coverage {
 
 export function coverageFromHarvest(
   subscriptions: string[],
-  checkIds: readonly string[] = AZURE_LAUNCH_CHECK_IDS,
-  assessedCheckIds: ReadonlySet<string> = AZURE_HARVEST_ASSESSED_CHECK_IDS,
+  checkIds: readonly string[],
+  assessedCheckIds: ReadonlySet<string>,
 ): CoverageEntry[] {
   const entries: CoverageEntry[] = [];
   for (const subscriptionOrProject of subscriptions) {

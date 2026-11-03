@@ -1,8 +1,8 @@
 import type { Finding, Inventory } from "@farside/scan-contracts";
-import { acceptFinding, indexFacts, type CheckDefinition } from "./checks/define.js";
+import { acceptFinding, indexFacts } from "./checks/define.js";
 import { recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import type { ResourceFacts } from "./facts.js";
-import { allProviders, findCheck } from "./providers/index.js";
+import { findCheck } from "./providers/index.js";
 import { scopeOf } from "./scope.js";
 import type { OrgSettings } from "./settings.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
@@ -12,7 +12,6 @@ export * from "./checks/azure-lifecycle.js";
 export * from "./checks/azure-resilience.js";
 export * from "./checks/azure-waste.js";
 export { acceptFinding } from "./checks/define.js";
-export { HARVEST_DRIVEN_CHECK_IDS } from "./providers/launch-ids.js";
 export { registeredCheckIds } from "./providers/index.js";
 
 export class UnregisteredCheckError extends Error {
@@ -21,10 +20,6 @@ export class UnregisteredCheckError extends Error {
     this.name = "UnregisteredCheckError";
   }
 }
-
-export const CHECK_REGISTRY: Record<string, CheckDefinition> = Object.fromEntries(
-  allProviders().flatMap((provider) => provider.checks.map((check) => [check.checkId, check])),
-);
 
 export function runChecks(input: {
   inventory: Inventory;
