@@ -50,7 +50,7 @@ export type ExportEnvelope = {
 
 const RAW_KEY_SET = new Set<string>(RAW_PROVIDER_KEYS);
 
-export function exportIssues(orgId: string, issues: StoredIssue[], exportedAt: string): ExportEnvelope {
+export function exportIssues(orgId: string, issues: readonly StoredIssue[], exportedAt: string): ExportEnvelope {
   return {
     format: EXPORT_FORMAT,
     kind: "issues",

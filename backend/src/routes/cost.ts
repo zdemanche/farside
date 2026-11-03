@@ -19,7 +19,7 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const org = ctx.store.snapshot(request.params.orgId);
+      const org = ctx.store.view(request.params.orgId);
       return sendClean(
         reply,
         200,
@@ -39,7 +39,7 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const org = ctx.store.snapshot(request.params.orgId);
+      const org = ctx.store.view(request.params.orgId);
       return sendClean(
         reply,
         200,
@@ -58,7 +58,7 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/cost",
     { schema: { params: orgParams } },
     async (request, reply) => {
-      const cost = ctx.store.snapshot(request.params.orgId).cost;
+      const cost = ctx.store.view(request.params.orgId).cost;
       return cost ? sendClean(reply, 200, cost) : problem(reply, 404, "Not found");
     },
   );
@@ -72,7 +72,7 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
         invalidTitle: "Invalid cost harvest",
         demo: (store, orgId) => ({
           status: 200,
-          body: { harvested: true, cost: store.snapshot(orgId).cost },
+          body: { harvested: true, cost: store.view(orgId).cost },
         }),
       },
     },
@@ -103,7 +103,7 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
       const costHarvest = harvested.value;
       ctx.store.putCoverage(
         orgId,
-        applyCostCoverage(ctx.store.snapshot(orgId).coverage, costHarvest.coverage),
+        applyCostCoverage(ctx.store.view(orgId).coverage, costHarvest.coverage),
       );
       if (!costHarvest.ok) {
         ctx.store.putCost(orgId, null, connected);

@@ -1,20 +1,37 @@
 import { canScan } from "../billing.js";
 import type { OrgParams, RoutePlugin } from "../http/context.js";
-import { problem, cloudOf, requireConnected, sendClean } from "../http/responses.js";
-import { cloudQuery, orgParams, scanBody, scanParams, tickBody } from "../http/schemas.js";
+import { problem, cloudOf, requireConnected, sendClean, sendStored } from "../http/responses.js";
+import {
+  DEFAULT_SCAN_PAGE,
+  MAX_SCAN_PAGE,
+  orgParams,
+  scanBody,
+  scanParams,
+  scansQuery,
+  tickBody,
+} from "../http/schemas.js";
 import { emitDecision } from "../observability.js";
-import { toScanView, toScanViews } from "../scans.js";
+import { findScanView, toScanView, toScanViews } from "../scans.js";
+import type { Cloud } from "../cloud.js";
+
+type ScansQuery = { cloud?: Cloud | ""; limit?: string; before?: string };
 
 export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
-  app.get<{ Params: OrgParams }>(
+  app.get<{ Params: OrgParams; Querystring: ScansQuery }>(
     "/v1/orgs/:orgId/scans",
-    { schema: { params: orgParams, querystring: cloudQuery } },
+    { schema: { params: orgParams, querystring: scansQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const scans = toScanViews(ctx.store.snapshot(request.params.orgId).scans).filter(
-        (scan) => cloud == null || scan.cloud === cloud,
-      );
-      return sendClean(reply, 200, { scans });
+      const limit = Math.min(Number(request.query.limit ?? DEFAULT_SCAN_PAGE), MAX_SCAN_PAGE);
+      const { before } = request.query;
+      const views = toScanViews(ctx.store.view(request.params.orgId).scans);
+      const end =
+        before === undefined ? views.length : views.findIndex((scan) => scan.id === before);
+      const scans = views
+        .slice(0, Math.max(end, 0))
+        .filter((scan) => cloud == null || scan.cloud === cloud)
+        .slice(-limit);
+      return sendStored(reply, 200, { scans });
     },
   );
 
@@ -22,10 +39,8 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/scans/:scanId",
     { schema: { params: scanParams } },
     async (request, reply) => {
-      const view = toScanViews(ctx.store.snapshot(request.params.orgId).scans).find(
-        (scan) => scan.id === request.params.scanId,
-      );
-      return view ? sendClean(reply, 200, view) : problem(reply, 404, "Not found");
+      const view = findScanView(ctx.store.view(request.params.orgId).scans, request.params.scanId);
+      return view ? sendStored(reply, 200, view) : problem(reply, 404, "Not found");
     },
   );
 
@@ -36,7 +51,7 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
       config: {
         invalidTitle: "Invalid scan",
         demo: (store, orgId) => {
-          const job = store.snapshot(orgId).scans[0];
+          const job = store.view(orgId).scans[0];
           return job
             ? { status: 200, body: { scan: toScanView(job, true), scanStarted: false } }
             : null;
@@ -45,7 +60,7 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
     },
     async (request, reply) => {
       const { orgId } = request.params;
-      if (!canScan(ctx.store.snapshot(orgId).contract, ctx.clock())) {
+      if (!canScan(ctx.store.view(orgId).contract, ctx.clock())) {
         return problem(reply, 409, "Scans paused", { attention: "scans paused" });
       }
       const connected = requireConnected(
@@ -70,7 +85,7 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/schedule",
     { schema: { params: orgParams } },
     async (request, reply) => {
-      const org = ctx.store.snapshot(request.params.orgId);
+      const org = ctx.store.view(request.params.orgId);
       const attention =
         org.connections.length === 0 || org.connections.every((item) => !item.healthy)
           ? "connection needs attention"
@@ -91,7 +106,7 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
     async (request, reply) => {
       const { orgId } = request.params;
       const now = ctx.clientTime(request.body.now);
-      if (!canScan(ctx.store.snapshot(orgId).contract, ctx.clock())) {
+      if (!canScan(ctx.store.view(orgId).contract, ctx.clock())) {
         emitDecision(ctx.log, { decision: "blocked", orgId, at: now });
         return sendClean(reply, 200, {
           action: "blocked",
@@ -99,7 +114,7 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
           record: null,
           scan: null,
           scanStarted: false,
-          schedule: ctx.store.snapshot(orgId).schedule,
+          schedule: ctx.store.view(orgId).schedule,
         });
       }
       const tick = ctx.scheduler.tick(orgId, now);

@@ -47,7 +47,14 @@ export type OrgState = {
   alerts: AlertAnalysis | null;
   schedule: ScheduleState;
   contract: Contract | null;
+  sequences: Record<Sequence, number>;
 };
+
+export type OrgView = { readonly [K in keyof OrgState]: Readonly<OrgState[K]> };
+
+export const MAX_SCANS_PER_ORG = 200;
+
+type Sequence = "scan" | "schedule";
 
 function emptyOrg(now: string): OrgState {
   return {
@@ -68,6 +75,7 @@ function emptyOrg(now: string): OrgState {
     alerts: null,
     schedule: emptySchedule(),
     contract: null,
+    sequences: { scan: 0, schedule: 0 },
   };
 }
 
@@ -91,6 +99,19 @@ function combineCommitments(snapshots: readonly CommitmentSnapshot[]): Commitmen
       savingsPlans: snapshots.every((item) => item.noneFound.savingsPlans),
     },
   };
+}
+
+function pruneScans(scans: ScanJob[]): ScanJob[] {
+  const current = [...scans].reverse().find((job) => job.status === "succeeded" && job.complete);
+  let excess = scans.length - MAX_SCANS_PER_ORG;
+  return scans.filter((job) => {
+    const settled = job.status !== "queued" && job.status !== "running" && job !== current;
+    if (excess > 0 && settled) {
+      excess -= 1;
+      return false;
+    }
+    return true;
+  });
 }
 
 export class MemoryStore {
@@ -219,6 +240,16 @@ export class MemoryStore {
       )
       .map(([orgId]) => orgId);
     return due.map((orgId) => this.offboard(orgId, now, "retention"));
+  }
+
+  view(orgId: string): OrgView {
+    return this.org(orgId);
+  }
+
+  nextSequence(orgId: string, kind: Sequence): number {
+    const { sequences } = this.org(orgId);
+    sequences[kind] += 1;
+    return sequences[kind];
   }
 
   snapshot(orgId: string): OrgState {
@@ -389,8 +420,12 @@ export class MemoryStore {
 
   putJob(input: Omit<ScanJob, "id">): ScanJob {
     assertNoSecrets(input);
-    const job: ScanJob = { ...input, id: `scan-${this.org(input.orgId).scans.length + 1}` };
-    this.org(input.orgId).scans.push(job);
+    const job: ScanJob = { ...input, id: `scan-${this.nextSequence(input.orgId, "scan")}` };
+    const org = this.org(input.orgId);
+    org.scans.push(job);
+    if (org.scans.length > MAX_SCANS_PER_ORG) {
+      org.scans = pruneScans(org.scans);
+    }
     return job;
   }
 

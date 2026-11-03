@@ -2,7 +2,7 @@ import { validateInventory, type Inventory } from "@farside/scan-contracts";
 import { coverageFromHarvest } from "../coverage.js";
 import { inventoriesFor } from "../estate.js";
 import type { OrgParams, RoutePlugin } from "../http/context.js";
-import { problem, cloudOf, sendClean } from "../http/responses.js";
+import { problem, cloudOf, sendClean, sendStored } from "../http/responses.js";
 import { browseQuery, cloudQuery, inventoryBody, orgParams } from "../http/schemas.js";
 import {
   applyOwnerTag,
@@ -24,9 +24,9 @@ export const inventoryRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const org = ctx.store.snapshot(request.params.orgId);
+      const org = ctx.store.view(request.params.orgId);
       const inventory = cloud ? inventoriesFor(org, cloud)[0] : org.inventory;
-      return inventory ? sendClean(reply, 200, inventory) : problem(reply, 404, "Not found");
+      return inventory ? sendStored(reply, 200, inventory) : problem(reply, 404, "Not found");
     },
   );
 
@@ -35,7 +35,7 @@ export const inventoryRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const inventories = inventoriesFor(ctx.store.snapshot(request.params.orgId), cloud);
+      const inventories = inventoriesFor(ctx.store.view(request.params.orgId), cloud);
       if (inventories.length === 0) {
         return problem(reply, 404, "Not found");
       }
@@ -58,7 +58,7 @@ export const inventoryRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams, querystring: browseQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const inventories = inventoriesFor(ctx.store.snapshot(request.params.orgId), cloud);
+      const inventories = inventoriesFor(ctx.store.view(request.params.orgId), cloud);
       if (inventories.length === 0) {
         return problem(reply, 404, "Not found");
       }
@@ -93,7 +93,7 @@ export const inventoryRoutes: RoutePlugin = (ctx) => async (app) => {
       const { orgId } = request.params;
       const tagged = applyOwnerTag(
         projectInventory(request.body as Inventory),
-        ctx.store.snapshot(orgId).settings.ownerTagKey,
+        ctx.store.view(orgId).settings.ownerTagKey,
       );
       const stored = ctx.store.putInventory(orgId, tagged);
       const scopes = [

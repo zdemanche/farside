@@ -3,7 +3,7 @@ import type { Cloud, Finding, Inventory } from "@farside/scan-contracts";
 import { abortable } from "./abortable.js";
 import { runChecks } from "./checks.js";
 import { systemClock, type Clock } from "./clock.js";
-import { applyCoverageResult, type CoverageEntry, type CoverageState } from "./coverage.js";
+import { applyCoverageResults, type CoverageEntry, type CoverageState } from "./coverage.js";
 import type { ResourceFacts } from "./facts.js";
 import { applyScanToIssues } from "./issues.js";
 import { DEFAULT_CLOUD, providerFor, registeredCheckIds } from "./providers/index.js";
@@ -76,7 +76,7 @@ export function coverageSummaryFrom(checks: readonly ScanCheckOutcome[]): ScanCo
 }
 
 export function checksFromCoverage(
-  coverage: CoverageEntry[],
+  coverage: readonly CoverageEntry[],
   subscriptionId: string,
 ): ScanCheckOutcome[] {
   return coverage
@@ -115,16 +115,24 @@ export function toScanView(job: ScanJob, current: boolean): ScanView {
   };
 }
 
-export function toScanViews(jobs: readonly ScanJob[]): ScanView[] {
-  let currentId: string | undefined;
+function currentScanId(jobs: readonly ScanJob[]): string | undefined {
   for (let index = jobs.length - 1; index >= 0; index -= 1) {
     const job = jobs[index];
     if (job && job.status === "succeeded" && job.complete) {
-      currentId = job.id;
-      break;
+      return job.id;
     }
   }
+  return undefined;
+}
+
+export function toScanViews(jobs: readonly ScanJob[]): ScanView[] {
+  const currentId = currentScanId(jobs);
   return jobs.filter((job) => job.status !== "cancelled").map((job) => toScanView(job, job.id === currentId));
+}
+
+export function findScanView(jobs: readonly ScanJob[], scanId: string): ScanView | undefined {
+  const job = jobs.find((candidate) => candidate.id === scanId);
+  return job && job.status !== "cancelled" ? toScanView(job, job.id === currentScanId(jobs)) : undefined;
 }
 
 export type { HarvestResult, Harvester, ScanHarvestClients };
@@ -132,17 +140,18 @@ export type { HarvestResult, Harvester, ScanHarvestClients };
 export { fixtureHarvester };
 
 export function mergeScanFindings(
-  existing: Finding[],
-  next: Finding[],
+  existing: readonly Finding[],
+  next: readonly Finding[],
   replaceCheckIds: ReadonlySet<string>,
   subscriptionId: string,
 ): Finding[] {
+  const target = subscriptionId.toLowerCase();
   return [
     ...existing.filter(
       (finding) =>
         !(
           replaceCheckIds.has(finding.checkId) &&
-          finding.scope.subscriptionOrProject.toLowerCase() === subscriptionId.toLowerCase()
+          finding.scope.subscriptionOrProject.toLowerCase() === target
         ),
     ),
     ...next,
@@ -150,19 +159,17 @@ export function mergeScanFindings(
 }
 
 export function mergeScanCoverage(
-  existing: CoverageEntry[],
-  next: CoverageEntry[],
+  existing: readonly CoverageEntry[],
+  next: readonly CoverageEntry[],
   replaceCheckIds: ReadonlySet<string>,
   subscriptionId: string,
 ): CoverageEntry[] {
+  const target = subscriptionId.toLowerCase();
   const kept = existing.filter(
     (entry) =>
-      !(
-        replaceCheckIds.has(entry.checkId) &&
-        entry.subscriptionOrProject.toLowerCase() === subscriptionId.toLowerCase()
-      ),
+      !(replaceCheckIds.has(entry.checkId) && entry.subscriptionOrProject.toLowerCase() === target),
   );
-  return next.reduce((coverage, entry) => applyCoverageResult(coverage, entry), kept);
+  return applyCoverageResults(kept, next);
 }
 
 function failureCode(error: unknown, harvesting: boolean): string {
@@ -207,8 +214,8 @@ export function mergeScanInventory(
 }
 
 export function mergeScanFacts(
-  existing: ResourceFacts[],
-  next: ResourceFacts[],
+  existing: readonly ResourceFacts[],
+  next: readonly ResourceFacts[],
   inventory: Inventory,
   subscriptionId: string,
 ): ResourceFacts[] {
@@ -410,7 +417,7 @@ export class ScanRunner {
     const remainingMs = () => Math.max(0, deadline - Date.parse(this.clock()));
     let harvesting = true;
     try {
-      const settings = this.store.snapshot(orgId).settings;
+      const settings = this.store.view(orgId).settings;
       const result = await abortable(
         signal,
         this.harvester.harvest({
@@ -455,7 +462,7 @@ export class ScanRunner {
       if (connectedAtStart && !this.store.isConnected(orgId, current.subscriptionId)) {
         return cancelled();
       }
-      const fresh = this.store.snapshot(orgId);
+      const fresh = this.store.view(orgId);
       this.store.putInventory(
         orgId,
         mergeScanInventory(fresh.inventories[result.inventory.cloud], result.inventory, current.subscriptionId),
@@ -469,11 +476,10 @@ export class ScanRunner {
         coverage: mergeScanCoverage(fresh.coverage, checked.coverage, replaceIds, current.subscriptionId),
       });
       const findings = merged.findings;
-      let coverage = merged.coverage;
       this.store.putFindings(orgId, findings);
-      this.store.putCoverage(orgId, coverage);
-      const written = this.store.snapshot(orgId);
-      coverage = written.coverage;
+      this.store.putCoverage(orgId, merged.coverage);
+      const written = this.store.view(orgId);
+      const coverage = written.coverage;
       this.store.putIssues(
         orgId,
         applyScanToIssues({

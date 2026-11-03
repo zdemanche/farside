@@ -7,6 +7,7 @@ export const DEFAULT_INTERVAL_HOURS = 24;
 export const DEFAULT_RETRY_LIMIT = 3;
 export const RETRY_DELAY_HOURS = 1;
 export const DEFAULT_SCAN_TIMEOUT_MS = 600_000;
+export const MAX_SCHEDULE_RECORDS = 500;
 
 export type ScheduleAction = "started" | "skipped_overlap" | "skipped_broken" | "retried" | "missed";
 
@@ -59,10 +60,10 @@ function recordOf(
   subscriptionId: string | null,
   reason: string | null,
   scanId: string | null,
-  index: number,
+  sequence: number,
 ): ScheduleRecord {
   const record: ScheduleRecord = {
-    id: `sched-${index + 1}`,
+    id: `sched-${sequence}`,
     orgId,
     subscriptionId,
     at,
@@ -143,18 +144,21 @@ export class ScanScheduler {
     org.schedule.lastTickAt = now;
     const healthy = healthyConnections(org.connections);
     const expired = this.runner.expireStaleScans(orgId, now);
-    const running = healthy.flatMap((item) => {
-      const job = this.store.runningScan(orgId, item.subscriptionId);
-      return job ? [job] : [];
-    });
+    const activeSubscriptions = new Set<string>();
+    const lastSystemStatus = new Map<string, ScanJob["status"]>();
+    for (const scan of org.scans) {
+      if (scan.status === "queued" || scan.status === "running") {
+        activeSubscriptions.add(scan.subscriptionId);
+      }
+      if (scan.actor === "system") {
+        lastSystemStatus.set(scan.subscriptionId, scan.status);
+      }
+    }
     const connection = healthy[0] ?? null;
     const subscriptionId = connection?.subscriptionId ?? org.connections[0]?.subscriptionId ?? null;
-    const failedRetryable = healthy.filter((item) => {
-      const last = [...org.scans]
-        .reverse()
-        .find((scan) => scan.actor === "system" && scan.subscriptionId === item.subscriptionId);
-      return last?.status === "failed";
-    });
+    const failedRetryable = healthy.filter(
+      (item) => lastSystemStatus.get(item.subscriptionId) === "failed",
+    );
     const retryCountOf = (item: Connection) => org.schedule.retryCounts[item.subscriptionId] ?? 0;
     const retryable = failedRetryable.filter((item) => retryCountOf(item) < org.settings.scanRetryLimit);
     const retryDue = org.schedule.retryAt !== null && Date.parse(now) >= Date.parse(org.schedule.retryAt);
@@ -170,7 +174,8 @@ export class ScanScheduler {
       nextRunAt: org.schedule.nextRunAt,
       retryCount: failedRetryable.length > 0 ? Math.min(...failedRetryable.map(retryCountOf)) : 0,
       connection,
-      running: healthy.length > 0 && running.length === healthy.length,
+      running:
+        healthy.length > 0 && healthy.every((item) => activeSubscriptions.has(item.subscriptionId)),
       lastSystemFailed: failedRetryable.length > 0,
     });
     const attention =
@@ -212,7 +217,7 @@ export class ScanScheduler {
       org.schedule.retryAt = null;
       org.schedule.nextRunAt = org.schedule.regularRunAt;
     }
-    const records = (scans.length > 0 ? scans : [null]).map((target, offset) =>
+    const records = (scans.length > 0 ? scans : [null]).map((target) =>
       recordOf(
         orgId,
         now,
@@ -220,10 +225,13 @@ export class ScanScheduler {
         target?.scan.subscriptionId ?? subscriptionId,
         decision.reason,
         target?.scan.id ?? null,
-        org.schedule.records.length + offset,
+        this.store.nextSequence(orgId, "schedule"),
       ),
     );
     org.schedule.records.push(...records);
+    if (org.schedule.records.length > MAX_SCHEDULE_RECORDS) {
+      org.schedule.records.splice(0, org.schedule.records.length - MAX_SCHEDULE_RECORDS);
+    }
     emitDecision(this.log, {
       decision: action,
       orgId,

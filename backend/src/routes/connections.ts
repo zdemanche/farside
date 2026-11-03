@@ -1,5 +1,5 @@
 import type { OrgParams, RoutePlugin } from "../http/context.js";
-import { problem, sendClean } from "../http/responses.js";
+import { problem, sendClean, sendStored } from "../http/responses.js";
 import { connectionBody, connectionParams, orgParams } from "../http/schemas.js";
 import { canScan } from "../billing.js";
 import { audit } from "../observability.js";
@@ -12,7 +12,7 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/connections",
     { schema: { params: orgParams } },
     async (request, reply) =>
-      sendClean(reply, 200, { connections: ctx.store.snapshot(request.params.orgId).connections }),
+      sendStored(reply, 200, { connections: ctx.store.view(request.params.orgId).connections }),
   );
 
   app.put<{ Params: OrgParams; Body: ConnectionInput }>(
@@ -31,7 +31,7 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
       });
       audit(request.log, "connection.connect");
       ctx.scheduler.applySettings(orgId, ctx.clientTime(asOf));
-      if (!canScan(ctx.store.snapshot(orgId).contract, ctx.clock())) {
+      if (!canScan(ctx.store.view(orgId).contract, ctx.clock())) {
         return sendClean(reply, 201, {
           ...connection,
           scan: null,

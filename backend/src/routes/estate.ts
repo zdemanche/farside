@@ -11,7 +11,7 @@ export const estateRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const org = ctx.store.snapshot(request.params.orgId);
+      const org = ctx.store.view(request.params.orgId);
       const coverage = cloudFilter(org.coverage, cloud, (entry) => entry.cloud);
       const findings = cloudFilter(org.findings, cloud, (finding) => finding.scope.cloud);
       return sendClean(reply, 200, {
@@ -27,7 +27,7 @@ export const estateRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      return sendClean(reply, 200, estateOverview(ctx.store.snapshot(request.params.orgId), cloud));
+      return sendClean(reply, 200, estateOverview(ctx.store.view(request.params.orgId), cloud));
     },
   );
 };

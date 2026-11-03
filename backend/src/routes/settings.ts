@@ -8,8 +8,7 @@ export const settingsRoutes: RoutePlugin = (ctx) => async (app) => {
   app.get<{ Params: OrgParams }>(
     "/v1/orgs/:orgId/settings",
     { schema: { params: orgParams } },
-    async (request, reply) =>
-      sendClean(reply, 200, ctx.store.snapshot(request.params.orgId).settings),
+    async (request, reply) => sendClean(reply, 200, ctx.store.view(request.params.orgId).settings),
   );
 
   app.put<{ Params: OrgParams; Body: SettingsInput & { asOf?: string } }>(

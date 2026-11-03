@@ -24,6 +24,13 @@ export const scanParams = object(
 
 const cloudParam = { enum: [...CLOUDS, ""] } as const;
 export const cloudQuery = object({ cloud: cloudParam });
+export const MAX_SCAN_PAGE = 200;
+export const DEFAULT_SCAN_PAGE = 50;
+export const scansQuery = object({
+  cloud: cloudParam,
+  limit: { type: "string", pattern: "^[1-9][0-9]{0,5}$" },
+  before: string(64),
+});
 export const exportQuery = object({ cloud: cloudParam, asOf: instant });
 export const browseQuery = object({
   cloud: cloudParam,

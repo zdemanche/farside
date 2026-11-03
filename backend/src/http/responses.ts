@@ -33,6 +33,10 @@ export function sendClean(reply: FastifyReply, status: number, body: unknown) {
   return reply.code(status).send(body);
 }
 
+export function sendStored(reply: FastifyReply, status: number, body: unknown) {
+  return reply.code(status).send(body);
+}
+
 export function rejectSecrets(body: unknown, reply: FastifyReply): boolean {
   try {
     assertNoSecrets(body);
@@ -53,7 +57,7 @@ export function cloudOf(query: unknown): Cloud | undefined {
 }
 
 export function cloudFilter<T>(
-  rows: T[],
+  rows: readonly T[],
   cloud: Cloud | undefined,
   cloudOf: (row: T) => Cloud,
 ): T[] {
@@ -82,7 +86,7 @@ export function connectedSubscription(
 ): string | null {
   const wanted = subscriptionId.toLowerCase();
   const match = store
-    .snapshot(orgId)
+    .view(orgId)
     .connections.find((connection) => connection.subscriptionId.toLowerCase() === wanted);
   return match?.subscriptionId ?? null;
 }
