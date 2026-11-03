@@ -50,7 +50,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Fetch main
         run: git fetch --depth=1 origin main
       - name: Validate accountId against the registry
