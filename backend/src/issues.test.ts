@@ -190,6 +190,47 @@ describe("replay scans", () => {
     });
     expect(uncovered[0]?.status).toBe("not_confirmed");
   });
+
+  it("limits a harvest apply to named check ids so other issues stay open", () => {
+    const opened = applyScanToIssues({
+      issues: [],
+      findings: [failFinding()],
+      coverage: assessed,
+      scanId: "scan-1",
+      observedAt: "1970-01-01T00:00:00.000Z",
+    });
+    const harvest = applyScanToIssues({
+      issues: opened,
+      findings: [
+        {
+          checkId: "azure-cost-subscriptions-without-budgets",
+          result: "fail",
+          evidence: { fields: { subscriptionId: "empty-no-budget", budgetCount: 0 } },
+          scope: {
+            id: "empty-no-budget:azure-cost-subscriptions-without-budgets",
+            cloud: "azure",
+            subscriptionOrProject: "empty-no-budget",
+          },
+        },
+      ],
+      coverage: [
+        ...assessed,
+        recordCoverageScope({
+          subscriptionOrProject: "empty-no-budget",
+          checkId: "azure-cost-subscriptions-without-budgets",
+          state: "assessed",
+        }),
+      ],
+      scanId: "harvest-budgets",
+      observedAt: "1970-01-02T00:00:00.000Z",
+      checkIds: ["azure-cost-subscriptions-without-budgets"],
+    });
+    expect(harvest.find((issue) => issue.resourceId === "disk-unattached")?.status).toBe("open");
+    expect(
+      harvest.find((issue) => issue.checkId === "azure-cost-subscriptions-without-budgets")?.status,
+    ).toBe("open");
+    expect(harvest.find((issue) => issue.scopeId === "empty-no-budget:azure-cost-subscriptions-without-budgets")).toBeTruthy();
+  });
 });
 
 describe("scan into issue store", () => {

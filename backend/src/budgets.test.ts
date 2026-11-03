@@ -79,5 +79,22 @@ describe("budget routes", () => {
       headers: ORG,
     });
     expect(stored.json().subscriptions).toHaveLength(2);
+    const issues = await app.inject({
+      method: "GET",
+      url: "/v1/orgs/org-a/issues",
+      headers: ORG,
+    });
+    const budgetIssues = (issues.json().issues as Array<{
+      checkId: string;
+      subscriptionOrProject: string;
+      status: string;
+      scopeId: string;
+    }>).filter((issue) => issue.checkId === NO_BUDGETS);
+    expect(budgetIssues).toHaveLength(1);
+    expect(budgetIssues[0]).toMatchObject({
+      subscriptionOrProject: "empty-no-budget",
+      status: "open",
+      scopeId: "empty-no-budget:azure-cost-subscriptions-without-budgets",
+    });
   });
 });
