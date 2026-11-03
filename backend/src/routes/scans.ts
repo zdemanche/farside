@@ -24,7 +24,7 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
       const cloud = cloudOf(request.query);
       const limit = Math.min(Number(request.query.limit ?? DEFAULT_SCAN_PAGE), MAX_SCAN_PAGE);
       const { before } = request.query;
-      const views = toScanViews(ctx.store.view(request.params.orgId).scans);
+      const views = toScanViews((await ctx.store.read(request.params.orgId, "scans")).scans);
       const end =
         before === undefined ? views.length : views.findIndex((scan) => scan.id === before);
       if (end < 0) {
@@ -47,7 +47,10 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/scans/:scanId",
     { schema: { params: scanParams } },
     async (request, reply) => {
-      const view = findScanView(ctx.store.view(request.params.orgId).scans, request.params.scanId);
+      const view = findScanView(
+        (await ctx.store.read(request.params.orgId, "scans")).scans,
+        request.params.scanId,
+      );
       return view ? sendClean(reply, 200, view) : problem(reply, 404, "Not found");
     },
   );
@@ -58,8 +61,8 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
       schema: { params: orgParams, body: scanBody },
       config: {
         invalidTitle: "Invalid scan",
-        demo: (store, orgId) => {
-          const job = store.view(orgId).scans[0];
+        demo: async (store, orgId) => {
+          const job = (await store.read(orgId, "scans")).scans[0];
           return job
             ? { status: 200, body: { scan: toScanView(job, true), scanStarted: false } }
             : null;
@@ -68,10 +71,10 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
     },
     async (request, reply) => {
       const { orgId } = request.params;
-      if (!canScan(ctx.store.view(orgId).contract, ctx.clock())) {
+      if (!canScan((await ctx.store.read(orgId, "contract")).contract, ctx.clock())) {
         return problem(reply, 409, "Scans paused", { attention: "scans paused" });
       }
-      const connected = requireConnected(
+      const connected = await requireConnected(
         ctx,
         request,
         reply,
@@ -81,7 +84,7 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
       if (!connected) {
         return reply;
       }
-      const scan = ctx.runner.start({ orgId, subscriptionId: connected, actor: "user" });
+      const scan = await ctx.runner.start({ orgId, subscriptionId: connected, actor: "user" });
       return sendClean(reply, scan.started ? 202 : 200, {
         scan: toScanView(scan.job, false),
         scanStarted: scan.started,
@@ -93,7 +96,7 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/schedule",
     { schema: { params: orgParams } },
     async (request, reply) => {
-      const org = ctx.store.view(request.params.orgId);
+      const org = await ctx.store.read(request.params.orgId, "connections", "schedule", "settings");
       const attention =
         org.connections.length === 0 || org.connections.every((item) => !item.healthy)
           ? "connection needs attention"
@@ -114,7 +117,7 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
     async (request, reply) => {
       const { orgId } = request.params;
       const now = ctx.clientTime(request.body.now);
-      if (!canScan(ctx.store.view(orgId).contract, ctx.clock())) {
+      if (!canScan((await ctx.store.read(orgId, "contract")).contract, ctx.clock())) {
         emitDecision(ctx.log, { decision: "blocked", orgId, at: now });
         return sendClean(reply, 200, {
           action: "blocked",
@@ -122,10 +125,10 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
           record: null,
           scan: null,
           scanStarted: false,
-          schedule: ctx.store.view(orgId).schedule,
+          schedule: (await ctx.store.read(orgId, "schedule")).schedule,
         });
       }
-      const tick = ctx.scheduler.tick(orgId, now);
+      const tick = await ctx.scheduler.tick(orgId, now);
       return sendClean(reply, 200, {
         action: tick.action,
         attention: tick.attention,

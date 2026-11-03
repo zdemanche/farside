@@ -22,8 +22,8 @@ import { offboardRoutes } from "./routes/offboard.js";
 import { scanRoutes } from "./routes/scans.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { ScanRunner, unconfiguredHarvester, type Harvester } from "./scans.js";
+import type { OrgRepository } from "./repository.js";
 import { ScanScheduler } from "./scheduler.js";
-import { MemoryStore } from "./store.js";
 
 export { SERVICE_NAME } from "./routes/health.js";
 
@@ -44,7 +44,7 @@ const ROUTE_PLUGINS: RoutePlugin[] = [
 ];
 
 export function buildApp(
-  store: MemoryStore = new MemoryStore(),
+  store: OrgRepository,
   options: {
     harvester?: Harvester;
     costClient?: CostQueryClient;

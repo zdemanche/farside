@@ -1,6 +1,7 @@
 import { systemClock, type Clock } from "./clock.js";
 import { emitDecision, silentLog, type LogSink } from "./observability.js";
-import type { Connection, MemoryStore } from "./store.js";
+import { asMutable } from "./readonly.js";
+import type { Connection, OrgRepository } from "./repository.js";
 import type { ScanJob, ScanRunner } from "./scans.js";
 
 export const DEFAULT_INTERVAL_HOURS = 24;
@@ -117,33 +118,46 @@ export function decideTick(input: {
   return { action: "idle", reason: null, attention: null };
 }
 
+type ScheduleFields = Pick<
+  ScheduleState,
+  "lastTickAt" | "nextRunAt" | "regularRunAt" | "retryAt" | "retryCount" | "retryCounts"
+>;
+
+function scheduleFields(schedule: ScheduleState): ScheduleFields {
+  const { lastTickAt, nextRunAt, regularRunAt, retryAt, retryCount, retryCounts } = schedule;
+  return { lastTickAt, nextRunAt, regularRunAt, retryAt, retryCount, retryCounts };
+}
+
 export class ScanScheduler {
   constructor(
-    private readonly store: MemoryStore,
+    private readonly store: OrgRepository,
     private readonly runner: ScanRunner,
     private readonly clock: Clock = systemClock,
     private readonly log: LogSink = silentLog,
   ) {}
 
-  applySettings(orgId: string, now: string = this.clock()): ScheduleState {
-    const org = this.store.org(orgId);
-    if (!org.settings.scanScheduleEnabled) {
-      org.schedule.nextRunAt = null;
-      org.schedule.regularRunAt = null;
-      org.schedule.retryAt = null;
-      return org.schedule;
-    }
-    org.schedule.regularRunAt = addHours(now, org.settings.scanIntervalHours);
-    org.schedule.retryAt = null;
-    org.schedule.nextRunAt = org.schedule.regularRunAt;
-    return org.schedule;
+  async applySettings(orgId: string, now: string = this.clock()): Promise<ScheduleState> {
+    const { settings } = await this.store.read(orgId, "settings");
+    return this.store.updateSchedule(orgId, (schedule) => {
+      if (!settings.scanScheduleEnabled) {
+        schedule.nextRunAt = null;
+        schedule.regularRunAt = null;
+        schedule.retryAt = null;
+        return;
+      }
+      schedule.regularRunAt = addHours(now, settings.scanIntervalHours);
+      schedule.retryAt = null;
+      schedule.nextRunAt = schedule.regularRunAt;
+    });
   }
 
-  tick(orgId: string, now: string = this.clock()): ScheduleTick {
-    const org = this.store.org(orgId);
-    org.schedule.lastTickAt = now;
-    const healthy = healthyConnections(org.connections);
-    const expired = this.runner.expireStaleScans(orgId, now);
+  async tick(orgId: string, now: string = this.clock()): Promise<ScheduleTick> {
+    const expired = await this.runner.expireStaleScans(orgId, now);
+    const org = await this.store.read(orgId, "settings", "connections", "scans", "schedule");
+    const { settings } = org;
+    const schedule = structuredClone(asMutable<ScheduleState>(org.schedule));
+    schedule.lastTickAt = now;
+    const healthy = healthyConnections(asMutable<Connection[]>(org.connections));
     const activeSubscriptions = new Set<string>();
     const lastSystemStatus = new Map<string, ScanJob["status"]>();
     for (const scan of org.scans) {
@@ -159,19 +173,19 @@ export class ScanScheduler {
     const failedRetryable = healthy.filter(
       (item) => lastSystemStatus.get(item.subscriptionId) === "failed",
     );
-    const retryCountOf = (item: Connection) => org.schedule.retryCounts[item.subscriptionId] ?? 0;
-    const retryable = failedRetryable.filter((item) => retryCountOf(item) < org.settings.scanRetryLimit);
-    const retryDue = org.schedule.retryAt !== null && Date.parse(now) >= Date.parse(org.schedule.retryAt);
-    if (retryDue && retryable.length === 0 && org.schedule.regularRunAt) {
-      org.schedule.retryAt = null;
-      org.schedule.nextRunAt = org.schedule.regularRunAt;
+    const retryCountOf = (item: Connection) => schedule.retryCounts[item.subscriptionId] ?? 0;
+    const retryable = failedRetryable.filter((item) => retryCountOf(item) < settings.scanRetryLimit);
+    const retryDue = schedule.retryAt !== null && Date.parse(now) >= Date.parse(schedule.retryAt);
+    if (retryDue && retryable.length === 0 && schedule.regularRunAt) {
+      schedule.retryAt = null;
+      schedule.nextRunAt = schedule.regularRunAt;
     }
     const decision = decideTick({
       now,
-      enabled: org.settings.scanScheduleEnabled,
-      intervalHours: org.settings.scanIntervalHours,
-      retryLimit: org.settings.scanRetryLimit,
-      nextRunAt: org.schedule.nextRunAt,
+      enabled: settings.scanScheduleEnabled,
+      intervalHours: settings.scanIntervalHours,
+      retryLimit: settings.scanRetryLimit,
+      nextRunAt: schedule.nextRunAt,
       retryCount: failedRetryable.length > 0 ? Math.min(...failedRetryable.map(retryCountOf)) : 0,
       connection,
       running:
@@ -181,6 +195,7 @@ export class ScanScheduler {
     const attention =
       expired.length > 0 ? "scan stuck: a scan ran past the timeout and was marked failed" : decision.attention;
     if (decision.action === "idle") {
+      const committed = await this.commit(orgId, schedule);
       emitDecision(this.log, { decision: "idle", orgId, at: now });
       return {
         action: "idle",
@@ -189,49 +204,58 @@ export class ScanScheduler {
         scan: null,
         scanStarted: false,
         scans: [],
-        schedule: org.schedule,
+        schedule: committed,
       };
     }
     const action = decision.action;
-    const scans: ScheduleTick["scans"] = [];
-    if ((action === "started" || action === "retried" || action === "missed") && healthy.length > 0) {
-      const targets = action === "retried" ? retryable : healthy;
-      for (const item of targets) {
-        const started = this.runner.start({ orgId, subscriptionId: item.subscriptionId, actor: "system" });
-        scans.push({ scan: started.job, started: started.started });
-      }
+    const targets = action === "retried" ? retryable : healthy;
+    const runs = (action === "started" || action === "retried" || action === "missed") && healthy.length > 0;
+    if (runs) {
       if (action === "retried") {
         for (const item of targets) {
-          org.schedule.retryCounts[item.subscriptionId] = retryCountOf(item) + 1;
+          schedule.retryCounts[item.subscriptionId] = retryCountOf(item) + 1;
         }
       } else {
-        org.schedule.retryCounts = {};
+        schedule.retryCounts = {};
       }
-      org.schedule.retryCount = Math.max(0, ...Object.values(org.schedule.retryCounts));
+      schedule.retryCount = Math.max(0, ...Object.values(schedule.retryCounts));
     }
     if (action === "retried") {
-      org.schedule.retryAt = null;
-      org.schedule.nextRunAt = org.schedule.regularRunAt;
+      schedule.retryAt = null;
+      schedule.nextRunAt = schedule.regularRunAt;
     } else {
-      org.schedule.regularRunAt = addHours(now, org.settings.scanIntervalHours);
-      org.schedule.retryAt = null;
-      org.schedule.nextRunAt = org.schedule.regularRunAt;
+      schedule.regularRunAt = addHours(now, settings.scanIntervalHours);
+      schedule.retryAt = null;
+      schedule.nextRunAt = schedule.regularRunAt;
     }
-    const records = (scans.length > 0 ? scans : [null]).map((target) =>
-      recordOf(
-        orgId,
-        now,
-        action,
-        target?.scan.subscriptionId ?? subscriptionId,
-        decision.reason,
-        target?.scan.id ?? null,
-        this.store.nextSequence(orgId, "schedule"),
-      ),
-    );
-    org.schedule.records.push(...records);
-    if (org.schedule.records.length > MAX_SCHEDULE_RECORDS) {
-      org.schedule.records.splice(0, org.schedule.records.length - MAX_SCHEDULE_RECORDS);
+    await this.commit(orgId, schedule);
+    const scans: ScheduleTick["scans"] = [];
+    if (runs) {
+      for (const item of targets) {
+        const started = await this.runner.start({ orgId, subscriptionId: item.subscriptionId, actor: "system" });
+        scans.push({ scan: started.job, started: started.started });
+      }
     }
+    const records: ScheduleRecord[] = [];
+    for (const target of scans.length > 0 ? scans : [null]) {
+      records.push(
+        recordOf(
+          orgId,
+          now,
+          action,
+          target?.scan.subscriptionId ?? subscriptionId,
+          decision.reason,
+          target?.scan.id ?? null,
+          await this.store.nextSequence(orgId, "schedule"),
+        ),
+      );
+    }
+    const committed = await this.store.updateSchedule(orgId, (live) => {
+      live.records.push(...records);
+      if (live.records.length > MAX_SCHEDULE_RECORDS) {
+        live.records.splice(0, live.records.length - MAX_SCHEDULE_RECORDS);
+      }
+    });
     emitDecision(this.log, {
       decision: action,
       orgId,
@@ -245,7 +269,14 @@ export class ScanScheduler {
       scan: scans[0]?.scan ?? null,
       scanStarted: scans[0]?.started ?? false,
       scans,
-      schedule: org.schedule,
+      schedule: committed,
     };
+  }
+
+  private commit(orgId: string, schedule: ScheduleState): Promise<ScheduleState> {
+    const fields = scheduleFields(schedule);
+    return this.store.updateSchedule(orgId, (live) => {
+      Object.assign(live, fields);
+    });
   }
 }

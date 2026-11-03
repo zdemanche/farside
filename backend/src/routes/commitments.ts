@@ -24,7 +24,7 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/commitments",
     { schema: { params: orgParams } },
     async (request, reply) => {
-      const commitments = ctx.store.view(request.params.orgId).commitments;
+      const { commitments } = await ctx.store.read(request.params.orgId, "commitments");
       return commitments ? sendClean(reply, 200, commitments) : problem(reply, 404, "Not found");
     },
   );
@@ -36,8 +36,8 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
       config: {
         rejectSecrets: true,
         invalidTitle: "Invalid commitment harvest",
-        demo: (store, orgId) => {
-          const org = store.view(orgId);
+        demo: async (store, orgId) => {
+          const org = await store.read(orgId, "commitments", "findings");
           return {
             status: 200,
             body: { harvested: true, commitments: org.commitments, findings: org.findings },
@@ -47,7 +47,7 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
     },
     async (request, reply) => {
       const { orgId } = request.params;
-      const connected = requireConnected(
+      const connected = await requireConnected(
         ctx,
         request,
         reply,
@@ -71,33 +71,37 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
         return reply;
       }
       const commitmentHarvest = harvested.value;
-      ctx.store.putCoverage(
+      await ctx.store.putCoverage(
         orgId,
-        applyCommitmentCoverage(ctx.store.view(orgId).coverage, commitmentHarvest.coverage),
+        applyCommitmentCoverage(
+          (await ctx.store.read(orgId, "coverage")).coverage,
+          commitmentHarvest.coverage,
+        ),
       );
       if (!commitmentHarvest.ok) {
-        ctx.store.putCommitments(orgId, null, connected);
+        await ctx.store.putCommitments(orgId, null, connected);
         return sendClean(reply, 200, {
           harvested: false,
           reason: commitmentHarvest.reason,
           closer: commitmentHarvest.coverage[0]?.closer,
         });
       }
-      ctx.store.putCommitments(orgId, commitmentHarvest.snapshot, connected);
-      ctx.store.putFindings(
+      await ctx.store.putCommitments(orgId, commitmentHarvest.snapshot, connected);
+      await ctx.store.putFindings(
         orgId,
         mergeCommitmentFindings(
-          ctx.store.view(orgId).findings,
+          (await ctx.store.read(orgId, "findings")).findings,
           commitmentHarvest.findings,
           connected,
         ),
       );
-      ctx.store.putIssues(
+      const stored = await ctx.store.read(orgId, "issues", "coverage");
+      await ctx.store.putIssues(
         orgId,
         applyScanToIssues({
-          issues: ctx.store.view(orgId).issues,
+          issues: stored.issues,
           findings: commitmentHarvest.findings,
-          coverage: ctx.store.view(orgId).coverage,
+          coverage: stored.coverage,
           scanId: "harvest-commitments",
           observedAt: commitmentHarvest.snapshot.periodEnd,
           checkIds: [RESERVATION_USE, SAVINGS_PLAN_USE],
@@ -115,7 +119,7 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/budgets",
     { schema: { params: orgParams } },
     async (request, reply) => {
-      const budgets = ctx.store.view(request.params.orgId).budgets;
+      const { budgets } = await ctx.store.read(request.params.orgId, "budgets");
       return budgets ? sendClean(reply, 200, budgets) : problem(reply, 404, "Not found");
     },
   );
@@ -125,8 +129,8 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
     {
       schema: { params: orgParams },
       config: {
-        demo: (store, orgId) => {
-          const org = store.view(orgId);
+        demo: async (store, orgId) => {
+          const org = await store.read(orgId, "budgets", "findings");
           return {
             status: 200,
             body: { harvested: true, budgets: org.budgets, findings: org.findings },
@@ -146,21 +150,22 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
         return reply;
       }
       const budgetHarvest = harvested.value;
-      ctx.store.putCoverage(
+      await ctx.store.putCoverage(
         orgId,
-        applyBudgetCoverage(ctx.store.view(orgId).coverage, budgetHarvest.coverage),
+        applyBudgetCoverage((await ctx.store.read(orgId, "coverage")).coverage, budgetHarvest.coverage),
       );
-      ctx.store.putBudgets(orgId, budgetHarvest.snapshot);
-      ctx.store.putFindings(
+      await ctx.store.putBudgets(orgId, budgetHarvest.snapshot);
+      await ctx.store.putFindings(
         orgId,
-        mergeBudgetFindings(ctx.store.view(orgId).findings, budgetHarvest.findings),
+        mergeBudgetFindings((await ctx.store.read(orgId, "findings")).findings, budgetHarvest.findings),
       );
-      ctx.store.putIssues(
+      const stored = await ctx.store.read(orgId, "issues", "coverage");
+      await ctx.store.putIssues(
         orgId,
         applyScanToIssues({
-          issues: ctx.store.view(orgId).issues,
+          issues: stored.issues,
           findings: budgetHarvest.findings,
-          coverage: ctx.store.view(orgId).coverage,
+          coverage: stored.coverage,
           scanId: "harvest-budgets",
           observedAt: budgetHarvest.snapshot.lastConfirmed,
           checkIds: [NO_BUDGETS],

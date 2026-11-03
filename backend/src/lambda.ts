@@ -1,5 +1,6 @@
 import { buildApp } from "./app.js";
 import { loggerFromEnv } from "./observability.js";
+import { storeFromEnv } from "./store-from-env.js";
 
 type HttpMethod = "DELETE" | "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
 
@@ -51,7 +52,7 @@ export async function resolveOperatorToken(
 }
 
 async function start() {
-  const app = buildApp(undefined, {
+  const app = buildApp(await storeFromEnv(), {
     operatorToken: await resolveOperatorToken(),
     logger: loggerFromEnv(),
   });

@@ -15,7 +15,7 @@ export const contractRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/contract",
     { schema: { params: orgParams } },
     async (request, reply) => {
-      const contract = ctx.store.view(request.params.orgId).contract;
+      const { contract } = await ctx.store.read(request.params.orgId, "contract");
       return contract
         ? sendClean(reply, 200, billingView(contract, ctx.clock()))
         : problem(reply, 404, "Not found");
@@ -38,7 +38,7 @@ export const contractRoutes: RoutePlugin = (ctx) => async (app) => {
             errors: [{ path: "body", message: "plan and an ISO startDate are required" }],
           });
         }
-        ctx.store.putContract(request.params.orgId, parsed);
+        await ctx.store.putContract(request.params.orgId, parsed);
         audit(request.log, "contract.change");
         return sendClean(reply, 200, billingView(parsed, now));
       } catch (error) {
@@ -59,14 +59,14 @@ export const contractRoutes: RoutePlugin = (ctx) => async (app) => {
     },
     async (request, reply) => {
       const { orgId } = request.params;
-      const current = ctx.store.view(orgId).contract;
+      const { contract: current } = await ctx.store.read(orgId, "contract");
       if (!current) {
         return problem(reply, 404, "Not found");
       }
       const now = ctx.clock();
       const event = request.body.event;
       const next = advanceContract(current, event ? { now, event } : { now });
-      ctx.store.putContract(orgId, next);
+      await ctx.store.putContract(orgId, next);
       audit(request.log, "contract.change", { via: "advance" });
       return sendClean(reply, 200, billingView(next, now));
     },

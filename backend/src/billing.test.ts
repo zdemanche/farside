@@ -265,7 +265,7 @@ describe("operator-only contract writes and ladder enforcement", () => {
       payload: { now: clock },
     });
     expect(tick.statusCode).toBe(410);
-    const record = store.deletion("org-ladder");
+    const record = await store.deletion("org-ladder");
     expect(record).toMatchObject({ orgId: "org-ladder", deletedAt: clock, trigger: "retention" });
     expect(provider).not.toHaveBeenCalled();
   });
@@ -274,8 +274,8 @@ describe("operator-only contract writes and ladder enforcement", () => {
     clock = T0;
     await operatorPut("org-early", { unpaidAt: T0 });
     clock = daysAfter(T0, 50);
-    expect(store.sweepRetention(clock)).toEqual([]);
-    expect(store.deletion("org-early")).toBeNull();
+    expect(await store.sweepRetention(clock)).toEqual([]);
+    expect(await store.deletion("org-early")).toBeNull();
   });
 
   it("offboards an ended contract after 30 days with a retention record", async () => {
@@ -283,10 +283,10 @@ describe("operator-only contract writes and ladder enforcement", () => {
     await operatorPut("org-ended", {});
     await operatorAdvance("org-ended", "ended");
     clock = daysAfter(T0, 29);
-    expect(store.sweepRetention(clock)).toEqual([]);
+    expect(await store.sweepRetention(clock)).toEqual([]);
     clock = daysAfter(T0, 30);
-    expect(store.sweepRetention(clock).map((record) => record.trigger)).toEqual(["retention"]);
-    expect(store.deletion("org-ended")?.orgId).toBe("org-ended");
+    expect((await store.sweepRetention(clock)).map((record) => record.trigger)).toEqual(["retention"]);
+    expect((await store.deletion("org-ended"))?.orgId).toBe("org-ended");
   });
 
   const MUTATING = [
@@ -354,7 +354,7 @@ describe("operator-only contract writes and ladder enforcement", () => {
       headers: orgHeaders("org-lazy"),
     });
     expect(exported.statusCode).toBe(410);
-    expect(store.deletion("org-lazy")).toMatchObject({ trigger: "retention", deletedAt: clock });
+    expect(await store.deletion("org-lazy")).toMatchObject({ trigger: "retention", deletedAt: clock });
     const mutate = await app.inject({
       method: "PUT",
       url: "/v1/orgs/org-lazy/settings",
@@ -369,9 +369,9 @@ describe("operator-only contract writes and ladder enforcement", () => {
       payload: {},
     });
     expect(tick.statusCode).toBe(410);
-    expect(store.deletion("org-bystander")).toBeNull();
-    expect(runRetentionSweep(store, () => clock).map((record) => record.orgId)).toContain("org-bystander");
-    expect(store.deletion("org-bystander")?.trigger).toBe("retention");
+    expect(await store.deletion("org-bystander")).toBeNull();
+    expect((await runRetentionSweep(store, () => clock)).map((record) => record.orgId)).toContain("org-bystander");
+    expect((await store.deletion("org-bystander"))?.trigger).toBe("retention");
   });
 
   it("refuses operator contract writes on the demo org and never sweeps it", async () => {
@@ -390,9 +390,9 @@ describe("operator-only contract writes and ladder enforcement", () => {
     });
     expect(advance.statusCode).toBe(403);
     const demoStore = new MemoryStore();
-    demoStore.putContract("demo", parseContract({ plan: "x", startDate: T0, unpaidAt: T0 }, T0));
-    expect(demoStore.sweepRetention(daysAfter(T0, 400))).toEqual([]);
-    expect(demoStore.deletion("demo")).toBeNull();
+    await demoStore.putContract("demo", parseContract({ plan: "x", startDate: T0, unpaidAt: T0 }, T0));
+    expect(await demoStore.sweepRetention(daysAfter(T0, 400))).toEqual([]);
+    expect(await demoStore.deletion("demo")).toBeNull();
   });
 
   it("rejects a contract body that includes a card number", async () => {

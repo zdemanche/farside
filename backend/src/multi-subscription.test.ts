@@ -17,9 +17,9 @@ const FAKE_TIMEOUTS = { toFake: ["setTimeout", "clearTimeout"] } as const;
 
 const openStores: MemoryStore[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   for (const store of openStores.splice(0)) {
-    store.offboard(ORG, FIXED_NOW);
+    await store.offboard(ORG, FIXED_NOW);
   }
   vi.useRealTimers();
 });
@@ -73,7 +73,7 @@ function harvesterFor(
 }
 
 async function scan(runner: ScanRunner, subscriptionId: string) {
-  return runner.start({ orgId: ORG, subscriptionId, actor: "user" }).done;
+  return (await runner.start({ orgId: ORG, subscriptionId, actor: "user" })).done;
 }
 
 async function settled(store: MemoryStore): Promise<void> {
@@ -197,22 +197,22 @@ describe("per-subscription state", () => {
     expect(store.snapshot(ORG).inventories.azure?.resources).toHaveLength(1);
   });
 
-  it("totals cost per month across subscriptions even when period ends differ", () => {
+  it("totals cost per month across subscriptions even when period ends differ", async () => {
     const store = new MemoryStore(fixedClock);
-    store.putCost(ORG, costSnapshot("sub-a", "USD", { months: [{ month: "2026-10", amount: "10.00", end: "2026-10-31" }] }));
-    store.putCost(ORG, costSnapshot("sub-b", "USD", { months: [{ month: "2026-10", amount: "5.25", end: "2026-10-30" }] }));
+    await store.putCost(ORG, costSnapshot("sub-a", "USD", { months: [{ month: "2026-10", amount: "10.00", end: "2026-10-31" }] }));
+    await store.putCost(ORG, costSnapshot("sub-b", "USD", { months: [{ month: "2026-10", amount: "5.25", end: "2026-10-30" }] }));
     expect(store.costsOf(ORG).map((row) => row.subscriptionId)).toEqual(["sub-a", "sub-b"]);
     const total = store.snapshot(ORG).cost;
     expect(total?.months).toHaveLength(1);
     expect(total?.months[0]).toMatchObject({ costAmount: "15.25", periodEnd: "2026-10-31" });
     expect(total?.services.map((row) => row.costAmount)).toEqual(["20.00"]);
-    store.putCost(ORG, null, "sub-a");
+    await store.putCost(ORG, null, "sub-a");
     expect(store.snapshot(ORG).cost?.months[0]?.costAmount).toBe("5.25");
   });
 
-  it("sorts months across subscriptions and recomputes month-on-month from combined figures", () => {
+  it("sorts months across subscriptions and recomputes month-on-month from combined figures", async () => {
     const store = new MemoryStore(fixedClock);
-    store.putCost(
+    await store.putCost(
       ORG,
       costSnapshot("sub-b", "USD", {
         months: [
@@ -223,7 +223,7 @@ describe("per-subscription state", () => {
         changes: [{ service: "Compute", currentMonth: "2026-10", previousMonth: "2026-09", current: "6.00", previous: "4.00" }],
       }),
     );
-    store.putCost(
+    await store.putCost(
       ORG,
       costSnapshot("sub-a", "USD", {
         months: ["06", "07", "08", "09", "10"].map((month) => ({ month: `2026-${month}`, amount: "10.00" })),
@@ -242,19 +242,19 @@ describe("per-subscription state", () => {
     expect(byService.Compute).toMatchObject({ currentMonthCost: "6.00", previousMonthCost: "4.00" });
   });
 
-  it("ignores a subscription with no cost figures when totalling and checking currency", () => {
+  it("ignores a subscription with no cost figures when totalling and checking currency", async () => {
     const store = new MemoryStore(fixedClock);
-    store.putCost(ORG, { ...costSnapshot("sub-empty", "", { months: [], services: {} }), currency: "" });
-    store.putCost(ORG, costSnapshot("sub-b", "USD"));
+    await store.putCost(ORG, { ...costSnapshot("sub-empty", "", { months: [], services: {} }), currency: "" });
+    await store.putCost(ORG, costSnapshot("sub-b", "USD"));
     const org = store.snapshot(ORG);
     expect(org.cost?.currency).toBe("USD");
     expect(org.coverage.filter((entry) => entry.closer === MIXED_CURRENCY_CLOSER)).toEqual([]);
   });
 
-  it("never adds across currencies and heals coverage from each stored snapshot", () => {
+  it("never adds across currencies and heals coverage from each stored snapshot", async () => {
     const store = new MemoryStore(fixedClock);
-    store.putCost(ORG, costSnapshot("sub-a", "USD"));
-    store.putCost(ORG, costSnapshot("sub-b", "EUR"));
+    await store.putCost(ORG, costSnapshot("sub-a", "USD"));
+    await store.putCost(ORG, costSnapshot("sub-b", "EUR"));
     const mixed = store.snapshot(ORG);
     expect(mixed.cost).toBeNull();
     expect(store.costsOf(ORG)).toHaveLength(2);
@@ -263,13 +263,13 @@ describe("per-subscription state", () => {
       ["undetermined", MIXED_CURRENCY_CLOSER],
       ["undetermined", MIXED_CURRENCY_CLOSER],
     ]);
-    store.putCoverage(ORG, mixed.coverage.map((entry) => ({ ...entry, state: "assessed" as const })));
+    await store.putCoverage(ORG, mixed.coverage.map((entry) => ({ ...entry, state: "assessed" as const })));
     expect(
       store.snapshot(ORG).coverage.filter((entry) => entry.checkId === SPEND_BY_SERVICE).every(
         (entry) => entry.state === "undetermined",
       ),
     ).toBe(true);
-    store.putCost(ORG, costSnapshot("sub-b", "USD"));
+    await store.putCost(ORG, costSnapshot("sub-b", "USD"));
     const healed = store.snapshot(ORG).coverage;
     expect(healed.filter((entry) => entry.checkId === SPEND_BY_SERVICE).every((entry) => entry.state === "assessed")).toBe(
       true,
@@ -285,14 +285,14 @@ describe("per-subscription state", () => {
 describe("disconnecting a subscription", () => {
   it("drops its inventory, facts and cost but keeps the others", async () => {
     const store = new MemoryStore(fixedClock);
-    const connectionA = store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
-    store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-b" });
+    const connectionA = await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
+    await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-b" });
     const runner = new ScanRunner(store, harvesterFor(TWO_SUBSCRIPTIONS), {}, fixedClock);
     await scan(runner, "sub-a");
     await scan(runner, "sub-b");
-    store.putCost(ORG, costSnapshot("sub-a", "USD"));
-    store.putCost(ORG, costSnapshot("sub-b", "USD", { months: [{ month: "2026-10", amount: "5.00" }] }));
-    expect(store.deleteConnection(ORG, connectionA.id)).toBe(true);
+    await store.putCost(ORG, costSnapshot("sub-a", "USD"));
+    await store.putCost(ORG, costSnapshot("sub-b", "USD", { months: [{ month: "2026-10", amount: "5.00" }] }));
+    expect(await store.deleteConnection(ORG, connectionA.id)).toBe(true);
     const org = store.snapshot(ORG);
     expect(org.inventories.azure?.resources.map((row) => row.resourceUri)).toEqual(
       TWO_SUBSCRIPTIONS["sub-b"],
@@ -316,11 +316,11 @@ describe("concurrent scans in one org", () => {
       {},
       fixedClock,
     );
-    const first = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "system" });
-    const second = runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "system" });
+    const first = await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "system" });
+    const second = await runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "system" });
     await new Promise((resolve) => setImmediate(resolve));
-    expect(store.getJob(ORG, first.job.id)?.status).toBe("running");
-    expect(store.getJob(ORG, second.job.id)?.status).toBe("queued");
+    expect((await store.getJob(ORG, first.job.id))?.status).toBe("running");
+    expect((await store.getJob(ORG, second.job.id))?.status).toBe("queued");
     open();
     await Promise.all([first.done, second.done]);
     const issues = diskIssues(store);
@@ -352,16 +352,16 @@ describe("concurrent scans in one org", () => {
       },
       fixedClock,
     );
-    const { done } = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    const { done } = await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
     await new Promise((resolve) => setImmediate(resolve));
-    store.offboard(ORG, FIXED_NOW);
+    await store.offboard(ORG, FIXED_NOW);
     release();
     expect((await done).status).toBe("cancelled");
-    expect(store.hasOrg(ORG)).toBe(false);
+    expect(await store.hasOrg(ORG)).toBe(false);
   });
 });
 
-function scheduled(
+async function scheduled(
   harvester: Harvester,
   clock: Clock = fixedClock,
   log: LogSink = silentLog,
@@ -371,10 +371,10 @@ function scheduled(
   openStores.push(store);
   const runner = new ScanRunner(store, harvester, {}, clock, log, timeoutMs);
   const scheduler = new ScanScheduler(store, runner, clock, log);
-  store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
-  store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-b" });
+  await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
+  await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-b" });
   store.org(ORG).settings.scanScheduleEnabled = true;
-  scheduler.applySettings(ORG, clock());
+  await scheduler.applySettings(ORG, clock());
   return { store, runner, scheduler };
 }
 
@@ -384,10 +384,10 @@ describe("scheduler with several connections", () => {
   });
 
   it("starts one scan per healthy connection and skips the unhealthy one", async () => {
-    const { store, scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS));
-    const broken = store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-c" });
-    store.patchConnection(ORG, broken.id, { healthy: false });
-    const tick = scheduler.tick(ORG, addHours(FIXED_NOW, 24));
+    const { store, scheduler } = await scheduled(harvesterFor(TWO_SUBSCRIPTIONS));
+    const broken = await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-c" });
+    await store.patchConnection(ORG, broken.id, { healthy: false });
+    const tick = await scheduler.tick(ORG, addHours(FIXED_NOW, 24));
     expect(tick.action).toBe("started");
     expect(tick.scans.map((item) => item.scan.subscriptionId)).toEqual(["sub-a", "sub-b"]);
     expect(tick.scans.every((item) => item.started)).toBe(true);
@@ -395,25 +395,25 @@ describe("scheduler with several connections", () => {
       "sub-a",
       "sub-b",
     ]);
-    expect(scheduler.tick(ORG, addHours(FIXED_NOW, 24)).action).toBe("idle");
+    expect((await scheduler.tick(ORG, addHours(FIXED_NOW, 24))).action).toBe("idle");
     await settled(store);
   });
 
   it("skips as overlap only when every healthy subscription is already scanning", async () => {
-    const { store, runner, scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS));
-    runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
-    const tick = scheduler.tick(ORG, addHours(FIXED_NOW, 24));
+    const { store, runner, scheduler } = await scheduled(harvesterFor(TWO_SUBSCRIPTIONS));
+    await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    const tick = await scheduler.tick(ORG, addHours(FIXED_NOW, 24));
     expect(tick.action).toBe("started");
     expect(tick.scans.map((item) => item.started)).toEqual([false, true]);
     await settled(store);
   });
 
   it("retries only the subscription whose last scheduled scan failed", async () => {
-    const { store, scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS, { failFor: "sub-a" }));
-    const first = scheduler.tick(ORG, addHours(FIXED_NOW, 24));
+    const { store, scheduler } = await scheduled(harvesterFor(TWO_SUBSCRIPTIONS, { failFor: "sub-a" }));
+    const first = await scheduler.tick(ORG, addHours(FIXED_NOW, 24));
     expect(first.scans).toHaveLength(2);
     await settled(store);
-    const retry = scheduler.tick(ORG, addHours(FIXED_NOW, 48));
+    const retry = await scheduler.tick(ORG, addHours(FIXED_NOW, 48));
     expect(retry.action).toBe("retried");
     expect(retry.scans.map((item) => item.scan.subscriptionId)).toEqual(["sub-a"]);
     expect(store.snapshot(ORG).schedule.retryCounts).toEqual({ "sub-a": 1 });
@@ -524,54 +524,54 @@ describe("scheduler hardening", () => {
     const store = new MemoryStore(fixedClock);
     openStores.push(store);
     const runner = new ScanRunner(store, harvesterFor(TWO_SUBSCRIPTIONS, { gates: { "sub-a": NEVER } }), {}, fixedClock, silentLog, 20);
-    const first = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "system" });
-    const second = runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "system" });
+    const first = await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "system" });
+    const second = await runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "system" });
     expect(await first.done).toMatchObject({ status: "failed", error: "harvest_timeout" });
     expect((await second.done).status).toBe("succeeded");
   });
 
-  it("treats a running job older than the timeout as failed so it cannot block a new scan", () => {
+  it("treats a running job older than the timeout as failed so it cannot block a new scan", async () => {
     let now = Date.parse("2026-10-01T00:00:00.000Z");
     const clock: Clock = () => new Date(now).toISOString();
     const store = new MemoryStore(clock);
     openStores.push(store);
     const runner = new ScanRunner(store, harvesterFor(TWO_SUBSCRIPTIONS, { gates: { "sub-a": NEVER } }), {}, clock, silentLog, 60_000);
-    const stuck = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
-    expect(runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" }).started).toBe(false);
+    const stuck = await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    expect((await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" })).started).toBe(false);
     now += 61_000;
-    const next = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    const next = await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
     expect(next.started).toBe(true);
     expect(next.job.id).not.toBe(stuck.job.id);
-    expect(store.getJob(ORG, stuck.job.id)).toMatchObject({ status: "failed", error: "harvest_timeout" });
+    expect(await store.getJob(ORG, stuck.job.id)).toMatchObject({ status: "failed", error: "harvest_timeout" });
   });
 
   it("retries a failed scan one retry delay later, only for the failed subscription", async () => {
     let now = FIXED_NOW;
-    const { store, scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS, { failFor: "sub-a" }), () => now);
+    const { store, scheduler } = await scheduled(harvesterFor(TWO_SUBSCRIPTIONS, { failFor: "sub-a" }), () => now);
     now = addHours(FIXED_NOW, 24);
-    expect(scheduler.tick(ORG, now).action).toBe("started");
+    expect((await scheduler.tick(ORG, now)).action).toBe("started");
     await settled(store);
     expect(store.snapshot(ORG).schedule.nextRunAt).toBe(addHours(now, RETRY_DELAY_HOURS));
-    expect(scheduler.tick(ORG, addHours(now, RETRY_DELAY_HOURS / 2)).action).toBe("idle");
+    expect((await scheduler.tick(ORG, addHours(now, RETRY_DELAY_HOURS / 2))).action).toBe("idle");
     now = addHours(now, RETRY_DELAY_HOURS);
-    const retry = scheduler.tick(ORG, now);
+    const retry = await scheduler.tick(ORG, now);
     expect(retry.action).toBe("retried");
     expect(retry.scans.map((item) => item.scan.subscriptionId)).toEqual(["sub-a"]);
     await settled(store);
   });
 
-  it("fails a stuck job at tick time, flags it, and starts a fresh scan", () => {
+  it("fails a stuck job at tick time, flags it, and starts a fresh scan", async () => {
     let now = FIXED_NOW;
-    const { store, runner, scheduler } = scheduled(
+    const { store, runner, scheduler } = await scheduled(
       harvesterFor(TWO_SUBSCRIPTIONS, { gates: { "sub-a": NEVER, "sub-b": NEVER } }),
       () => now,
       silentLog,
       60_000,
     );
-    const stuck = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    const stuck = await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
     now = addHours(FIXED_NOW, 24);
-    const tick = scheduler.tick(ORG, now);
-    expect(store.getJob(ORG, stuck.job.id)).toMatchObject({ status: "failed", error: "harvest_timeout" });
+    const tick = await scheduler.tick(ORG, now);
+    expect(await store.getJob(ORG, stuck.job.id)).toMatchObject({ status: "failed", error: "harvest_timeout" });
     expect(tick.attention).toBe("scan stuck: a scan ran past the timeout and was marked failed");
     expect(tick.action).toBe("started");
     expect(tick.scans.every((item) => item.started)).toBe(true);
@@ -590,11 +590,11 @@ describe("scheduler hardening", () => {
       },
     };
     const runner = new ScanRunner(store, harvester, { costClient: { query: () => NEVER as never } }, clock, silentLog, 10 * 60_000);
-    const { job } = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    const { job } = await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
     await vi.advanceTimersByTimeAsync(4 * 60_000 - 1);
-    expect(store.getJob(ORG, job.id)?.status).toBe("running");
+    expect((await store.getJob(ORG, job.id))?.status).toBe("running");
     await vi.advanceTimersByTimeAsync(1);
-    expect(store.getJob(ORG, job.id)).toMatchObject({ status: "failed", error: "harvest_timeout" });
+    expect(await store.getJob(ORG, job.id)).toMatchObject({ status: "failed", error: "harvest_timeout" });
   });
 
   it("keeps a scan alive when its harvests together fit the budget, even if a tick arrives mid-scan", async () => {
@@ -617,7 +617,7 @@ describe("scheduler hardening", () => {
         costClient: {
           query: async () => {
             now += 3 * 60_000;
-            expiredMidScan = runner.expireStaleScans(ORG, clock());
+            expiredMidScan = (await runner.expireStaleScans(ORG, clock()));
             return { rows: [] };
           },
         },
@@ -626,34 +626,36 @@ describe("scheduler hardening", () => {
       silentLog,
       10 * 60_000,
     );
-    const { done } = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    const { done } = await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
     expect((await done).status).toBe("succeeded");
     expect(expiredMidScan).toEqual([]);
   });
 
   it("goes back to the regular cadence when a retry comes due with nothing left to retry", async () => {
     let now = FIXED_NOW;
-    const { store, scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS, { failFor: "sub-a" }), () => now);
+    const { store, scheduler } = await scheduled(harvesterFor(TWO_SUBSCRIPTIONS, { failFor: "sub-a" }), () => now);
     now = addHours(FIXED_NOW, 24);
-    scheduler.tick(ORG, now);
+    await scheduler.tick(ORG, now);
     await settled(store);
     const regular = addHours(now, 24);
     expect(store.snapshot(ORG).schedule).toMatchObject({ retryAt: addHours(now, 1), regularRunAt: regular });
-    store.snapshot(ORG).scans.forEach((job) => store.patchJob(ORG, job.id, { status: "succeeded" }));
-    const due = scheduler.tick(ORG, addHours(now, 1));
+    for (const job of store.snapshot(ORG).scans) {
+      await store.patchJob(ORG, job.id, { status: "succeeded" });
+    }
+    const due = await scheduler.tick(ORG, addHours(now, 1));
     expect(due.action).toBe("idle");
     expect(store.snapshot(ORG).schedule).toMatchObject({ retryAt: null, nextRunAt: regular, retryCounts: {} });
   });
 
   it("does not push the regular cadence later after a retry", async () => {
     let now = FIXED_NOW;
-    const { store, scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS, { failFor: "sub-a" }), () => now);
+    const { store, scheduler } = await scheduled(harvesterFor(TWO_SUBSCRIPTIONS, { failFor: "sub-a" }), () => now);
     now = addHours(FIXED_NOW, 24);
-    scheduler.tick(ORG, now);
+    await scheduler.tick(ORG, now);
     await settled(store);
     const regular = addHours(now, 24);
     now = addHours(now, 1);
-    expect(scheduler.tick(ORG, now).action).toBe("retried");
+    expect((await scheduler.tick(ORG, now)).action).toBe("retried");
     await settled(store);
     expect(store.snapshot(ORG).schedule.regularRunAt).toBe(regular);
     expect(store.snapshot(ORG).schedule.retryAt).toBe(addHours(now, 1));
@@ -668,9 +670,9 @@ describe("scheduler hardening", () => {
 
     it("logs one decision line without subscription ids", async () => {
       const { lines, log } = capture();
-      const { store, scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS), fixedClock, log);
-      expect(scheduler.tick(ORG, FIXED_NOW).action).toBe("idle");
-      const started = scheduler.tick(ORG, addHours(FIXED_NOW, 24));
+      const { store, scheduler } = await scheduled(harvesterFor(TWO_SUBSCRIPTIONS), fixedClock, log);
+      expect((await scheduler.tick(ORG, FIXED_NOW)).action).toBe("idle");
+      const started = await scheduler.tick(ORG, addHours(FIXED_NOW, 24));
       await settled(store);
       const decisions = lines.filter((line) => line.event === "scheduler.decision");
       expect(decisions).toEqual([
@@ -680,16 +682,16 @@ describe("scheduler hardening", () => {
       expect(JSON.stringify(decisions)).not.toContain("sub-");
     });
 
-    it("adds EMF fields only when FARSIDE_EMIT_EMF=1", () => {
+    it("adds EMF fields only when FARSIDE_EMIT_EMF=1", async () => {
       const { lines, log } = capture();
-      const { scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS), fixedClock, log);
+      const { scheduler } = await scheduled(harvesterFor(TWO_SUBSCRIPTIONS), fixedClock, log);
       vi.stubEnv("FARSIDE_EMIT_EMF", "1");
       try {
-        scheduler.tick(ORG, FIXED_NOW);
+        await scheduler.tick(ORG, FIXED_NOW);
       } finally {
         vi.unstubAllEnvs();
       }
-      scheduler.tick(ORG, FIXED_NOW);
+      await scheduler.tick(ORG, FIXED_NOW);
       const [emf, plain] = lines.filter((line) => line.event === "scheduler.decision");
       expect(emf).toMatchObject({
         Decision: "idle",
@@ -711,9 +713,9 @@ describe("scheduler hardening", () => {
 });
 
 describe("combined month-on-month with a service that stops", () => {
-  it("keeps the previous month of a service one subscription stopped using", () => {
+  it("keeps the previous month of a service one subscription stopped using", async () => {
     const store = new MemoryStore(fixedClock);
-    store.putCost(
+    await store.putCost(
       ORG,
       costSnapshot("sub-a", "USD", {
         months: [
@@ -728,7 +730,7 @@ describe("combined month-on-month with a service that stops", () => {
         },
       }),
     );
-    store.putCost(
+    await store.putCost(
       ORG,
       costSnapshot("sub-b", "USD", {
         months: [{ month: "2026-09", amount: "5.00" }],
@@ -774,8 +776,8 @@ describe("combined month-on-month with a service that stops", () => {
 describe("disconnect during a scan", () => {
   it("writes nothing for a subscription disconnected mid-scan and cancels the queued one before harvesting", async () => {
     const store = new MemoryStore(fixedClock);
-    const connectionA = store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
-    const connectionB = store.putConnection(ORG, { tenantId: "t", subscriptionId: "SUB-B" });
+    const connectionA = await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
+    const connectionB = await store.putConnection(ORG, { tenantId: "t", subscriptionId: "SUB-B" });
     let open!: () => void;
     const gate = new Promise<void>((resolve) => {
       open = resolve;
@@ -783,11 +785,11 @@ describe("disconnect during a scan", () => {
     const harvester = harvesterFor(TWO_SUBSCRIPTIONS, { gates: { "sub-a": gate } });
     const harvest = vi.spyOn(harvester, "harvest");
     const runner = new ScanRunner(store, harvester, {}, fixedClock);
-    const first = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
-    const second = runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "user" });
+    const first = await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    const second = await runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "user" });
     await new Promise((resolve) => setImmediate(resolve));
-    store.deleteConnection(ORG, connectionA.id);
-    store.deleteConnection(ORG, connectionB.id);
+    await store.deleteConnection(ORG, connectionA.id);
+    await store.deleteConnection(ORG, connectionB.id);
     open();
     expect((await first.done).status).toBe("cancelled");
     expect((await second.done).status).toBe("cancelled");
@@ -798,7 +800,7 @@ describe("disconnect during a scan", () => {
     expect(org.findings).toEqual([]);
     expect(org.issues).toEqual([]);
     expect(org.scans.map((job) => job.status)).toEqual(["cancelled", "cancelled"]);
-    expect(store.runningScan(ORG, "sub-a")).toBeUndefined();
+    expect(await store.runningScan(ORG, "sub-a")).toBeUndefined();
   });
 
   it("removes its abort listener once the harvest settles", async () => {
@@ -814,7 +816,7 @@ describe("disconnect during a scan", () => {
     expect(removed).toHaveBeenCalledWith("abort", expect.any(Function));
   });
 
-  it("lists each billing scope once when combining commitments", () => {
+  it("lists each billing scope once when combining commitments", async () => {
     const store = new MemoryStore(fixedClock);
     const snapshot = (subscriptionId: string) => ({
       subscriptionId,
@@ -825,8 +827,8 @@ describe("disconnect during a scan", () => {
       savingsPlans: [],
       noneFound: { reservations: true, savingsPlans: true },
     });
-    store.putCommitments(ORG, snapshot("sub-a"));
-    store.putCommitments(ORG, snapshot("sub-b"));
+    await store.putCommitments(ORG, snapshot("sub-a"));
+    await store.putCommitments(ORG, snapshot("sub-b"));
     expect(store.snapshot(ORG).commitments?.billingScope).toBe("/providers/Microsoft.Billing/billingAccounts/shared");
   });
 });

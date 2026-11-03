@@ -4,7 +4,9 @@ import { guardHarvester, isDemoOrg } from "./demo.js";
 import { audit, auditRetention, loggerFromEnv, pinoOptions, type LogSink } from "./observability.js";
 import { ScanRunner, unconfiguredHarvester } from "./scans.js";
 import { ScanScheduler, type ScheduleTick } from "./scheduler.js";
-import { MemoryStore, runRetentionSweep } from "./store.js";
+import type { OrgRepository } from "./repository.js";
+import { storeFromEnv } from "./store-from-env.js";
+import { runRetentionSweep } from "./store.js";
 
 const SETTLE_MS = 240_000;
 const POLL_MS = 250;
@@ -15,7 +17,7 @@ export type TickSummary = {
 };
 
 export type TickDeps = {
-  store: MemoryStore;
+  store: OrgRepository;
   scheduler: Pick<ScanScheduler, "tick">;
   clock: Clock;
   log: LogSink;
@@ -25,17 +27,21 @@ export type TickDeps = {
 
 type StartedScan = { orgId: string; jobId: string };
 
-function isPending(store: MemoryStore, { orgId, jobId }: StartedScan): boolean {
-  const status = store.getJob(orgId, jobId)?.status;
+async function isPending(store: OrgRepository, { orgId, jobId }: StartedScan): Promise<boolean> {
+  const status = (await store.getJob(orgId, jobId))?.status;
   return status === "queued" || status === "running";
 }
 
 async function settle(started: StartedScan[], deps: TickDeps) {
   const deadline = Date.now() + (deps.settleMs ?? SETTLE_MS);
-  while (started.some((scan) => isPending(deps.store, scan)) && Date.now() < deadline) {
+  const pending = async () => {
+    const flags = await Promise.all(started.map((scan) => isPending(deps.store, scan)));
+    return started.filter((_, index) => flags[index]);
+  };
+  while ((await pending()).length > 0 && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, deps.pollMs ?? POLL_MS));
   }
-  const abandoned = started.filter((scan) => isPending(deps.store, scan));
+  const abandoned = await pending();
   for (const orgId of new Set(abandoned.map((scan) => scan.orgId))) {
     audit(deps.log, "schedule.settle_abandoned", {
       orgId,
@@ -46,13 +52,13 @@ async function settle(started: StartedScan[], deps: TickDeps) {
 
 export async function runScheduledTick(deps: TickDeps): Promise<TickSummary> {
   const { store, scheduler, clock, log } = deps;
-  const retired = runRetentionSweep(store, clock);
+  const retired = await runRetentionSweep(store, clock);
   auditRetention(log, retired);
   const summary: TickSummary = { orgs: [], retired: retired.length };
   const started: StartedScan[] = [];
-  for (const orgId of store.orgIds().filter((id) => !isDemoOrg(id))) {
+  for (const orgId of (await store.orgIds()).filter((id) => !isDemoOrg(id))) {
     try {
-      const tick = scheduler.tick(orgId, clock());
+      const tick = await scheduler.tick(orgId, clock());
       audit(log, "schedule.tick", {
         orgId,
         action: tick.action,
@@ -75,11 +81,20 @@ export async function runScheduledTick(deps: TickDeps): Promise<TickSummary> {
   return summary;
 }
 
-const store = new MemoryStore(systemClock);
 const log = pino(pinoOptions(loggerFromEnv()) || {});
-const runner = new ScanRunner(store, guardHarvester(unconfiguredHarvester()), {}, systemClock, log);
-const scheduler = new ScanScheduler(store, runner, systemClock, log);
+
+async function createDeps(): Promise<TickDeps> {
+  const store = await storeFromEnv(process.env, systemClock);
+  const runner = new ScanRunner(store, guardHarvester(unconfiguredHarvester()), {}, systemClock, log);
+  return { store, scheduler: new ScanScheduler(store, runner, systemClock, log), clock: systemClock, log };
+}
+
+let deps: Promise<TickDeps> | undefined;
 
 export async function handler(): Promise<TickSummary> {
-  return runScheduledTick({ store, scheduler, clock: systemClock, log });
+  deps ??= createDeps().catch((error: unknown) => {
+    deps = undefined;
+    throw error;
+  });
+  return runScheduledTick(await deps);
 }

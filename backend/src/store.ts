@@ -1,124 +1,52 @@
-import { CLOUDS, type Cloud, type Finding, type Inventory } from "@farside/scan-contracts";
-import { systemClock, type Clock } from "./clock.js";
-import type { CoverageEntry } from "./coverage.js";
-import { combineCosts, hasFigures, hasMixedCurrencies, markMixedCurrency, restoreAfterMixedCurrency } from "./cost-total.js";
-import { scopeOf } from "./scope.js";
-import type { DeepReadonly } from "./readonly.js";
-import type { ResourceFacts } from "./facts.js";
-import type { StoredIssue } from "./issues.js";
-import { applyOwnerTag } from "./inventory.js";
-import { DEFAULT_CLOUD, providerFor } from "./providers/index.js";
-import { DEMO_ORG_ID } from "./demo.js";
+import type { Finding, Inventory } from "@farside/scan-contracts";
 import type { AlertAnalysis } from "./alerts.js";
-import { retentionElapsed, type Contract } from "./billing.js";
+import type { Contract } from "./billing.js";
 import type { BudgetSnapshot } from "./budgets.js";
+import { systemClock, type Clock } from "./clock.js";
 import type { CommitmentSnapshot } from "./commitments.js";
 import type { CostSnapshot } from "./cost.js";
-import { DeletedOrgError, type DeletionRecord, type RowsPurged } from "./offboard.js";
+import type { CoverageEntry } from "./coverage.js";
+import type { ResourceFacts } from "./facts.js";
+import type { StoredIssue } from "./issues.js";
+import { DeletedOrgError, type DeletionRecord } from "./offboard.js";
+import {
+  applyCommitments,
+  applyCost,
+  applyCoverage,
+  deletionRecordFor,
+  dropSubscription,
+  emptyOrg,
+  pruneScans,
+  retagInventories,
+  RunningScans,
+  rowsPurged,
+  sweepRetention,
+} from "./org-ops.js";
+import { DEFAULT_CLOUD, providerFor } from "./providers/index.js";
+import {
+  MAX_SCANS_PER_ORG,
+  SUBSCRIPTION_DISCONNECTED,
+  type AggregateName,
+  type Connection,
+  type ConnectionInput,
+  type OrgRepository,
+  type OrgState,
+  type OrgView,
+  type ScanPage,
+  type Sequence,
+} from "./repository.js";
 import type { ScanJob } from "./scans.js";
-import { emptySchedule, type ScheduleState } from "./scheduler.js";
+import type { ScheduleState } from "./scheduler.js";
 import { assertNoSecrets, markVerified, markVerifiedAll } from "./secrets.js";
-import { DEFAULT_SETTINGS, type OrgSettings } from "./settings.js";
+import type { OrgSettings } from "./settings.js";
 
-export type Connection = {
-  id: string;
-  cloud: Cloud;
-  tenantId: string;
-  subscriptionId: string;
-  roles: string[];
-  createdAt: string;
-  healthy: boolean;
-};
+export { MAX_SCANS_PER_ORG, SUBSCRIPTION_DISCONNECTED };
+export type { Connection, OrgState, OrgView };
 
-export type OrgState = {
-  connections: Connection[];
-  inventory: Inventory | null;
-  inventories: Partial<Record<Cloud, Inventory>>;
-  coverage: CoverageEntry[];
-  findings: Finding[];
-  settings: OrgSettings;
-  scans: ScanJob[];
-  facts: ResourceFacts[];
-  issues: StoredIssue[];
-  cost: CostSnapshot | null;
-  costs: Record<string, CostSnapshot>;
-  commitments: CommitmentSnapshot | null;
-  commitmentsBySubscription: Record<string, CommitmentSnapshot>;
-  budgets: BudgetSnapshot | null;
-  alerts: AlertAnalysis | null;
-  schedule: ScheduleState;
-  contract: Contract | null;
-  sequences: Record<Sequence, number>;
-};
-
-export type OrgView = DeepReadonly<OrgState>;
-
-export const MAX_SCANS_PER_ORG = 200;
-
-type Sequence = "scan" | "schedule" | "connection";
-
-function emptyOrg(now: string): OrgState {
-  return {
-    connections: [],
-    inventory: null,
-    inventories: {},
-    coverage: [],
-    findings: [],
-    settings: { ...DEFAULT_SETTINGS, updatedAt: now },
-    scans: [],
-    facts: [],
-    issues: [],
-    cost: null,
-    costs: {},
-    commitments: null,
-    commitmentsBySubscription: {},
-    budgets: null,
-    alerts: null,
-    schedule: emptySchedule(),
-    contract: null,
-    sequences: { scan: 0, schedule: 0, connection: 0 },
-  };
-}
-
-export const SUBSCRIPTION_DISCONNECTED = "subscription disconnected";
-
-function combineCommitments(snapshots: readonly CommitmentSnapshot[]): CommitmentSnapshot | null {
-  const first = snapshots[0];
-  if (!first || snapshots.length === 1) {
-    return first ?? null;
-  }
-  return {
-    ...first,
-    subscriptionId: snapshots.map((item) => item.subscriptionId).join(","),
-    billingScope: [...new Set(snapshots.map((item) => item.billingScope))].join(","),
-    periodStart: snapshots.map((item) => item.periodStart).sort()[0] ?? first.periodStart,
-    periodEnd: snapshots.map((item) => item.periodEnd).sort().at(-1) ?? first.periodEnd,
-    reservations: snapshots.flatMap((item) => item.reservations),
-    savingsPlans: snapshots.flatMap((item) => item.savingsPlans),
-    noneFound: {
-      reservations: snapshots.every((item) => item.noneFound.reservations),
-      savingsPlans: snapshots.every((item) => item.noneFound.savingsPlans),
-    },
-  };
-}
-
-function pruneScans(scans: ScanJob[]): ScanJob[] {
-  const current = [...scans].reverse().find((job) => job.status === "succeeded" && job.complete);
-  let excess = scans.length - MAX_SCANS_PER_ORG;
-  return scans.filter((job) => {
-    const settled = job.status !== "queued" && job.status !== "running" && job !== current;
-    if (excess > 0 && settled) {
-      excess -= 1;
-      return false;
-    }
-    return true;
-  });
-}
-
-export class MemoryStore {
+export class MemoryStore implements OrgRepository {
   #orgs = new Map<string, OrgState>();
   #deletions = new Map<string, DeletionRecord>();
-  #runningScans = new Map<string, Set<AbortController>>();
+  #running = new RunningScans();
 
   constructor(readonly clock: Clock = systemClock) {}
 
@@ -135,122 +63,8 @@ export class MemoryStore {
     return created;
   }
 
-  trackScan(orgId: string): { signal: AbortSignal; release: () => void } {
-    const controller = new AbortController();
-    const controllers = this.#runningScans.get(orgId) ?? new Set<AbortController>();
-    controllers.add(controller);
-    this.#runningScans.set(orgId, controllers);
-    return {
-      signal: controller.signal,
-      release: () => {
-        controllers.delete(controller);
-        if (controllers.size === 0 && this.#runningScans.get(orgId) === controllers) {
-          this.#runningScans.delete(orgId);
-        }
-      },
-    };
-  }
-
-  orgIds(): string[] {
-    return [...this.#orgs.keys()];
-  }
-
-  hasOrg(orgId: string): boolean {
-    return this.#orgs.has(orgId);
-  }
-
-  deletion(orgId: string): DeletionRecord | null {
-    return this.#deletions.get(orgId) ?? null;
-  }
-
-  orgRows(orgId: string): number {
-    return Object.entries(this.#rowsPurged(this.#orgs.get(orgId))).reduce(
-      (sum, [kind, count]) => (kind === "settings" ? sum : sum + count),
-      0,
-    );
-  }
-
-  #rowsPurged(org: OrgState | undefined): RowsPurged {
-    const inventories = [
-      ...Object.values(org?.inventories ?? {}),
-      ...(org?.inventory && !org.inventories[org.inventory.cloud] ? [org.inventory] : []),
-    ];
-    return {
-      connections: org?.connections.length ?? 0,
-      inventoryResources: inventories.reduce((sum, inventory) => sum + inventory.resources.length, 0),
-      facts: org?.facts.length ?? 0,
-      findings: org?.findings.length ?? 0,
-      coverage: org?.coverage.length ?? 0,
-      issues: org?.issues.length ?? 0,
-      scans: org?.scans.length ?? 0,
-      costSnapshots: Object.keys(org?.costs ?? {}).length,
-      commitments: Object.keys(org?.commitmentsBySubscription ?? {}).length,
-      budgets: org?.budgets ? 1 : 0,
-      alerts: org?.alerts ? 1 : 0,
-      settings: org ? 1 : 0,
-      contract: org?.contract ? 1 : 0,
-    };
-  }
-
-  offboard(
-    orgId: string,
-    now: string = this.clock(),
-    trigger: DeletionRecord["trigger"] = "customer",
-    requestedBy: string = trigger === "retention" ? "system" : "unknown",
-  ): DeletionRecord {
-    const existing = this.#deletions.get(orgId);
-    if (existing) {
-      return existing;
-    }
-    const org = this.#orgs.get(orgId);
-    const connectionsRemoved = org?.connections.length ?? 0;
-    const schedulePending = Boolean(
-      org && org.settings.scanScheduleEnabled && org.schedule.nextRunAt,
-    );
-    const running = this.#runningScans.get(orgId) ?? new Set<AbortController>();
-    const scansStopped = running.size + (org?.scans.filter((job) => job.status === "queued").length ?? 0);
-    for (const controller of running) {
-      controller.abort();
-    }
-    this.#runningScans.delete(orgId);
-    const record: DeletionRecord = {
-      orgId,
-      requestedBy,
-      deletedAt: now,
-      rowsPurged: this.#rowsPurged(org),
-      connectionsRemoved,
-      scansStopped,
-      scheduleCancelled: schedulePending || Boolean(org?.settings.scanScheduleEnabled),
-      accountClosureAt: null,
-      trigger,
-    };
-    assertNoSecrets(record);
-    this.#orgs.delete(orgId);
-    this.#deletions.set(orgId, record);
-    return record;
-  }
-
-  sweepRetention(now: string = this.clock(), onlyOrgId?: string): DeletionRecord[] {
-    const due = [...this.#orgs]
-      .filter(
-        ([orgId, org]) =>
-          orgId !== DEMO_ORG_ID &&
-          (onlyOrgId === undefined || orgId === onlyOrgId) &&
-          org.contract !== null &&
-          retentionElapsed(org.contract, now),
-      )
-      .map(([orgId]) => orgId);
-    return due.map((orgId) => this.offboard(orgId, now, "retention"));
-  }
-
   view(orgId: string): OrgView {
     return this.org(orgId);
-  }
-
-  nextSequence(orgId: string, kind: Sequence): number {
-    const { sequences } = this.org(orgId);
-    sequences[kind] += 1;
-    return sequences[kind];
   }
 
   snapshot(orgId: string): OrgState {
@@ -259,7 +73,72 @@ export class MemoryStore {
     return copy;
   }
 
-  putInventory(orgId: string, inventory: Inventory): Inventory {
+  costsOf(orgId: string): CostSnapshot[] {
+    return Object.values(this.org(orgId).costs);
+  }
+
+  orgRows(orgId: string): number {
+    return Object.entries(rowsPurged(this.#orgs.get(orgId))).reduce(
+      (sum, [kind, count]) => (kind === "settings" ? sum : sum + count),
+      0,
+    );
+  }
+
+  async read<K extends AggregateName>(orgId: string, ...keys: K[]): Promise<Pick<OrgView, K>> {
+    const org = this.org(orgId);
+    return Object.fromEntries(keys.map((key) => [key, org[key]])) as Pick<OrgView, K>;
+  }
+
+  trackScan(orgId: string): { signal: AbortSignal; release: () => void } {
+    return this.#running.track(orgId);
+  }
+
+  async orgIds(): Promise<string[]> {
+    return [...this.#orgs.keys()];
+  }
+
+  async hasOrg(orgId: string): Promise<boolean> {
+    return this.#orgs.has(orgId);
+  }
+
+  async deletion(orgId: string): Promise<DeletionRecord | null> {
+    return this.#deletions.get(orgId) ?? null;
+  }
+
+  async offboard(
+    orgId: string,
+    now: string = this.clock(),
+    trigger: DeletionRecord["trigger"] = "customer",
+    requestedBy: string = trigger === "retention" ? "system" : "unknown",
+  ): Promise<DeletionRecord> {
+    const existing = this.#deletions.get(orgId);
+    if (existing) {
+      return existing;
+    }
+    const record = deletionRecordFor(this.#orgs.get(orgId), {
+      orgId,
+      now,
+      trigger,
+      requestedBy,
+      runningScans: this.#running.abortAll(orgId),
+    });
+    assertNoSecrets(record);
+    this.#orgs.delete(orgId);
+    this.#deletions.set(orgId, record);
+    return record;
+  }
+
+  sweepRetention(now: string = this.clock(), onlyOrgId?: string): Promise<DeletionRecord[]> {
+    return sweepRetention(this, now, onlyOrgId);
+  }
+
+  async nextSequence(orgId: string, kind: Sequence): Promise<number> {
+    const { sequences } = this.org(orgId);
+    sequences[kind] += 1;
+    return sequences[kind];
+  }
+
+  async putInventory(orgId: string, inventory: Inventory): Promise<Inventory> {
     assertNoSecrets(inventory);
     markVerified(inventory);
     const org = this.org(orgId);
@@ -268,24 +147,11 @@ export class MemoryStore {
     return inventory;
   }
 
-  inventoriesOf(orgId: string, cloud?: Cloud): Inventory[] {
-    const org = this.org(orgId);
-    const stored = CLOUDS.flatMap((name) => {
-      const inventory = org.inventories[name];
-      return inventory ? [inventory] : [];
-    });
-    const pool = stored.length > 0 ? stored : org.inventory ? [org.inventory] : [];
-    return pool.filter((inventory) => cloud == null || inventory.cloud === cloud);
-  }
-
-  putConnection(
-    orgId: string,
-    input: { tenantId: string; subscriptionId: string; cloud?: Cloud },
-  ): Connection {
+  async putConnection(orgId: string, input: ConnectionInput): Promise<Connection> {
     assertNoSecrets(input);
     const cloud = input.cloud ?? DEFAULT_CLOUD;
     const connection: Connection = {
-      id: `conn-${this.nextSequence(orgId, "connection")}`,
+      id: `conn-${await this.nextSequence(orgId, "connection")}`,
       cloud,
       tenantId: input.tenantId,
       subscriptionId: input.subscriptionId,
@@ -298,92 +164,58 @@ export class MemoryStore {
     return connection;
   }
 
-  putCoverage(orgId: string, coverage: CoverageEntry[]): CoverageEntry[] {
+  async putCoverage(orgId: string, coverage: CoverageEntry[]): Promise<CoverageEntry[]> {
     assertNoSecrets(coverage);
     const org = this.org(orgId);
-    org.coverage = coverage;
-    this.#refreshCost(org);
+    applyCoverage(org, coverage);
     return org.coverage;
   }
 
-  putFindings(orgId: string, findings: Finding[]): Finding[] {
+  async putFindings(orgId: string, findings: Finding[]): Promise<Finding[]> {
     assertNoSecrets(findings);
     markVerifiedAll(findings);
     this.org(orgId).findings = findings;
     return findings;
   }
 
-  putFacts(orgId: string, facts: ResourceFacts[]): ResourceFacts[] {
+  async putFacts(orgId: string, facts: ResourceFacts[]): Promise<ResourceFacts[]> {
     assertNoSecrets(facts);
     this.org(orgId).facts = facts;
     return facts;
   }
 
-  putIssues(orgId: string, issues: StoredIssue[]): StoredIssue[] {
+  async putIssues(orgId: string, issues: StoredIssue[]): Promise<StoredIssue[]> {
     assertNoSecrets(issues);
     markVerifiedAll(issues);
     this.org(orgId).issues = issues;
     return issues;
   }
 
-  putCost(
+  async putCost(
     orgId: string,
     cost: CostSnapshot | null,
     subscriptionId: string | undefined = cost?.subscriptionId,
-  ): CostSnapshot | null {
+  ): Promise<CostSnapshot | null> {
     if (cost) {
       assertNoSecrets(cost);
     }
-    const org = this.org(orgId);
-    if (subscriptionId === undefined) {
-      org.costs = {};
-    } else {
-      delete org.costs[subscriptionId];
-      if (cost) {
-        org.costs[subscriptionId] = cost;
-      }
-    }
-    this.#refreshCost(org);
+    applyCost(this.org(orgId), cost, subscriptionId);
     return cost;
   }
 
-  #refreshCost(org: OrgState): void {
-    const snapshots = Object.values(org.costs);
-    org.cost = combineCosts(snapshots);
-    org.coverage = hasMixedCurrencies(snapshots)
-      ? markMixedCurrency(
-          org.coverage,
-          Object.keys(org.costs).filter((key) => org.costs[key] && hasFigures(org.costs[key])),
-        )
-      : restoreAfterMixedCurrency(org.coverage, org.costs);
-  }
-
-  costsOf(orgId: string): CostSnapshot[] {
-    return Object.values(this.org(orgId).costs);
-  }
-
-  putCommitments(
+  async putCommitments(
     orgId: string,
     commitments: CommitmentSnapshot | null,
     subscriptionId: string | undefined = commitments?.subscriptionId,
-  ): CommitmentSnapshot | null {
+  ): Promise<CommitmentSnapshot | null> {
     if (commitments) {
       assertNoSecrets(commitments);
     }
-    const org = this.org(orgId);
-    if (subscriptionId === undefined) {
-      org.commitmentsBySubscription = {};
-    } else {
-      delete org.commitmentsBySubscription[subscriptionId];
-      if (commitments) {
-        org.commitmentsBySubscription[subscriptionId] = commitments;
-      }
-    }
-    org.commitments = combineCommitments(Object.values(org.commitmentsBySubscription));
+    applyCommitments(this.org(orgId), commitments, subscriptionId);
     return commitments;
   }
 
-  putBudgets(orgId: string, budgets: BudgetSnapshot | null): BudgetSnapshot | null {
+  async putBudgets(orgId: string, budgets: BudgetSnapshot | null): Promise<BudgetSnapshot | null> {
     if (budgets) {
       assertNoSecrets(budgets);
     }
@@ -391,7 +223,7 @@ export class MemoryStore {
     return budgets;
   }
 
-  putAlerts(orgId: string, alerts: AlertAnalysis | null): AlertAnalysis | null {
+  async putAlerts(orgId: string, alerts: AlertAnalysis | null): Promise<AlertAnalysis | null> {
     if (alerts) {
       assertNoSecrets(alerts);
     }
@@ -399,23 +231,15 @@ export class MemoryStore {
     return alerts;
   }
 
-  putSettings(orgId: string, settings: OrgSettings): OrgSettings {
+  async putSettings(orgId: string, settings: OrgSettings): Promise<OrgSettings> {
     assertNoSecrets(settings);
     const org = this.org(orgId);
     org.settings = settings;
-    for (const cloud of CLOUDS) {
-      const inventory = org.inventories[cloud];
-      if (inventory) {
-        org.inventories[cloud] = markVerified(applyOwnerTag(inventory, settings.ownerTagKey));
-      }
-    }
-    if (org.inventory) {
-      org.inventory = markVerified(applyOwnerTag(org.inventory, settings.ownerTagKey));
-    }
+    retagInventories(org, settings.ownerTagKey);
     return settings;
   }
 
-  putContract(orgId: string, contract: Contract | null): Contract | null {
+  async putContract(orgId: string, contract: Contract | null): Promise<Contract | null> {
     if (contract) {
       assertNoSecrets(contract);
     }
@@ -423,9 +247,15 @@ export class MemoryStore {
     return contract;
   }
 
-  putJob(input: Omit<ScanJob, "id">): ScanJob {
+  async updateSchedule(orgId: string, mutate: (schedule: ScheduleState) => void): Promise<ScheduleState> {
+    const { schedule } = this.org(orgId);
+    mutate(schedule);
+    return schedule;
+  }
+
+  async putJob(input: Omit<ScanJob, "id">): Promise<ScanJob> {
     assertNoSecrets(input);
-    const job: ScanJob = { ...input, id: `scan-${this.nextSequence(input.orgId, "scan")}` };
+    const job: ScanJob = { ...input, id: `scan-${await this.nextSequence(input.orgId, "scan")}` };
     const org = this.org(input.orgId);
     markVerified(job);
     org.scans.push(job);
@@ -435,11 +265,11 @@ export class MemoryStore {
     return job;
   }
 
-  getJob(orgId: string, jobId: string): ScanJob | undefined {
+  async getJob(orgId: string, jobId: string): Promise<ScanJob | undefined> {
     return this.org(orgId).scans.find((job) => job.id === jobId);
   }
 
-  patchJob(orgId: string, jobId: string, patch: Partial<ScanJob>): ScanJob {
+  async patchJob(orgId: string, jobId: string, patch: Partial<ScanJob>): Promise<ScanJob> {
     const org = this.org(orgId);
     const index = org.scans.findIndex((job) => job.id === jobId);
     const current = org.scans[index];
@@ -453,19 +283,32 @@ export class MemoryStore {
     return next;
   }
 
-  runningScan(orgId: string, subscriptionId: string): ScanJob | undefined {
+  async runningScan(orgId: string, subscriptionId: string): Promise<ScanJob | undefined> {
     return this.org(orgId).scans.find(
       (job) =>
         job.subscriptionId === subscriptionId && (job.status === "queued" || job.status === "running"),
     );
   }
 
-  isConnected(orgId: string, subscriptionId: string): boolean {
+  async listScans(orgId: string, page: { limit?: number; after?: string } = {}): Promise<ScanPage> {
+    const { scans } = this.org(orgId);
+    const start = page.after === undefined ? 0 : scans.findIndex((job) => job.id === page.after) + 1;
+    const limit = page.limit ?? MAX_SCANS_PER_ORG;
+    const slice = scans.slice(start, start + limit);
+    const last = slice.at(-1);
+    return last && start + limit < scans.length ? { scans: slice, next: last.id } : { scans: slice };
+  }
+
+  async isConnected(orgId: string, subscriptionId: string): Promise<boolean> {
     const target = subscriptionId.toLowerCase();
     return this.org(orgId).connections.some((item) => item.subscriptionId.toLowerCase() === target);
   }
 
-  patchConnection(orgId: string, connectionId: string, patch: { healthy: boolean }): Connection | null {
+  async patchConnection(
+    orgId: string,
+    connectionId: string,
+    patch: { healthy: boolean },
+  ): Promise<Connection | null> {
     const connection = this.org(orgId).connections.find((item) => item.id === connectionId);
     if (!connection) {
       return null;
@@ -476,52 +319,7 @@ export class MemoryStore {
     return connection;
   }
 
-  #dropSubscription(org: OrgState, subscriptionId: string): void {
-    const target = subscriptionId.toLowerCase();
-    const inScope = (cloud: Cloud, resourceUri: string) => scopeOf(cloud, resourceUri).toLowerCase() === target;
-    for (const cloud of CLOUDS) {
-      const inventory = org.inventories[cloud];
-      if (inventory) {
-        org.inventories[cloud] = markVerified({
-          ...inventory,
-          resources: inventory.resources.filter((resource) => !inScope(cloud, resource.resourceUri)),
-        });
-      }
-    }
-    const latest = org.inventory;
-    if (latest) {
-      org.inventory = markVerified({
-        ...latest,
-        resources: latest.resources.filter((resource) => !inScope(latest.cloud, resource.resourceUri)),
-      });
-    }
-    org.facts = org.facts.filter((row) => !CLOUDS.some((cloud) => inScope(cloud, row.resourceUri)));
-    for (const key of Object.keys(org.costs)) {
-      if (key.toLowerCase() === target) {
-        delete org.costs[key];
-      }
-    }
-    for (const key of Object.keys(org.commitmentsBySubscription)) {
-      if (key.toLowerCase() === target) {
-        delete org.commitmentsBySubscription[key];
-      }
-    }
-    org.commitments = combineCommitments(Object.values(org.commitmentsBySubscription));
-    const matches = (value: string) => value.toLowerCase() === target;
-    org.findings = org.findings.filter((finding) => !matches(finding.scope.subscriptionOrProject));
-    org.coverage = org.coverage.filter((entry) => !matches(entry.subscriptionOrProject));
-    org.issues = org.issues.map((issue) => {
-      if (!matches(issue.subscriptionOrProject) || issue.status === "closed") {
-        return issue;
-      }
-      const { closingScanId: _closing, notConfirmedReason: _reason, ...rest } = issue;
-      return { ...rest, status: "closed", closedReason: SUBSCRIPTION_DISCONNECTED };
-    });
-    markVerifiedAll(org.issues);
-    this.#refreshCost(org);
-  }
-
-  deleteConnection(orgId: string, connectionId: string): boolean {
+  async deleteConnection(orgId: string, connectionId: string): Promise<boolean> {
     const org = this.org(orgId);
     const next = org.connections.filter((connection) => connection.id !== connectionId);
     if (next.length === org.connections.length) {
@@ -533,12 +331,15 @@ export class MemoryStore {
       removed &&
       !next.some((connection) => connection.subscriptionId.toLowerCase() === removed.subscriptionId.toLowerCase())
     ) {
-      this.#dropSubscription(org, removed.subscriptionId);
+      dropSubscription(org, removed.subscriptionId);
     }
     return true;
   }
 }
 
-export function runRetentionSweep(store: MemoryStore, clock: Clock = store.clock): DeletionRecord[] {
+export async function runRetentionSweep(
+  store: OrgRepository,
+  clock: Clock = store.clock,
+): Promise<DeletionRecord[]> {
   return store.sweepRetention(clock());
 }

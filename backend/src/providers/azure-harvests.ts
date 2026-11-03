@@ -31,28 +31,28 @@ function fillUnrunLaunchCoverage(coverage: CoverageEntry[], subscriptionId: stri
   return next;
 }
 
-function applyAzureHarvests(
+async function applyAzureHarvests(
   { orgId, subscriptionId, store }: PostHarvestContext,
   collected: AzureHarvests,
   outputs: ScanOutputs,
-): ScanOutputs {
+): Promise<ScanOutputs> {
   let { findings, coverage } = outputs;
   if (collected.cost) {
     coverage = applyCostCoverage(coverage, collected.cost.coverage);
-    store.putCost(orgId, collected.cost.ok ? collected.cost.snapshot : null, subscriptionId);
+    await store.putCost(orgId, collected.cost.ok ? collected.cost.snapshot : null, subscriptionId);
   }
   if (collected.commitments) {
     coverage = applyCommitmentCoverage(coverage, collected.commitments.coverage);
     if (collected.commitments.ok) {
-      store.putCommitments(orgId, collected.commitments.snapshot, subscriptionId);
+      await store.putCommitments(orgId, collected.commitments.snapshot, subscriptionId);
       findings = mergeCommitmentFindings(findings, collected.commitments.findings, subscriptionId);
     } else {
-      store.putCommitments(orgId, null, subscriptionId);
+      await store.putCommitments(orgId, null, subscriptionId);
     }
   }
   if (collected.budgets) {
     coverage = applyBudgetCoverage(coverage, collected.budgets.coverage);
-    store.putBudgets(orgId, collected.budgets.snapshot);
+    await store.putBudgets(orgId, collected.budgets.snapshot);
     findings = mergeBudgetFindings(findings, collected.budgets.findings);
   }
   return { findings, coverage: fillUnrunLaunchCoverage(coverage, subscriptionId) };

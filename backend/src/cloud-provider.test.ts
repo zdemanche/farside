@@ -81,11 +81,11 @@ describe("cloud provider registration", () => {
     expect(scopeOf("gcp", "fake://scope-a/thing-1")).toBe("scope-a");
 
     const store = new MemoryStore(fixedClock);
-    const connection = store.putConnection("org-a", { tenantId: "t", subscriptionId: "scope-a", cloud: "gcp" });
+    const connection = await store.putConnection("org-a", { tenantId: "t", subscriptionId: "scope-a", cloud: "gcp" });
     expect(connection.roles).toEqual(["fake.viewer"]);
 
     const runner = new ScanRunner(store, fakeProvider.harvester(fixedClock), {}, fixedClock);
-    const { done } = runner.start({ orgId: "org-a", subscriptionId: "scope-a", actor: "user" });
+    const { done } = await runner.start({ orgId: "org-a", subscriptionId: "scope-a", actor: "user" });
     const job = await done;
 
     expect(job.status).toBe("succeeded");
@@ -118,9 +118,9 @@ describe("cloud provider registration", () => {
     });
     registerProvider({ ...fakeProvider, checks: [throwing] });
     const store = new MemoryStore(fixedClock);
-    store.putConnection("org-a", { tenantId: "t", subscriptionId: "scope-a", cloud: "gcp" });
+    await store.putConnection("org-a", { tenantId: "t", subscriptionId: "scope-a", cloud: "gcp" });
     const runner = new ScanRunner(store, fakeProvider.harvester(fixedClock), {}, fixedClock);
-    const job = await runner.start({ orgId: "org-a", subscriptionId: "scope-a", actor: "user" }).done;
+    const job = await (await runner.start({ orgId: "org-a", subscriptionId: "scope-a", actor: "user" })).done;
     expect(job.status).toBe("failed");
     expect(job.checks.map((check) => check.checkId)).toEqual([...fakeProvider.launchCheckIds]);
   });
@@ -142,10 +142,10 @@ describe("cloud provider registration", () => {
     await app.close();
   });
 
-  it("stores the connection cloud", () => {
+  it("stores the connection cloud", async () => {
     const store = new MemoryStore(fixedClock);
-    expect(store.putConnection("org-a", { tenantId: "t", subscriptionId: "s" }).cloud).toBe("azure");
-    expect(store.putConnection("org-a", { tenantId: "t", subscriptionId: "p", cloud: "gcp" }).cloud).toBe("gcp");
+    expect((await store.putConnection("org-a", { tenantId: "t", subscriptionId: "s" })).cloud).toBe("azure");
+    expect((await store.putConnection("org-a", { tenantId: "t", subscriptionId: "p", cloud: "gcp" })).cloud).toBe("gcp");
   });
 });
 

@@ -13,7 +13,7 @@ import { PROVIDER_NOT_CONFIGURED, ProviderNotConfiguredError, rejectUnconfigured
 import { scopeOf } from "./scope.js";
 import { silentLog, type LogSink } from "./observability.js";
 import { addHours, DEFAULT_SCAN_TIMEOUT_MS, RETRY_DELAY_HOURS } from "./scheduler.js";
-import type { MemoryStore } from "./store.js";
+import type { OrgRepository } from "./repository.js";
 import { asMutable, type DeepReadonly } from "./readonly.js";
 
 // "cancelled" is stored so a cancelled job frees its subscription, but the API never returns it
@@ -252,13 +252,18 @@ export function unconfiguredHarvester(): Harvester {
   };
 }
 
-const NO_POST_HARVEST: PostHarvest = { apply: (outputs) => outputs };
+const NO_POST_HARVEST: PostHarvest = { apply: async (outputs) => outputs };
+
+type StartInput = { orgId: string; subscriptionId: string; actor: "user" | "system" };
+
+type StartedScan = { job: ScanJob; started: boolean; done: Promise<ScanJob> };
 
 export class ScanRunner {
   #queues = new Map<string, Promise<unknown>>();
+  #admissions = new Map<string, Promise<unknown>>();
 
   constructor(
-    private readonly store: MemoryStore,
+    private readonly store: OrgRepository,
     private readonly harvester: Harvester,
     private readonly harvestClients: ScanHarvestClients = {},
     private readonly clock: Clock = systemClock,
@@ -266,17 +271,26 @@ export class ScanRunner {
     readonly scanTimeoutMs: number = DEFAULT_SCAN_TIMEOUT_MS,
   ) {}
 
-  start(input: { orgId: string; subscriptionId: string; actor: "user" | "system" }): {
-    job: ScanJob;
-    started: boolean;
-    done: Promise<ScanJob>;
-  } {
-    this.expireStaleScans(input.orgId, this.clock());
-    const existing = this.store.runningScan(input.orgId, input.subscriptionId);
+  start(input: StartInput): Promise<StartedScan> {
+    const prior = this.#admissions.get(input.orgId) ?? Promise.resolve();
+    const admitted = prior.then(() => this.admit(input));
+    const settled = admitted.catch(() => undefined);
+    this.#admissions.set(input.orgId, settled);
+    void settled.then(() => {
+      if (this.#admissions.get(input.orgId) === settled) {
+        this.#admissions.delete(input.orgId);
+      }
+    });
+    return admitted;
+  }
+
+  private async admit(input: StartInput): Promise<StartedScan> {
+    await this.expireStaleScans(input.orgId, this.clock());
+    const existing = await this.store.runningScan(input.orgId, input.subscriptionId);
     if (existing) {
       return { job: existing, started: false, done: Promise.resolve(existing) };
     }
-    const job = this.store.putJob({
+    const job = await this.store.putJob({
       orgId: input.orgId,
       subscriptionId: input.subscriptionId,
       cloud: null,
@@ -292,17 +306,18 @@ export class ScanRunner {
       coverageSummary: EMPTY_COVERAGE_SUMMARY,
       checks: [],
     });
-    const connected = this.store.isConnected(input.orgId, input.subscriptionId);
+    const connected = await this.store.isConnected(input.orgId, input.subscriptionId);
     const tail = this.#queues.get(input.orgId);
     if (tail) {
       this.log.info({ event: "scan.queued", orgId: input.orgId, scanId: job.id }, "scan.queued");
     }
     const done = tail
-      ? tail.then((): Promise<ScanJob> | ScanJob =>
-          this.store.deletion(input.orgId) || (connected && !this.store.isConnected(input.orgId, input.subscriptionId))
-            ? this.cancel(input.orgId, job)
-            : this.execute(input.orgId, job.id, connected),
-        )
+      ? tail.then(async (): Promise<ScanJob> => {
+          const abandoned =
+            (await this.store.deletion(input.orgId)) ||
+            (connected && !(await this.store.isConnected(input.orgId, input.subscriptionId)));
+          return abandoned ? this.cancel(input.orgId, job) : this.execute(input.orgId, job.id, connected);
+        })
       : this.execute(input.orgId, job.id, connected);
     const settled = done.catch(() => undefined);
     this.#queues.set(input.orgId, settled);
@@ -320,34 +335,43 @@ export class ScanRunner {
     return { job, started: true, done };
   }
 
-  private cancel(orgId: string, job: ScanJob, patch: Partial<ScanJob> = {}): ScanJob {
+  private async cancel(orgId: string, job: ScanJob, patch: Partial<ScanJob> = {}): Promise<ScanJob> {
     this.log.info({ event: "scan.cancelled", orgId, scanId: job.id }, "scan.cancelled");
-    if (!this.store.hasOrg(orgId) || this.store.deletion(orgId) || !this.store.getJob(orgId, job.id)) {
+    if (
+      !(await this.store.hasOrg(orgId)) ||
+      (await this.store.deletion(orgId)) ||
+      !(await this.store.getJob(orgId, job.id))
+    ) {
       return { ...job, ...patch, status: "cancelled" };
     }
     return this.store.patchJob(orgId, job.id, { ...patch, status: "cancelled" });
   }
 
-  private scheduleRetry(orgId: string, subscriptionId: string, finishedAt: string): void {
-    const { settings, schedule } = this.store.org(orgId);
-    if (!settings.scanScheduleEnabled || (schedule.retryCounts[subscriptionId] ?? 0) >= settings.scanRetryLimit) {
+  private async scheduleRetry(orgId: string, subscriptionId: string, finishedAt: string): Promise<void> {
+    const { settings } = await this.store.read(orgId, "settings");
+    if (!settings.scanScheduleEnabled) {
       return;
     }
-    const candidate = addHours(finishedAt, RETRY_DELAY_HOURS);
-    if (!schedule.retryAt || Date.parse(candidate) < Date.parse(schedule.retryAt)) {
-      schedule.retryAt = candidate;
-    }
-    if (!schedule.regularRunAt || Date.parse(schedule.retryAt) < Date.parse(schedule.regularRunAt)) {
-      schedule.nextRunAt = schedule.retryAt;
-    }
+    await this.store.updateSchedule(orgId, (schedule) => {
+      if ((schedule.retryCounts[subscriptionId] ?? 0) >= settings.scanRetryLimit) {
+        return;
+      }
+      const candidate = addHours(finishedAt, RETRY_DELAY_HOURS);
+      if (!schedule.retryAt || Date.parse(candidate) < Date.parse(schedule.retryAt)) {
+        schedule.retryAt = candidate;
+      }
+      if (!schedule.regularRunAt || Date.parse(schedule.retryAt) < Date.parse(schedule.regularRunAt)) {
+        schedule.nextRunAt = schedule.retryAt;
+      }
+    });
   }
 
-  private recordFailure(
+  private async recordFailure(
     orgId: string,
     job: ScanJob,
     startedAt: string,
     failure: { error: unknown; errorCode: string; stored: string; covered: string[] },
-  ): ScanJob {
+  ): Promise<ScanJob> {
     const checks = checksFromFailure(failure.covered, job.subscriptionId, job.cloud ?? DEFAULT_CLOUD);
     const finishedAt = this.clock();
     const errorId = randomUUID();
@@ -362,11 +386,11 @@ export class ScanRunner {
       coverageSummary: coverageSummaryFrom(checks),
       checks,
     };
-    const failed = this.store.getJob(orgId, job.id)
-      ? this.store.patchJob(orgId, job.id, patch)
+    const failed = (await this.store.getJob(orgId, job.id))
+      ? await this.store.patchJob(orgId, job.id, patch)
       : { ...job, ...patch };
     if (job.actor === "system") {
-      this.scheduleRetry(orgId, job.subscriptionId, finishedAt);
+      await this.scheduleRetry(orgId, job.subscriptionId, finishedAt);
     }
     this.log.error(
       {
@@ -385,43 +409,46 @@ export class ScanRunner {
     return failed;
   }
 
-  expireStaleScans(orgId: string, now: string): ScanJob[] {
-    return this.store
-      .org(orgId)
-      .scans.filter(
-        (job) =>
-          job.status === "running" &&
-          job.startedAt !== null &&
-          Date.parse(now) - Date.parse(job.startedAt) > this.scanTimeoutMs,
-      )
-      .map((job) => {
+  async expireStaleScans(orgId: string, now: string): Promise<ScanJob[]> {
+    const { scans } = await this.store.read(orgId, "scans");
+    const expired: ScanJob[] = [];
+    for (const job of scans) {
+      if (
+        job.status === "running" &&
+        job.startedAt !== null &&
+        Date.parse(now) - Date.parse(job.startedAt) > this.scanTimeoutMs
+      ) {
         const error = new Error(`scan exceeded ${this.scanTimeoutMs}ms`);
         error.name = "TimeoutError";
-        return this.recordFailure(orgId, job, job.startedAt ?? now, {
-          error,
-          errorCode: "harvest_timeout",
-          stored: "harvest_timeout",
-          covered: [],
-        });
-      });
+        expired.push(
+          await this.recordFailure(orgId, asMutable<ScanJob>(job), job.startedAt ?? now, {
+            error,
+            errorCode: "harvest_timeout",
+            stored: "harvest_timeout",
+            covered: [],
+          }),
+        );
+      }
+    }
+    return expired;
   }
 
   private async execute(orgId: string, jobId: string, connectedAtStart: boolean): Promise<ScanJob> {
-    const current = this.store.getJob(orgId, jobId);
+    const current = await this.store.getJob(orgId, jobId);
     if (!current) {
       throw new Error(`scan ${jobId} missing`);
     }
     const startedAt = this.clock();
-    this.store.patchJob(orgId, jobId, { status: "running", startedAt });
+    await this.store.patchJob(orgId, jobId, { status: "running", startedAt });
     const { signal, release } = this.store.trackScan(orgId);
     const scanFields = { orgId, scanId: jobId };
     this.log.info({ event: "scan.start", ...scanFields }, "scan.start");
-    const cancelled = (): ScanJob => this.cancel(orgId, current, { startedAt });
+    const cancelled = (): Promise<ScanJob> => this.cancel(orgId, current, { startedAt });
     const deadline = Date.parse(startedAt) + this.scanTimeoutMs;
     const remainingMs = () => Math.max(0, deadline - Date.parse(this.clock()));
     let harvesting = true;
     try {
-      const settings = this.store.view(orgId).settings;
+      const { settings } = await this.store.read(orgId, "settings");
       const result = await abortable(
         signal,
         this.harvester.harvest({
@@ -433,9 +460,9 @@ export class ScanRunner {
       );
       harvesting = false;
       if (signal.aborted) {
-        return cancelled();
+        return await cancelled();
       }
-      this.store.patchJob(orgId, jobId, { cloud: result.inventory.cloud });
+      await this.store.patchJob(orgId, jobId, { cloud: result.inventory.cloud });
       const checked = runChecks({
         inventory: result.inventory,
         facts: result.facts,
@@ -457,34 +484,34 @@ export class ScanRunner {
           })
         : NO_POST_HARVEST;
       if (!postHarvest || signal.aborted) {
-        return cancelled();
+        return await cancelled();
       }
-      const live = this.store.getJob(orgId, jobId);
+      const live = await this.store.getJob(orgId, jobId);
       if (live?.status !== "running") {
-        return live ?? cancelled();
+        return live ?? (await cancelled());
       }
-      if (connectedAtStart && !this.store.isConnected(orgId, current.subscriptionId)) {
-        return cancelled();
+      if (connectedAtStart && !(await this.store.isConnected(orgId, current.subscriptionId))) {
+        return await cancelled();
       }
-      const fresh = this.store.view(orgId);
-      this.store.putInventory(
+      const fresh = await this.store.read(orgId, "inventories", "facts", "findings", "coverage");
+      await this.store.putInventory(
         orgId,
         mergeScanInventory(asMutable<Inventory | undefined>(fresh.inventories[result.inventory.cloud]), result.inventory, current.subscriptionId),
       );
-      this.store.putFacts(
+      await this.store.putFacts(
         orgId,
         mergeScanFacts(fresh.facts, result.facts, result.inventory, current.subscriptionId),
       );
-      const merged = postHarvest.apply({
+      const merged = await postHarvest.apply({
         findings: mergeScanFindings(fresh.findings, checked.findings, replaceIds, current.subscriptionId),
         coverage: mergeScanCoverage(fresh.coverage, checked.coverage, replaceIds, current.subscriptionId),
       });
       const findings = merged.findings;
-      this.store.putFindings(orgId, findings);
-      this.store.putCoverage(orgId, merged.coverage);
-      const written = this.store.view(orgId);
+      await this.store.putFindings(orgId, findings);
+      await this.store.putCoverage(orgId, merged.coverage);
+      const written = await this.store.read(orgId, "coverage", "issues");
       const coverage = written.coverage;
-      this.store.putIssues(
+      await this.store.putIssues(
         orgId,
         applyScanToIssues({
           issues: written.issues,
@@ -496,7 +523,7 @@ export class ScanRunner {
       );
       const checks = checksFromCoverage(coverage, current.subscriptionId);
       const finishedAt = this.clock();
-      const succeeded = this.store.patchJob(orgId, jobId, {
+      const succeeded = await this.store.patchJob(orgId, jobId, {
         status: "succeeded",
         complete: true,
         coveredScopes: result.coveredScopes,
@@ -519,10 +546,10 @@ export class ScanRunner {
       return succeeded;
     } catch (error) {
       if (signal.aborted) {
-        return cancelled();
+        return await cancelled();
       }
       const errorCode = failureCode(error, harvesting);
-      return this.recordFailure(orgId, this.store.getJob(orgId, jobId) ?? current, startedAt, {
+      return await this.recordFailure(orgId, (await this.store.getJob(orgId, jobId)) ?? current, startedAt, {
         error,
         errorCode,
         stored: error instanceof ProviderNotConfiguredError ? PROVIDER_NOT_CONFIGURED : errorCode,

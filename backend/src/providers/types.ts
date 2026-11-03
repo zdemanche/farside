@@ -7,7 +7,7 @@ import type { CostQueryClient } from "../cost.js";
 import type { CoverageEntry } from "../coverage.js";
 import type { ResourceFacts } from "../facts.js";
 import type { OrgSettings } from "../settings.js";
-import type { MemoryStore } from "../store.js";
+import type { OrgRepository } from "../repository.js";
 
 export type HarvestResult = {
   inventory: Inventory;
@@ -37,12 +37,12 @@ export type PostHarvestContext = {
   remainingMs: () => number;
   clock: Clock;
   clients: ScanHarvestClients;
-  store: MemoryStore;
+  store: OrgRepository;
 };
 
 export type ScanOutputs = { findings: Finding[]; coverage: CoverageEntry[] };
 
-export type PostHarvest = { apply: (outputs: ScanOutputs) => ScanOutputs };
+export type PostHarvest = { apply: (outputs: ScanOutputs) => Promise<ScanOutputs> };
 
 export type CloudProvider = {
   cloud: Cloud;

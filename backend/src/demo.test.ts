@@ -118,7 +118,7 @@ describe("demo org mode", () => {
       expect(response.statusCode, `${route.method} ${route.url}`).toBeLessThan(500);
     }
     expect(outbound).not.toHaveBeenCalled();
-    expect(store.deletion(DEMO_ORG_ID)).toBeNull();
+    expect(await store.deletion(DEMO_ORG_ID)).toBeNull();
     const after = await app.inject({ method: "GET", url: `/v1/orgs/${DEMO_ORG_ID}`, headers: DEMO });
     expect(after.statusCode).toBe(200);
     const estate = await app.inject({ method: "GET", url: `/v1/orgs/${DEMO_ORG_ID}/estate`, headers: DEMO });
@@ -151,7 +151,7 @@ describe("demo org mode", () => {
   it("fails a demo scan before the harvester when a runner uses the guarded harvester", async () => {
     const harvest = vi.fn();
     const runner = new ScanRunner(new MemoryStore(), guardHarvester({ harvest }));
-    const started = runner.start({ orgId: DEMO_ORG_ID, subscriptionId: "real-sub", actor: "user" });
+    const started = await runner.start({ orgId: DEMO_ORG_ID, subscriptionId: "real-sub", actor: "user" });
     const job = await started.done;
     expect(job.status).toBe("failed");
     expect(harvest).not.toHaveBeenCalled();

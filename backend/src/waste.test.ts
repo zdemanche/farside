@@ -106,9 +106,9 @@ describe("waste totals", () => {
   });
 });
 
-describe("cost-waste route", () => {
+describe("cost-waste route", async () => {
   const store = new MemoryStore(fixedClock);
-  store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+  await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
   const app = buildApp(store, {
     ...TEST_APP_OPTIONS,
     harvester: fixtureHarvester(inventoryFromManifest(MANIFEST), factsFromManifest(MANIFEST)),

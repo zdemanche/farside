@@ -8,7 +8,8 @@ export const settingsRoutes: RoutePlugin = (ctx) => async (app) => {
   app.get<{ Params: OrgParams }>(
     "/v1/orgs/:orgId/settings",
     { schema: { params: orgParams } },
-    async (request, reply) => sendClean(reply, 200, ctx.store.view(request.params.orgId).settings),
+    async (request, reply) =>
+      sendClean(reply, 200, (await ctx.store.read(request.params.orgId, "settings")).settings),
   );
 
   app.put<{ Params: OrgParams; Body: SettingsInput & { asOf?: string } }>(
@@ -20,8 +21,8 @@ export const settingsRoutes: RoutePlugin = (ctx) => async (app) => {
     async (request, reply) => {
       const parsed = settingsFromInput(request.body);
       const { orgId } = request.params;
-      const saved = ctx.store.putSettings(orgId, { ...parsed, updatedAt: ctx.clock() });
-      const schedule = ctx.scheduler.applySettings(orgId, ctx.clientTime(request.body.asOf));
+      const saved = await ctx.store.putSettings(orgId, { ...parsed, updatedAt: ctx.clock() });
+      const schedule = await ctx.scheduler.applySettings(orgId, ctx.clientTime(request.body.asOf));
       audit(request.log, "settings.change");
       return sendClean(reply, 200, { ...saved, nextRunAt: schedule.nextRunAt });
     },

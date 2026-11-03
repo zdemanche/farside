@@ -36,9 +36,9 @@ describe("offboard", () => {
   });
 
   it("deletes org rows, stops a pending schedule, and keeps a deletion record", async () => {
-    store.putInventory("org-a", inventoryFromManifest(MANIFEST));
-    store.putFindings("org-a", [fail]);
-    store.putIssues("org-a", [
+    await store.putInventory("org-a", inventoryFromManifest(MANIFEST));
+    await store.putFindings("org-a", [fail]);
+    await store.putIssues("org-a", [
       {
         id: "issue-1",
         checkId: fail.checkId,
@@ -53,7 +53,7 @@ describe("offboard", () => {
         lastConfirmed: T0,
       },
     ]);
-    store.putCost("org-a", {
+    await store.putCost("org-a", {
       subscriptionId: "main",
       billingScope: "/subscriptions/main",
       currency: "USD",
@@ -66,8 +66,8 @@ describe("offboard", () => {
       months: [],
       monthOnMonth: [],
     });
-    store.putConnection("org-a", { tenantId: "tenant-a", subscriptionId: "main" });
-    store.putConnection("org-b", { tenantId: "tenant-b", subscriptionId: "other" });
+    await store.putConnection("org-a", { tenantId: "tenant-a", subscriptionId: "main" });
+    await store.putConnection("org-b", { tenantId: "tenant-b", subscriptionId: "other" });
     const scheduled = await app.inject({
       method: "PUT",
       url: "/v1/orgs/org-a/settings",
@@ -91,7 +91,7 @@ describe("offboard", () => {
       payload: { now: T0 },
     });
     expect(refused.statusCode).toBe(400);
-    expect(store.hasOrg("org-a")).toBe(true);
+    expect(await store.hasOrg("org-a")).toBe(true);
 
     const offboarded = await app.inject({
       method: "POST",
@@ -109,9 +109,9 @@ describe("offboard", () => {
       accountClosureAt: null,
     });
     expect(offboarded.json().grantsToRemove).toEqual(GRANTS_TO_REMOVE);
-    expect(store.hasOrg("org-a")).toBe(false);
+    expect(await store.hasOrg("org-a")).toBe(false);
     expect(store.orgRows("org-a")).toBe(0);
-    expect(store.deletion("org-a")?.deletedAt).toBe(T0);
+    expect((await store.deletion("org-a"))?.deletedAt).toBe(T0);
 
     const gone = await app.inject({
       method: "GET",
@@ -128,7 +128,7 @@ describe("offboard", () => {
       payload: inventoryFromManifest(MANIFEST),
     });
     expect(recreate.statusCode).toBe(410);
-    expect(store.hasOrg("org-a")).toBe(false);
+    expect(await store.hasOrg("org-a")).toBe(false);
     expect(store.orgRows("org-a")).toBe(0);
 
     const tick = await app.inject({
@@ -138,7 +138,7 @@ describe("offboard", () => {
       payload: { now: addHours(T0, 24) },
     });
     expect(tick.statusCode).toBe(410);
-    expect(store.hasOrg("org-a")).toBe(false);
+    expect(await store.hasOrg("org-a")).toBe(false);
 
     const record = await app.inject({
       method: "GET",
@@ -158,7 +158,7 @@ describe("offboard", () => {
     });
     expect(other.statusCode).toBe(200);
     expect(other.json().connections).toHaveLength(1);
-    expect(store.hasOrg("org-b")).toBe(true);
+    expect(await store.hasOrg("org-b")).toBe(true);
   });
 });
 
@@ -172,9 +172,9 @@ describe("deletion record as erasure evidence", () => {
   });
 
   it("stamps the server clock, the actor, the trigger and purge counts, ignoring body time", async () => {
-    store.putInventory("org-a", inventoryFromManifest(MANIFEST));
-    store.putFindings("org-a", [fail]);
-    store.putConnection("org-a", { tenantId: "tenant-a", subscriptionId: "main" });
+    await store.putInventory("org-a", inventoryFromManifest(MANIFEST));
+    await store.putFindings("org-a", [fail]);
+    await store.putConnection("org-a", { tenantId: "tenant-a", subscriptionId: "main" });
     const response = await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/offboard",
@@ -197,14 +197,14 @@ describe("deletion record as erasure evidence", () => {
       contract: 0,
     });
     expect(body.rowsPurged.inventoryResources).toBeGreaterThan(0);
-    expect(store.deletion("org-a")?.rowsPurged).toEqual(body.rowsPurged);
+    expect((await store.deletion("org-a"))?.rowsPurged).toEqual(body.rowsPurged);
   });
 
-  it("records the system as requester on a retention offboard", () => {
+  it("records the system as requester on a retention offboard", async () => {
     const contract = parseContract({ plan: "farside-standard", startDate: SERVER_NOW, unpaidAt: SERVER_NOW }, SERVER_NOW);
-    store.putContract("org-r", contract);
+    await store.putContract("org-r", contract);
     const elapsed = new Date(Date.parse(SERVER_NOW) + 51 * 86_400_000).toISOString();
-    const [record] = store.sweepRetention(elapsed);
+    const [record] = await store.sweepRetention(elapsed);
     expect(record).toMatchObject({
       orgId: "org-r",
       trigger: "retention",

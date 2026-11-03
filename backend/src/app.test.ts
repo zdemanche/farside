@@ -1,11 +1,12 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { buildApp, SERVICE_NAME } from "./app.js";
+import { MemoryStore } from "./store.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 
 const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 
 describe("health route", () => {
-  const app = buildApp();
+  const app = buildApp(new MemoryStore());
 
   afterAll(async () => {
     await app.close();

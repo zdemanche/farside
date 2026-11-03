@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildApp } from "./app.js";
+import { MemoryStore } from "./store.js";
 import { handler, resolveOperatorToken, resultOf } from "./lambda.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 
@@ -33,7 +34,7 @@ describe("lambda handler", () => {
       headers,
       body: JSON.stringify(SETTINGS),
     });
-    const direct = await buildApp().inject({
+    const direct = await buildApp(new MemoryStore()).inject({
       method: "PUT",
       url: "/v1/orgs/org-a/settings",
       headers,
@@ -51,7 +52,7 @@ describe("lambda handler", () => {
       rawQueryString: "cloud=gcp",
       headers: ORG,
     });
-    const direct = await buildApp().inject({
+    const direct = await buildApp(new MemoryStore()).inject({
       method: "GET",
       url: "/v1/orgs/org-a/coverage?cloud=gcp",
       headers: ORG,

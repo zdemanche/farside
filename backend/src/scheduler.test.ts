@@ -133,7 +133,7 @@ async function waitForJob(
   status: ScanJob["status"],
 ): Promise<ScanJob> {
   for (let attempt = 0; attempt < 40; attempt += 1) {
-    const job = store.getJob(orgId, scanId);
+    const job = await store.getJob(orgId, scanId);
     if (job?.status === status) {
       return job;
     }
@@ -190,7 +190,7 @@ describe("schedule routes", () => {
 
   it("skips and records overlap, then retries a failed run", async () => {
     await connectAt();
-    store.putJob({
+    await store.putJob({
       orgId: "org-a",
       subscriptionId: "main",
       cloud: null,
@@ -214,9 +214,9 @@ describe("schedule routes", () => {
     });
     expect(overlap.json().action).toBe("skipped_overlap");
     expect(overlap.json().record.action).toBe("skipped_overlap");
-    const running = store.runningScan("org-a", "main");
+    const running = await store.runningScan("org-a", "main");
     expect(running).toBeTruthy();
-    store.patchJob("org-a", running!.id, {
+    await store.patchJob("org-a", running!.id, {
       status: "failed",
       complete: false,
       error: "Resource Graph call failed",
@@ -250,7 +250,7 @@ describe("schedule routes", () => {
     await connectAt();
     const connection = store.snapshot("org-a").connections[0];
     expect(connection).toBeTruthy();
-    store.patchConnection("org-a", connection!.id, { healthy: false });
+    await store.patchConnection("org-a", connection!.id, { healthy: false });
     const broken = await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/schedule/tick",

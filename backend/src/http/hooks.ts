@@ -45,7 +45,7 @@ export function operatorGuard(ctx: AppContext): preValidationAsyncHookHandler {
     if (!isOperator(request, ctx.operatorToken) || isDemoOrg(orgId)) {
       return problem(reply, 403, "Forbidden");
     }
-    const deletion = ctx.store.deletion(orgId);
+    const deletion = await ctx.store.deletion(orgId);
     if (deletion) {
       return problem(reply, 410, "Gone", { deletedAt: deletion.deletedAt });
     }
@@ -53,13 +53,13 @@ export function operatorGuard(ctx: AppContext): preValidationAsyncHookHandler {
   };
 }
 
-function rejectLocked(
+async function rejectLocked(
   ctx: AppContext,
   request: FastifyRequest,
   reply: FastifyReply,
   orgId: string,
-): boolean {
-  if (ctx.store.deletion(orgId) || NON_MUTATING_METHODS.has(request.method)) {
+): Promise<boolean> {
+  if ((await ctx.store.deletion(orgId)) || NON_MUTATING_METHODS.has(request.method)) {
     return false;
   }
   const route = `${request.method} ${request.routeOptions.url?.replace(ORG_ROUTE_PREFIX, "") ?? ""}`;
@@ -70,7 +70,11 @@ function rejectLocked(
     void problem(reply, 403, "Demo is read-only");
     return true;
   }
-  if (READ_ONLY_EXEMPT.has(route) || !isReadOnly(ctx.store.view(orgId).contract, ctx.clock())) {
+  if (READ_ONLY_EXEMPT.has(route)) {
+    return false;
+  }
+  const { contract } = await ctx.store.read(orgId, "contract");
+  if (!isReadOnly(contract, ctx.clock())) {
     return false;
   }
   void problem(reply, 409, "Console read-only", {
@@ -97,10 +101,10 @@ function orgGate(ctx: AppContext): preValidationAsyncHookHandler {
       return undefined;
     }
     const session = sessionFromHeaders(request);
-    if (session && assertOrgAccess(session, orgId) === "ok" && !ctx.store.deletion(orgId)) {
+    if (session && assertOrgAccess(session, orgId) === "ok" && !(await ctx.store.deletion(orgId))) {
       auditRetention(
         request.server.log.child({ reqId: request.id }),
-        ctx.store.sweepRetention(ctx.clock(), orgId),
+        await ctx.store.sweepRetention(ctx.clock(), orgId),
       );
     }
     if (!session) {
@@ -109,14 +113,14 @@ function orgGate(ctx: AppContext): preValidationAsyncHookHandler {
     if (assertOrgAccess(session, orgId) !== "ok") {
       return problem(reply, 403, "Forbidden");
     }
-    const deletion = ctx.store.deletion(orgId);
+    const deletion = await ctx.store.deletion(orgId);
     if (deletion && !config.allowDeleted) {
       return problem(reply, 410, "Gone", { deletedAt: deletion.deletedAt });
     }
     if (isDemoOrg(orgId) && !deletion) {
-      seedDemoOrg(ctx.store);
+      await seedDemoOrg(ctx.store);
     }
-    if (rejectLocked(ctx, request, reply, orgId)) {
+    if (await rejectLocked(ctx, request, reply, orgId)) {
       return reply;
     }
     return secretsRejected(request, reply);
@@ -130,7 +134,7 @@ function demoShortcut(ctx: AppContext): preHandlerAsyncHookHandler {
     if (!demo || !orgId || !isDemoOrg(orgId)) {
       return undefined;
     }
-    const canned = demo(ctx.store, orgId);
+    const canned = await demo(ctx.store, orgId);
     return canned ? sendClean(reply, canned.status, canned.body) : problem(reply, 404, "Not found");
   };
 }

@@ -77,7 +77,7 @@ describe("cloud dimension on APIs", () => {
     const bad = await app.inject({ method: "GET", url: "/v1/orgs/org-a/issues?cloud=aws", headers: ORG });
     expect(bad.statusCode).toBe(400);
 
-    store.putCoverage("org-a", [
+    await store.putCoverage("org-a", [
       recordCoverageScope({
         subscriptionOrProject: "main",
         checkId: "azure-waste-unattached-disks",
@@ -89,8 +89,8 @@ describe("cloud dimension on APIs", () => {
         state: "assessed",
       }),
     ]);
-    store.putFindings("org-a", [azureFail, gcpFail]);
-    store.putIssues(
+    await store.putFindings("org-a", [azureFail, gcpFail]);
+    await store.putIssues(
       "org-a",
       applyScanToIssues({
         issues: [],
@@ -100,7 +100,7 @@ describe("cloud dimension on APIs", () => {
         observedAt: "1970-01-01T00:00:00.000Z",
       }),
     );
-    store.putJob({
+    await store.putJob({
       orgId: "org-a",
       subscriptionId: "main",
       cloud: "azure",
@@ -116,7 +116,7 @@ describe("cloud dimension on APIs", () => {
       coverageSummary: { assessed: 1, unassessed: 0, undetermined: 0 },
       checks: [{ checkId: "azure-waste-unattached-disks", state: "assessed" }],
     });
-    store.putJob({
+    await store.putJob({
       orgId: "org-a",
       subscriptionId: "farside-test",
       cloud: "gcp",

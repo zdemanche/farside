@@ -16,7 +16,7 @@ export const offboardRoutes: RoutePlugin = (ctx) => async (app) => {
     },
     async (request, reply) => {
       const { orgId } = request.params;
-      const existing = ctx.store.deletion(orgId);
+      const existing = await ctx.store.deletion(orgId);
       if (existing) {
         return sendClean(reply, 200, deletionView(existing));
       }
@@ -27,7 +27,7 @@ export const offboardRoutes: RoutePlugin = (ctx) => async (app) => {
         });
       }
       const actorId = sessionFromHeaders(request)?.actorId ?? "unknown";
-      const record = ctx.store.offboard(orgId, ctx.clientTime(body.now), "customer", actorId);
+      const record = await ctx.store.offboard(orgId, ctx.clientTime(body.now), "customer", actorId);
       audit(request.log, "org.offboard", { trigger: record.trigger });
       return sendClean(reply, 200, deletionView(record));
     },
@@ -37,7 +37,7 @@ export const offboardRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/deletion",
     { schema: { params: orgParams }, config: { allowDeleted: true } },
     async (request, reply) => {
-      const record = ctx.store.deletion(request.params.orgId);
+      const record = await ctx.store.deletion(request.params.orgId);
       return record
         ? sendClean(reply, 200, deletionView(record))
         : problem(reply, 404, "Not found");

@@ -62,14 +62,14 @@ function headers(orgId: string) {
   return { [ORG_HEADER]: orgId, [ACTOR_HEADER]: `actor-${orgId}` };
 }
 
-describe("org scoping", () => {
+describe("org scoping", async () => {
   const store = new MemoryStore(fixedClock);
   const app = buildApp(store, TEST_APP_OPTIONS);
   const inventory = inventoryFromManifest(MANIFEST);
 
-  store.putInventory("org-a", inventory);
-  store.putConnection("org-a", { tenantId: "tenant-org-a", subscriptionId: "sub-org-a" });
-  store.putConnection("org-b", { tenantId: "tenant-org-b", subscriptionId: "sub-org-b" });
+  await store.putInventory("org-a", inventory);
+  await store.putConnection("org-a", { tenantId: "tenant-org-a", subscriptionId: "sub-org-a" });
+  await store.putConnection("org-b", { tenantId: "tenant-org-b", subscriptionId: "sub-org-b" });
 
   afterAll(async () => {
     await app.close();

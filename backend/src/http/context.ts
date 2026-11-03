@@ -5,7 +5,7 @@ import type { CommitmentClient } from "../commitments.js";
 import type { CostQueryClient } from "../cost.js";
 import type { ScanRunner } from "../scans.js";
 import type { ScanScheduler } from "../scheduler.js";
-import type { MemoryStore } from "../store.js";
+import type { OrgRepository } from "../repository.js";
 
 export type OrgParams = { orgId: string };
 
@@ -17,12 +17,12 @@ declare module "fastify" {
     allowDeleted?: boolean;
     rejectSecrets?: boolean;
     invalidTitle?: string;
-    demo?: (store: MemoryStore, orgId: string) => DemoReply;
+    demo?: (store: OrgRepository, orgId: string) => Promise<DemoReply>;
   }
 }
 
 export type AppContext = {
-  store: MemoryStore;
+  store: OrgRepository;
   clock: Clock;
   clientTime: (candidate: unknown) => string;
   trustClientClock: boolean;

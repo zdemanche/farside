@@ -22,7 +22,14 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const org = ctx.store.view(request.params.orgId);
+      const org = await ctx.store.read(
+        request.params.orgId,
+        "cost",
+        "alerts",
+        "commitments",
+        "findings",
+        "coverage",
+      );
       return sendClean(
         reply,
         200,
@@ -42,7 +49,7 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
       const cloud = cloudOf(request.query);
-      const org = ctx.store.view(request.params.orgId);
+      const org = await ctx.store.read(request.params.orgId, "cost", "findings", "coverage");
       return sendClean(
         reply,
         200,
@@ -61,7 +68,7 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/cost",
     { schema: { params: orgParams } },
     async (request, reply) => {
-      const cost = ctx.store.view(request.params.orgId).cost;
+      const { cost } = await ctx.store.read(request.params.orgId, "cost");
       return cost ? sendClean(reply, 200, cost) : problem(reply, 404, "Not found");
     },
   );
@@ -73,15 +80,15 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
       config: {
         rejectSecrets: true,
         invalidTitle: "Invalid cost harvest",
-        demo: (store, orgId) => ({
+        demo: async (store, orgId) => ({
           status: 200,
-          body: { harvested: true, cost: store.view(orgId).cost },
+          body: { harvested: true, cost: (await store.read(orgId, "cost")).cost },
         }),
       },
     },
     async (request, reply) => {
       const { orgId } = request.params;
-      const connected = requireConnected(
+      const connected = await requireConnected(
         ctx,
         request,
         reply,
@@ -104,19 +111,19 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
         return reply;
       }
       const costHarvest = harvested.value;
-      ctx.store.putCoverage(
+      await ctx.store.putCoverage(
         orgId,
-        applyCostCoverage(ctx.store.view(orgId).coverage, costHarvest.coverage),
+        applyCostCoverage((await ctx.store.read(orgId, "coverage")).coverage, costHarvest.coverage),
       );
       if (!costHarvest.ok) {
-        ctx.store.putCost(orgId, null, connected);
+        await ctx.store.putCost(orgId, null, connected);
         return sendClean(reply, 200, {
           harvested: false,
           reason: costHarvest.reason,
           closer: costHarvest.coverage[0]?.closer,
         });
       }
-      ctx.store.putCost(orgId, costHarvest.snapshot, connected);
+      await ctx.store.putCost(orgId, costHarvest.snapshot, connected);
       return sendClean(reply, 200, { harvested: true, cost: costHarvest.snapshot });
     },
   );

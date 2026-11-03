@@ -29,11 +29,11 @@ describe("estate overview", () => {
     });
   });
 
-  it("shows totals, no-owner count and coverage on seeded inventory", () => {
+  it("shows totals, no-owner count and coverage on seeded inventory", async () => {
     const store = new MemoryStore(fixedClock);
     const inventory = inventoryFromManifest(MANIFEST);
-    store.putInventory("org-a", inventory);
-    store.putCoverage("org-a", [
+    await store.putInventory("org-a", inventory);
+    await store.putCoverage("org-a", [
       recordCoverageScope({
         subscriptionOrProject: "main",
         checkId: "azure-inventory-all-resources",
@@ -60,10 +60,10 @@ describe("estate overview", () => {
     expect(overview.healthScore).toBeNull();
   });
 
-  it("scores only assessed scopes when findings exist", () => {
+  it("scores only assessed scopes when findings exist", async () => {
     const store = new MemoryStore(fixedClock);
     const inventory = inventoryFromManifest(MANIFEST);
-    store.putInventory("org-a", inventory);
+    await store.putInventory("org-a", inventory);
     const assessed = recordCoverageScope({
       subscriptionOrProject: "main",
       checkId: "azure-waste-unattached-disks",
@@ -75,13 +75,13 @@ describe("estate overview", () => {
       evidence: { fields: { diskId: "disk-unattached", diskState: "Unattached" } },
       scope: { id: assessed.id, cloud: "azure" as const, subscriptionOrProject: "main" },
     };
-    store.putCoverage("org-a", [assessed]);
-    store.putFindings("org-a", [finding]);
+    await store.putCoverage("org-a", [assessed]);
+    await store.putFindings("org-a", [finding]);
     const baseline = estateOverview(store.snapshot("org-a"));
     expect(baseline.healthScore).toBe(
       scoreHealth(toContractCoverage([assessed]), [finding]).score,
     );
-    store.putCoverage("org-a", [
+    await store.putCoverage("org-a", [
       assessed,
       recordCoverageScope({
         subscriptionOrProject: "ghost",
