@@ -16,6 +16,13 @@ import {
 } from "./coverage.js";
 import type { CoverageCauseId } from "./causes.js";
 import {
+  applyBudgetCoverage,
+  defaultBudgetClient,
+  harvestBudgets,
+  mergeBudgetFindings,
+  type BudgetClient,
+} from "./budgets.js";
+import {
   applyCommitmentCoverage,
   defaultCommitmentClient,
   harvestCommitments,
@@ -111,6 +118,7 @@ export function buildApp(
     harvester?: Harvester;
     costClient?: CostQueryClient;
     commitmentClient?: CommitmentClient;
+    budgetClient?: BudgetClient;
   } = {},
 ) {
   const runner = new ScanRunner(store, options.harvester ?? defaultHarvester());
@@ -415,6 +423,40 @@ export function buildApp(
     return sendClean(reply, 200, {
       harvested: true,
       commitments: harvested.snapshot,
+      findings: harvested.findings,
+    });
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/budgets", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    const budgets = store.snapshot(request.params.orgId).budgets;
+    if (!budgets) {
+      return problem(reply, 404, "Not found");
+    }
+    return sendClean(reply, 200, budgets);
+  });
+
+  app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/budgets", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    const harvested = await harvestBudgets({
+      client: options.budgetClient ?? defaultBudgetClient(),
+    });
+    store.putCoverage(
+      request.params.orgId,
+      applyBudgetCoverage(store.snapshot(request.params.orgId).coverage, harvested.coverage),
+    );
+    store.putBudgets(request.params.orgId, harvested.snapshot);
+    store.putFindings(
+      request.params.orgId,
+      mergeBudgetFindings(store.snapshot(request.params.orgId).findings, harvested.findings),
+    );
+    return sendClean(reply, 200, {
+      harvested: true,
+      budgets: harvested.snapshot,
       findings: harvested.findings,
     });
   });

@@ -11,6 +11,8 @@ In-repo Cost Management harvest against a multi-page fake, billing scope and cur
 | E4-S1-T3 | #130 | Month-on-month per service from the two latest complete months. The latest day is provisional and excluded from those months. |
 | E4-S2-T2 | #134 | Low reservation and savings-plan use fail with an unused-spend range. Well-used commitments pass. |
 | E4-S2-T3 | #135 | Empty lists pass as none-found, not zero utilisation. Missing Reservations Reader is unassessed and names the role. |
+| E4-S3-T2 | #138 | Seeded `empty-no-budget` fails; `main` with `farside-test-guard` passes. Findings include subscription, evidence, and lastConfirmed. |
+| E4-S3-T3 | #139 | Unreadable budgets are `undetermined` with a Cost Management Reader closer. |
 
 ## Leftovers
 
@@ -25,3 +27,7 @@ The missing-role path is covered by a fake client. A live 403 from Azure is left
 ### Live reservation and savings-plan harvest (#133)
 
 The test estate will not buy commitments. Fixture utilization in `docs/azure/commitments.json` is not a live purchase. A dated live run stays leftover.
+
+### Live budget harvest (#137)
+
+Budget definitions are read from the ground-truth manifest. A live Cost Management budgets list stays leftover.
