@@ -77,6 +77,26 @@ describe("scheduled tick", () => {
     expect(log.error).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-a" }), "schedule tick failed");
   });
 
+  it("does not remove in-memory orgs when re-purging deleted ones", async () => {
+    const store = seeded(["org-a"], NOW);
+    expect(await store.repurgeDeleted(NOW)).toBe(0);
+    expect(await store.orgIds()).toEqual(["org-a"]);
+  });
+
+  it("re-purges recently deleted orgs before ticking and keeps going if that sweep fails", async () => {
+    const store = seeded(["org-a"], "2026-10-02T00:00:00.000Z");
+    const log = fakeLog();
+    const repurge = vi.spyOn(store, "repurgeDeleted").mockRejectedValue(new Error("purge down"));
+    const runner = new ScanRunner(store, defaultHarvester(clock), {}, clock, log);
+    const summary = await runScheduledTick({ store, scheduler: new ScanScheduler(store, runner, clock), clock, log });
+    expect(repurge).toHaveBeenCalledWith(NOW);
+    expect(summary.orgs).toEqual([{ orgId: "org-a", action: "idle" }]);
+    expect(log.error).toHaveBeenCalledWith(
+      expect.objectContaining({ err: expect.any(Error) }),
+      "deleted-org re-purge failed",
+    );
+  });
+
   it("still ticks every org when the retention sweep fails", async () => {
     const store = seeded(["org-a", "org-b"], "2026-10-02T00:00:00.000Z");
     vi.spyOn(store, "sweepRetention").mockRejectedValue(new Error("sweep down"));

@@ -1,6 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { CreateTableCommand, DynamoDBClient, waitUntilTableExists } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  ConditionalCheckFailedException,
+  CreateTableCommand,
+  DynamoDBClient,
+  TransactionCanceledException,
+  waitUntilTableExists,
+} from "@aws-sdk/client-dynamodb";
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  TransactWriteCommand,
+  UpdateCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { MemoryBlobStore, type BlobStore } from "./blob-store.js";
 import { sweepRetention } from "./org-ops.js";
 import { seedDemoOrg } from "./demo.js";
@@ -46,7 +59,7 @@ beforeAll(async () => {
     region: "us-east-1",
     credentials: { accessKeyId: "local", secretAccessKey: "local" },
   });
-  docClient = documentClient(rawClient);
+  docClient = process.env.DYNAMO_ENDPOINT ? documentClient(rawClient) : withTransactShim(documentClient(rawClient));
   await rawClient.send(
     new CreateTableCommand({
       TableName: TABLE,
@@ -635,7 +648,7 @@ describe("DynamoStore persistence", () => {
     let fired = false;
     const racing = new DynamoStore(
       interceptingClient(async (command) => {
-        if (!fired && command instanceof UpdateCommand && command.input.Key?.sk === "FINDINGS") {
+        if (!fired && writesSk(command, "FINDINGS")) {
           fired = true;
           await docClient.send(
             new PutCommand({
@@ -656,6 +669,55 @@ describe("DynamoStore persistence", () => {
     expect((await rawItems(org)).map((item) => item.sk)).toEqual(["DELETION"]);
   });
 
+  it("re-purges leftovers for orgs deleted in the last 48 hours and leaves live orgs and older deletions alone", async () => {
+    const store = newDynamo();
+    const recent = orgName();
+    const live = orgName();
+    const old = orgName();
+    await store.putConnection(recent, { tenantId: "t", subscriptionId: "main" });
+    await store.putFindings(recent, [finding("main")]);
+    await store.putConnection(live, { tenantId: "t", subscriptionId: "keep" });
+    await store.putConnection(old, { tenantId: "t", subscriptionId: "main" });
+    await store.offboard(recent, NOW);
+    await store.offboard(old, "2026-10-31T00:00:00.000Z");
+    await docClient.send(
+      new PutCommand({
+        TableName: TABLE,
+        Item: {
+          pk: `ORG#${recent}`,
+          sk: "FINDINGS",
+          version: 1,
+          body: JSON.stringify([finding("main")]),
+        },
+      }),
+    );
+    await docClient.send(
+      new PutCommand({
+        TableName: TABLE,
+        Item: { pk: `ORG#${recent}`, sk: "META", gsi1pk: "ORGS", gsi1sk: `ORG#${recent}` },
+      }),
+    );
+    await docClient.send(
+      new PutCommand({
+        TableName: TABLE,
+        Item: {
+          pk: `ORG#${old}`,
+          sk: "FINDINGS",
+          version: 1,
+          body: JSON.stringify([finding("main")]),
+        },
+      }),
+    );
+    expect(await store.orgIds()).toContain(recent);
+    expect(await store.orgIds()).toContain(live);
+    expect(await store.repurgeDeleted(NOW)).toBeGreaterThanOrEqual(1);
+    expect((await rawItems(recent)).map((item) => item.sk)).toEqual(["DELETION"]);
+    expect((await rawItems(old)).map((item) => item.sk).sort()).toEqual(["DELETION", "FINDINGS"]);
+    expect((await store.read(live, "connections")).connections).toHaveLength(1);
+    expect(await store.orgIds()).not.toContain(recent);
+    expect(await store.orgIds()).toContain(live);
+  });
+
   it("retries a multi-document change whose base document moved underneath it", async () => {
     const org = orgName();
     const other = newDynamo();
@@ -663,7 +725,7 @@ describe("DynamoStore persistence", () => {
     let fired = false;
     const store = new DynamoStore(
       interceptingClient(async (command) => {
-        if (command instanceof UpdateCommand && command.input.Key?.sk === "SETTINGS") {
+        if (writesSk(command, "SETTINGS")) {
           writes += 1;
           if (!fired) {
             fired = true;
@@ -762,7 +824,7 @@ describe("DynamoStore persistence", () => {
     let fired = false;
     const racing = new DynamoStore(
       interceptingClient(async (command) => {
-        if (!fired && command instanceof UpdateCommand && command.input.Key?.sk === "FINDINGS") {
+        if (!fired && writesSk(command, "FINDINGS")) {
           fired = true;
           await other.mergeScan(org, "azure", scanMerge("sub-b"));
         }
@@ -846,6 +908,85 @@ describe("DynamoStore persistence", () => {
     expect(outcomes[1]).toEqual(outcomes[0]);
   });
 });
+
+function writesSk(command: unknown, sk: string): boolean {
+  if (command instanceof UpdateCommand) {
+    return command.input.Key?.sk === sk;
+  }
+  if (command instanceof TransactWriteCommand) {
+    return (command.input.TransactItems ?? []).some(
+      (item) => item.Update?.Key?.sk === sk || item.Put?.Item?.sk === sk,
+    );
+  }
+  return false;
+}
+
+function withTransactShim(client: DynamoDBDocumentClient): DynamoDBDocumentClient {
+  let tail = Promise.resolve();
+  const exclusive = <T>(work: () => Promise<T>) => {
+    const next = tail.then(work, work);
+    tail = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  };
+  return {
+    send: async (command: unknown) => {
+      if (!(command instanceof TransactWriteCommand)) {
+        return client.send(command as never);
+      }
+      return exclusive(() => emulateTransact(client, command));
+    },
+  } as unknown as DynamoDBDocumentClient;
+}
+
+async function emulateTransact(client: DynamoDBDocumentClient, command: TransactWriteCommand) {
+  const items = command.input.TransactItems ?? [];
+  const reasons = items.map(() => ({ Code: "None" }));
+  const fail = (index: number): never => {
+    reasons[index] = { Code: "ConditionalCheckFailed" };
+    throw new TransactionCanceledException({
+      message: "Transaction cancelled",
+      CancellationReasons: reasons,
+      $metadata: { httpStatusCode: 400 },
+    });
+  };
+  for (const [index, item] of items.entries()) {
+    const check = item.ConditionCheck;
+    if (!check) {
+      continue;
+    }
+    const got = await client.send(
+      new GetCommand({ TableName: check.TableName, Key: check.Key, ConsistentRead: true }),
+    );
+    if (check.ConditionExpression === "attribute_not_exists(pk)" && got.Item) {
+      fail(index);
+    }
+  }
+  for (const [index, item] of items.entries()) {
+    try {
+      if (item.Put) {
+        await client.send(
+          new PutCommand({
+            TableName: item.Put.TableName,
+            Item: item.Put.Item,
+            ConditionExpression: item.Put.ConditionExpression,
+            ExpressionAttributeNames: item.Put.ExpressionAttributeNames,
+            ExpressionAttributeValues: item.Put.ExpressionAttributeValues,
+          }),
+        );
+      } else if (item.Update) {
+        await client.send(new UpdateCommand(item.Update));
+      }
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        fail(index);
+      }
+      throw error;
+    }
+  }
+}
 
 function interceptingClient(before: (command: unknown) => Promise<void>): DynamoDBDocumentClient {
   return {

@@ -27,6 +27,7 @@ const TABLE_ACTIONS = [
   "dynamodb:UpdateItem",
   "dynamodb:DeleteItem",
   "dynamodb:BatchWriteItem",
+  "dynamodb:ConditionCheckItem",
   "dynamodb:Query",
 ];
 
