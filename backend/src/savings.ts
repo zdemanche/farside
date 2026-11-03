@@ -93,11 +93,11 @@ export function unusedReservationSavings(unusedHours: number): NamedSavingsRange
   });
 }
 
-export function unusedSavingsPlanSavings(unusedAmount: number): NamedSavingsRange {
+export function unusedSavingsPlanSavings(unusedAmount: number, currency: string): NamedSavingsRange {
   return savingsRange({
     min: unusedAmount * 0.8,
     max: unusedAmount * 1.2,
-    currency: "USD",
+    currency,
     basis: SAVINGS_PLAN_SAVINGS_BASIS,
   });
 }
