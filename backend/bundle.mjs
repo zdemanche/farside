@@ -22,6 +22,12 @@ export async function bundle(outdir) {
     outExtension: { ".js": ".mjs" },
     external: ["@aws-sdk/*"],
   });
+  await build({
+    ...SHARED,
+    entryPoints: { "farside-cli": `${root}src/cli.ts` },
+    outdir,
+    outExtension: { ".js": ".mjs" },
+  });
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
