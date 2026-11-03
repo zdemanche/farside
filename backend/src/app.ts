@@ -39,6 +39,7 @@ import {
 import { CardDataError, advanceContract, billingView, canScan, parseContract } from "./billing.js";
 import { deletionView } from "./offboard.js";
 import { demoDescriptor, isDemoOrg, seedDemoOrg } from "./demo.js";
+import { exportCost, exportFilename, exportInventory, exportIssues } from "./export.js";
 import { estateOverview } from "./estate.js";
 import { buildHeadline } from "./headline.js";
 import { costWasteView } from "./waste.js";
@@ -363,6 +364,40 @@ export function buildApp(
       return reply;
     }
     return sendClean(reply, 200, { issues: store.snapshot(request.params.orgId).issues });
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/export/issues", async (request, reply) => {
+    if (!requireOrg(request, reply, store)) {
+      return reply;
+    }
+    const query = request.query as Record<string, unknown>;
+    const exportedAt = typeof query.asOf === "string" ? query.asOf : "1970-01-01T00:00:00.000Z";
+    void reply.header("content-disposition", `attachment; filename="${exportFilename("issues")}"`);
+    return sendClean(reply, 200, exportIssues(request.params.orgId, store.snapshot(request.params.orgId).issues, exportedAt));
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/export/inventory", async (request, reply) => {
+    if (!requireOrg(request, reply, store)) {
+      return reply;
+    }
+    const query = request.query as Record<string, unknown>;
+    const exportedAt = typeof query.asOf === "string" ? query.asOf : "1970-01-01T00:00:00.000Z";
+    void reply.header("content-disposition", `attachment; filename="${exportFilename("inventory")}"`);
+    return sendClean(
+      reply,
+      200,
+      exportInventory(request.params.orgId, store.snapshot(request.params.orgId).inventory, exportedAt),
+    );
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/export/cost", async (request, reply) => {
+    if (!requireOrg(request, reply, store)) {
+      return reply;
+    }
+    const query = request.query as Record<string, unknown>;
+    const exportedAt = typeof query.asOf === "string" ? query.asOf : "1970-01-01T00:00:00.000Z";
+    void reply.header("content-disposition", `attachment; filename="${exportFilename("cost")}"`);
+    return sendClean(reply, 200, exportCost(request.params.orgId, store.snapshot(request.params.orgId).cost, exportedAt));
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/cost-waste", async (request, reply) => {
