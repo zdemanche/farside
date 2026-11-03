@@ -28,6 +28,7 @@ import {
 import { factsFromManifest, type ResourceFacts } from "./facts.js";
 import { applyOwnerTag, inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
 import { applyScanToIssues } from "./issues.js";
+import { rejectUnconfigured } from "./providers.js";
 import type { OrgSettings } from "./settings.js";
 import type { MemoryStore } from "./store.js";
 
@@ -227,6 +228,14 @@ export function defaultHarvester(clock?: Clock): Harvester {
     readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/ground-truth.json"), "utf8"),
   ) as GroundTruthManifest;
   return fixtureHarvester(inventoryFromManifest(manifest), factsFromManifest(manifest), clock);
+}
+
+export function unconfiguredHarvester(): Harvester {
+  return {
+    async harvest() {
+      rejectUnconfigured();
+    },
+  };
 }
 
 export class ScanRunner {

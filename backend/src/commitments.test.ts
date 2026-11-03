@@ -130,7 +130,7 @@ describe("commitment harvest", () => {
 
 describe("commitment routes", () => {
   const store = new MemoryStore(fixedClock);
-  const app = buildApp(store, TEST_APP_OPTIONS);
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, commitmentClient: fixtureCommitmentClient() });
 
   afterAll(async () => {
     await app.close();

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyCoverageResult, recordCoverageScope, type CoverageEntry } from "./coverage.js";
+import { rejectUnconfigured } from "./providers.js";
 
 export const SPEND_BY_SERVICE = "azure-cost-spend-by-service";
 export const MONTH_ON_MONTH = "azure-cost-month-on-month";
@@ -104,6 +105,14 @@ export function fixtureCostClient(pages: PagesFile = PAGES): CostQueryClient {
 
 export function defaultCostClient(): CostQueryClient {
   return fixtureCostClient();
+}
+
+export function unconfiguredCostClient(): CostQueryClient {
+  return {
+    async query() {
+      rejectUnconfigured();
+    },
+  };
 }
 
 export function missingCostRoleClient(): CostQueryClient {
