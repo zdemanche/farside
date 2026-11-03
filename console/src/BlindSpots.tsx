@@ -13,35 +13,37 @@ export function BlindSpots({
 }) {
   return (
     <>
-      <h1 id="page-title" tabIndex={-1}>
+      <h1 className="page-title" id="page-title" tabIndex={-1}>
         Blind spots
       </h1>
-      <p>
+      <p className="page-description">
         Farside does not treat silence as health. Unassessed scopes are left out of the score.
       </p>
-      <p>{formula}</p>
-      <p role="status" aria-live="polite">
+      <p className="page-description">{formula}</p>
+      <p className="page-meta" role="status" aria-live="polite">
         {leftOut} of {total} scopes were left out of the score.
       </p>
-      <table>
-        <caption>What Farside could not check</caption>
-        <thead>
-          <tr>
-            <th scope="col">Check</th>
-            <th scope="col">Why it was not checked</th>
-            <th scope="col">What would close it</th>
-          </tr>
-        </thead>
-        <tbody>
-          {spots.map((spot) => (
-            <tr key={spot.id}>
-              <th scope="row">{spot.checkId}</th>
-              <td>{spot.reason}</td>
-              <td>{spot.closer}</td>
+      <div className="table-wrap" role="region" aria-labelledby="blind-spots-caption" tabIndex={0}>
+        <table>
+          <caption id="blind-spots-caption">What Farside could not check</caption>
+          <thead>
+            <tr>
+              <th scope="col">Check</th>
+              <th scope="col">Why it was not checked</th>
+              <th scope="col">What would close it</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {spots.map((spot) => (
+              <tr key={spot.id}>
+                <th scope="row">{spot.checkId}</th>
+                <td>{spot.reason}</td>
+                <td>{spot.closer}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

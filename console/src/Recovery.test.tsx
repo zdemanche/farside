@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
-import { RECOVERY_BACKUP, RECOVERY_ROWS } from "./recovery";
+import { RECOVERY_BACKUP, RECOVERY_ROWS } from "./recovery-data";
 
 describe("Recovery screen", () => {
   beforeEach(() => {
