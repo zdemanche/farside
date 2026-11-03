@@ -25,24 +25,33 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   up:
     runs-on: ubuntu-latest
+    environment: customer
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - name: Skip apply until the dedicated-account integration is switched on
+      - name: Validate accountId against the registry
         env:
           CUSTOMER_NAME: ${{ inputs.customerName }}
           ACCOUNT_ID: ${{ inputs.accountId }}
         run: |
-          echo "Would pulumi up organization/farside/${CUSTOMER_NAME} in account ${ACCOUNT_ID}."
-          echo "Skipping: dedicated-account deploy and iac-hub registration are switch-on-later."
-          echo "See docs/e1-s3-remaining.md."
-          exit 0
+          set -euo pipefail
+          if ! [[ "${ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]]; then
+            echo "::error::accountId must be a 12-digit AWS account id."
+            exit 1
+          fi
+          REGISTERED=$(jq -r --arg c "$CUSTOMER_NAME" 'if .productDev.customer == $c then .productDev.accountId else (.customers[$c] // "") end' infra/accounts.json)
+          if [ "$REGISTERED" != "$ACCOUNT_ID" ]; then
+            echo "::error::accountId is not the registered dedicated account for $CUSTOMER_NAME in infra/accounts.json."
+            exit 1
+          fi
+      - name: Report that apply is not wired
+        run: |
+          set -euo pipefail
+          echo "::warning::pulumi up was not run."
+          echo "Skipped: pulumi up was not run. Reason: dedicated-account deploy and iac-hub registration are switch-on-later; see docs/e1-s3-remaining.md." >> "$GITHUB_STEP_SUMMARY"

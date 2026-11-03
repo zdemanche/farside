@@ -14,21 +14,57 @@ on:
         required: true
         type: string
       destroy:
+        description: Must be true to destroy
         required: false
         type: boolean
-        default: true
+        default: false
+      confirm:
+        description: Type the customer slug to confirm
+        required: true
+        type: string
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   destroy:
     runs-on: ubuntu-latest
+    environment: customer
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
-      - name: Skip destroy until a real stack exists
+      - name: Validate destroy confirmation and accountId
+        env:
+          CUSTOMER_NAME: ${{ inputs.customerName }}
+          ACCOUNT_ID: ${{ inputs.accountId }}
+          DESTROY: ${{ inputs.destroy }}
+          CONFIRM: ${{ inputs.confirm }}
         run: |
-          echo "No Farside Pulumi stack has been created yet. Nothing to destroy."
-          echo "See docs/e1-s3-remaining.md."
-          exit 0
+          set -euo pipefail
+          if [ "$DESTROY" != "true" ]; then
+            echo "::error::destroy is not true; nothing destroyed."
+            echo "Destroy refused: the destroy input was not true." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ "$CONFIRM" != "$CUSTOMER_NAME" ]; then
+            echo "::error::confirm must equal the customer slug."
+            echo "Destroy refused: confirm did not equal the customer slug." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          set -euo pipefail
+          if ! [[ "${ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]]; then
+            echo "::error::accountId must be a 12-digit AWS account id."
+            exit 1
+          fi
+          REGISTERED=$(jq -r --arg c "$CUSTOMER_NAME" 'if .productDev.customer == $c then .productDev.accountId else (.customers[$c] // "") end' infra/accounts.json)
+          if [ "$REGISTERED" != "$ACCOUNT_ID" ]; then
+            echo "::error::accountId is not the registered dedicated account for $CUSTOMER_NAME in infra/accounts.json."
+            exit 1
+          fi
+      - name: Report that destroy is not wired
+        run: |
+          set -euo pipefail
+          echo "::warning::pulumi destroy was not run."
+          echo "Skipped: pulumi destroy was not run. Reason: no Farside Pulumi stack has been created yet; see docs/e1-s3-remaining.md." >> "$GITHUB_STEP_SUMMARY"

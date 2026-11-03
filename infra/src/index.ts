@@ -10,7 +10,7 @@
  * account by accident. The plan, tags and account guard are the executable
  * part of this skeleton.
  */
-import { assertDedicatedAccount } from "./account.js";
+import { type AccountRegistry, assertDedicatedAccount } from "./account.js";
 import { planDevStack } from "./plan.js";
 import { PRODUCT_DISPLAY_NAME } from "./product.js";
 
@@ -19,10 +19,16 @@ export type StackConfig = {
   accountId: string;
   environment: "dev" | "non-prod" | "prod" | "prod-critical";
   callerAccountId: string;
+  registry: AccountRegistry;
 };
 
 export function materializeDevStack(config: StackConfig) {
-  assertDedicatedAccount(config.callerAccountId, config.accountId);
+  assertDedicatedAccount(
+    config.callerAccountId,
+    config.accountId,
+    config.customerName,
+    config.registry,
+  );
   const plan = planDevStack({
     customerName: config.customerName,
     environment: config.environment,
@@ -50,6 +56,7 @@ export function materializeDevStack(config: StackConfig) {
  *       accountId: config.require("accountId"),
  *       environment: config.require("environment"),
  *       callerAccountId,
+ *       registry: loadAccountRegistry("accounts.json"),
  *     });
  *     // create lambda (backend/dist), function URL, S3+CloudFront (console/dist)
  *     // with outputs.tags on every resource, then export healthUrl and consoleUrl.

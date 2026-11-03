@@ -145,6 +145,8 @@ Hub order, `workflow_dispatch` only (never `push` to `main`):
 
 `materializeDevStack` calls `assertDedicatedAccount`. Resources stay a typed sketch until AWS OIDC and Pulumi state are wired; current workflows **skip** apply rather than create in the wrong account.
 
+Every deploy workflow is `workflow_dispatch` only; only `ci.yml` runs on push. A skipped step prints a `::warning::` and a step-summary line saying what was not done. `deploy.yml`, `infra-pulumi_up.yaml` and `infra-pulumi_destroy.yaml` run in the GitHub `dev` / `customer` environments: configure required reviewers on both so a dispatch waits for approval before a job can assume the AWS role (`id-token: write` is granted on those jobs only). Each workflow rejects an `accountId` that is not 12 digits. `accountId` must also be registered to the customer slug in `infra/accounts.json` (merge that change first); the Pulumi guard refuses unregistered, cross-customer and product-dev accounts.
+
 **Leftover:** a real `pulumi up` needs the dedicated account, GitHub OIDC, and Pulumi state (#175).
 
 #### Check
@@ -160,7 +162,7 @@ Hub order, `workflow_dispatch` only (never `push` to `main`):
 - Shared account: treat as fatal. Do not retry against that account.
 - Infra failed after artifacts: re-dispatch Infra only. Artifacts can stay.
 - Web failed after infra: re-dispatch Web only.
-- Need to abandon the customer: `infra-pulumi_destroy.yaml` with `customerName`, `accountId`, `run_identifier`. Today that workflow no-ops because no stack exists yet. After a real stack exists, destroy Infra, then stop dispatching Backend/Web.
+- Need to abandon the customer: `infra-pulumi_destroy.yaml` with `customerName`, `accountId`, `run_identifier`, `destroy` set to true (default false), and `confirm` typed as the exact customer slug, then approve the `customer` environment. Today that workflow no-ops because no stack exists yet. After a real stack exists, destroy Infra, then stop dispatching Backend/Web.
 
 ### 8. CTO claims the org and signs in {#claim-org}
 

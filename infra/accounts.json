@@ -1,0 +1,6 @@
+{
+  "productDev": { "customer": "moonaan-dev", "accountId": "000000000000" },
+  "customers": {
+    "example-customer": "000000000001"
+  }
+}
