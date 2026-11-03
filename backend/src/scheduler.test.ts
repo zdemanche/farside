@@ -198,8 +198,8 @@ describe("schedule routes", () => {
       status: "running",
       complete: false,
       coveredScopes: [],
-      createdAt: addHours(T0, 24),
-      startedAt: addHours(T0, 24),
+      createdAt: addHours(T0, 48),
+      startedAt: addHours(T0, 48),
       finishedAt: null,
       error: null,
       durationMs: null,
@@ -232,6 +232,18 @@ describe("schedule routes", () => {
     expect(retry.json().scanStarted).toBe(true);
     const finished = await waitForJob(store, "org-a", retry.json().scan.id, "succeeded");
     expect(finished.status).toBe("succeeded");
+  });
+
+  it("ignores a system actor in the POST /scans body", async () => {
+    await connectAt();
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/scans",
+      headers: ORG,
+      payload: { subscriptionId: "main", actor: "system" },
+    });
+    expect(response.json().scan.actor).toBe("user");
+    await waitForJob(store, "org-a", response.json().scan.id, "succeeded");
   });
 
   it("does not start when the connection is marked unhealthy", async () => {

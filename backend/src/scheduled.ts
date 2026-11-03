@@ -78,7 +78,7 @@ export async function runScheduledTick(deps: TickDeps): Promise<TickSummary> {
 const store = new MemoryStore(systemClock);
 const log = pino(pinoOptions(loggerFromEnv()) || {});
 const runner = new ScanRunner(store, guardHarvester(unconfiguredHarvester()), {}, systemClock, log);
-const scheduler = new ScanScheduler(store, runner, systemClock);
+const scheduler = new ScanScheduler(store, runner, systemClock, log);
 
 export async function handler(): Promise<TickSummary> {
   return runScheduledTick({ store, scheduler, clock: systemClock, log });

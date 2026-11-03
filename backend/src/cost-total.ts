@@ -63,33 +63,6 @@ function sumMonthly(figures: readonly CostFigure[], scopes: string): CostFigure[
     );
 }
 
-function monthlyServiceFigures(snapshot: CostSnapshot): CostFigure[] {
-  const base = { billingScope: snapshot.billingScope, currency: snapshot.currency, provisional: false };
-  const fromChanges = snapshot.monthOnMonth.flatMap((change) => [
-    {
-      ...base,
-      agreementType: change.agreementType,
-      serviceName: change.serviceName,
-      periodStart: `${change.currentMonth}-01`,
-      periodEnd: `${change.currentMonth}-01`,
-      costAmount: change.currentMonthCost,
-    },
-    {
-      ...base,
-      agreementType: change.agreementType,
-      serviceName: change.serviceName,
-      periodStart: `${change.previousMonth}-01`,
-      periodEnd: `${change.previousMonth}-01`,
-      costAmount: change.previousMonthCost,
-    },
-  ]);
-  const seen = new Set(fromChanges.map((figure) => `${figure.serviceName}|${monthOf(figure)}`));
-  return [
-    ...fromChanges,
-    ...snapshot.services.filter((figure) => !seen.has(`${figure.serviceName}|${monthOf(figure)}`)),
-  ];
-}
-
 export function combineCosts(snapshots: readonly CostSnapshot[]): CostSnapshot | null {
   const usable = snapshots.filter(hasFigures);
   const first = usable[0];
@@ -110,6 +83,10 @@ export function combineCosts(snapshots: readonly CostSnapshot[]): CostSnapshot |
     usable.flatMap((snapshot) => snapshot.services),
     scopes,
   );
+  const serviceMonths = sumMonthly(
+    usable.flatMap((snapshot) => snapshot.serviceMonths),
+    scopes,
+  );
   const provisional = usable.flatMap((snapshot) => (snapshot.provisionalDate ? [snapshot.provisionalDate] : []));
   return {
     ...first,
@@ -122,13 +99,8 @@ export function combineCosts(snapshots: readonly CostSnapshot[]): CostSnapshot |
     provisionalDate: provisional.sort().at(-1) ?? null,
     services,
     months,
-    monthOnMonth: monthOnMonth(
-      sumMonthly(
-        usable.flatMap(monthlyServiceFigures),
-        scopes,
-      ),
-      agreementType,
-    ),
+    serviceMonths,
+    monthOnMonth: monthOnMonth(serviceMonths, agreementType),
   };
 }
 

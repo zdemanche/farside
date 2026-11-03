@@ -59,6 +59,7 @@ export type CostSnapshot = {
   provisionalDate: string | null;
   services: CostFigure[];
   months: CostFigure[];
+  serviceMonths: CostFigure[];
   monthOnMonth: MonthChange[];
 };
 
@@ -328,6 +329,7 @@ export async function harvestCost(input: {
       billingScope: input.billingScope,
       agreementType: input.agreementType,
     });
+    const serviceMonths = monthlyServiceFigures(rows, input);
     const snapshot: CostSnapshot = {
       subscriptionId: input.subscriptionId,
       billingScope: input.billingScope,
@@ -339,7 +341,8 @@ export async function harvestCost(input: {
       provisionalDate: figures.provisionalDate,
       services: figures.services,
       months: figures.months,
-      monthOnMonth: monthOnMonth(monthlyServiceFigures(rows, input), input.agreementType),
+      serviceMonths,
+      monthOnMonth: monthOnMonth(serviceMonths, input.agreementType),
     };
     const coverage = [
       recordCoverageScope({

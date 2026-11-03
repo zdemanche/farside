@@ -141,7 +141,7 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     handler: "scheduled.handler",
     role: lambdaRole(tickName, tickLogs.arn, tags),
     logGroup: tickLogs,
-    environment,
+    environment: { ...environment, FARSIDE_EMIT_EMF: "1" },
     timeout: 300,
     tags,
   });

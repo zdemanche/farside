@@ -29,10 +29,11 @@ import { applyScanToIssues } from "./issues.js";
 import { PROVIDER_NOT_CONFIGURED, ProviderNotConfiguredError, rejectUnconfigured } from "./providers.js";
 import type { OrgSettings } from "./settings.js";
 import { silentLog, type LogSink } from "./observability.js";
+import { addHours, DEFAULT_SCAN_TIMEOUT_MS, RETRY_DELAY_HOURS } from "./scheduler.js";
 import type { MemoryStore } from "./store.js";
 import docAzureGroundTruth from "../../docs/azure/ground-truth.json" with { type: "json" };
 
-// "cancelled" is internal-only: never stored or returned by the API
+// "cancelled" is stored so a cancelled job frees its subscription, but the API never returns it
 export type ScanStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export type ScanCheckOutcome = {
@@ -140,7 +141,7 @@ export function toScanViews(jobs: readonly ScanJob[]): ScanView[] {
       break;
     }
   }
-  return jobs.map((job) => toScanView(job, job.id === currentId));
+  return jobs.filter((job) => job.status !== "cancelled").map((job) => toScanView(job, job.id === currentId));
 }
 
 export type HarvestResult = {
@@ -301,14 +302,29 @@ export function unconfiguredHarvester(): Harvester {
   };
 }
 
-function abortable<T>(signal: AbortSignal, work: Promise<T>): Promise<T> {
+const MAX_TIMER_MS = 2 ** 31 - 1;
+
+function abortable<T>(signal: AbortSignal, work: Promise<T>, timeoutMs: number): Promise<T> {
   if (signal.aborted) {
     return Promise.reject(new Error("scan aborted"));
   }
   return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(new Error("scan aborted"));
+    const onAbort = () => settle(() => reject(new Error("scan aborted")));
+    const timer = setTimeout(() => {
+      const error = new Error(`harvest exceeded ${timeoutMs}ms`);
+      error.name = "TimeoutError";
+      settle(() => reject(error));
+    }, Math.min(timeoutMs, MAX_TIMER_MS));
+    const settle = (finish: () => void) => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      finish();
+    };
     signal.addEventListener("abort", onAbort, { once: true });
-    work.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+    work.then(
+      (value) => settle(() => resolve(value)),
+      (error: unknown) => settle(() => reject(error)),
+    );
   });
 }
 
@@ -327,6 +343,7 @@ export class ScanRunner {
     private readonly harvestClients: ScanHarvestClients = {},
     private readonly clock: Clock = systemClock,
     private readonly log: LogSink = silentLog,
+    readonly scanTimeoutMs: number = DEFAULT_SCAN_TIMEOUT_MS,
   ) {}
 
   start(input: { orgId: string; subscriptionId: string; actor: "user" | "system" }): {
@@ -334,6 +351,7 @@ export class ScanRunner {
     started: boolean;
     done: Promise<ScanJob>;
   } {
+    this.expireStaleScans(input.orgId, this.clock());
     const existing = this.store.runningScan(input.orgId, input.subscriptionId);
     if (existing) {
       return { job: existing, started: false, done: Promise.resolve(existing) };
@@ -354,15 +372,18 @@ export class ScanRunner {
       coverageSummary: EMPTY_COVERAGE_SUMMARY,
       checks: [],
     });
+    const connected = this.store.isConnected(input.orgId, input.subscriptionId);
     const tail = this.#queues.get(input.orgId);
     if (tail) {
       this.log.info({ event: "scan.queued", orgId: input.orgId, scanId: job.id }, "scan.queued");
     }
     const done = tail
       ? tail.then((): Promise<ScanJob> | ScanJob =>
-          this.store.deletion(input.orgId) ? this.cancelQueued(input.orgId, job) : this.execute(input.orgId, job.id),
+          this.store.deletion(input.orgId) || (connected && !this.store.isConnected(input.orgId, input.subscriptionId))
+            ? this.cancel(input.orgId, job)
+            : this.execute(input.orgId, job.id, connected),
         )
-      : this.execute(input.orgId, job.id);
+      : this.execute(input.orgId, job.id, connected);
     const settled = done.catch(() => undefined);
     this.#queues.set(input.orgId, settled);
     void settled.then(() => {
@@ -379,12 +400,90 @@ export class ScanRunner {
     return { job, started: true, done };
   }
 
-  private cancelQueued(orgId: string, job: ScanJob): ScanJob {
+  private cancel(orgId: string, job: ScanJob, patch: Partial<ScanJob> = {}): ScanJob {
     this.log.info({ event: "scan.cancelled", orgId, scanId: job.id }, "scan.cancelled");
-    return { ...job, status: "cancelled" };
+    if (!this.store.hasOrg(orgId) || this.store.deletion(orgId)) {
+      return { ...job, ...patch, status: "cancelled" };
+    }
+    return this.store.patchJob(orgId, job.id, { ...patch, status: "cancelled" });
   }
 
-  private async execute(orgId: string, jobId: string): Promise<ScanJob> {
+  private scheduleRetry(orgId: string, subscriptionId: string, finishedAt: string): void {
+    const { settings, schedule } = this.store.org(orgId);
+    if (!settings.scanScheduleEnabled || (schedule.retryCounts[subscriptionId] ?? 0) >= settings.scanRetryLimit) {
+      return;
+    }
+    const candidate = addHours(finishedAt, RETRY_DELAY_HOURS);
+    if (!schedule.retryAt || Date.parse(candidate) < Date.parse(schedule.retryAt)) {
+      schedule.retryAt = candidate;
+    }
+    if (!schedule.regularRunAt || Date.parse(schedule.retryAt) < Date.parse(schedule.regularRunAt)) {
+      schedule.nextRunAt = schedule.retryAt;
+    }
+  }
+
+  private recordFailure(
+    orgId: string,
+    job: ScanJob,
+    startedAt: string,
+    failure: { error: unknown; errorCode: string; stored: string; covered: string[] },
+  ): ScanJob {
+    const checks = checksFromFailure(failure.covered, job.subscriptionId);
+    const finishedAt = this.clock();
+    const errorId = randomUUID();
+    const failed = this.store.patchJob(orgId, job.id, {
+      status: "failed",
+      complete: false,
+      coveredScopes: failure.covered,
+      finishedAt,
+      error: failure.stored,
+      errorId,
+      durationMs: durationMsFrom(startedAt, finishedAt),
+      coverageSummary: coverageSummaryFrom(checks),
+      checks,
+    });
+    if (job.actor === "system") {
+      this.scheduleRetry(orgId, job.subscriptionId, finishedAt);
+    }
+    this.log.error(
+      {
+        event: "scan.failed",
+        orgId,
+        scanId: job.id,
+        durationMs: failed.durationMs,
+        checkCount: checks.length,
+        coverageSummary: failed.coverageSummary,
+        errorCode: failure.errorCode,
+        errorId,
+        err: failure.error,
+      },
+      "scan.failed",
+    );
+    return failed;
+  }
+
+  expireStaleScans(orgId: string, now: string): ScanJob[] {
+    return this.store
+      .org(orgId)
+      .scans.filter(
+        (job) =>
+          job.status === "running" &&
+          job.startedAt !== null &&
+          Date.parse(now) - Date.parse(job.startedAt) > this.scanTimeoutMs,
+      )
+      .map((job) => {
+        const error = new Error(`scan exceeded ${this.scanTimeoutMs}ms`);
+        error.name = "TimeoutError";
+        return this.recordFailure(orgId, job, job.startedAt ?? now, {
+          error,
+          errorCode: "harvest_timeout",
+          stored: "harvest_timeout",
+          covered: [],
+        });
+      });
+  }
+
+  private async execute(orgId: string, jobId: string, connectedAtStart: boolean): Promise<ScanJob> {
     const current = this.store.getJob(orgId, jobId);
     if (!current) {
       throw new Error(`scan ${jobId} missing`);
@@ -394,10 +493,9 @@ export class ScanRunner {
     const { signal, release } = this.store.trackScan(orgId);
     const scanFields = { orgId, scanId: jobId };
     this.log.info({ event: "scan.start", ...scanFields }, "scan.start");
-    const cancelled = (): ScanJob => {
-      this.log.info({ event: "scan.cancelled", ...scanFields }, "scan.cancelled");
-      return { ...current, status: "cancelled", startedAt };
-    };
+    const cancelled = (): ScanJob => this.cancel(orgId, current, { startedAt });
+    const deadline = Date.parse(startedAt) + this.scanTimeoutMs;
+    const remainingMs = () => Math.max(0, deadline - Date.parse(this.clock()));
     let harvesting = true;
     try {
       const settings = this.store.snapshot(orgId).settings;
@@ -408,6 +506,7 @@ export class ScanRunner {
           subscriptionId: current.subscriptionId,
           settings,
         }),
+        remainingMs(),
       );
       harvesting = false;
       if (signal.aborted) {
@@ -424,9 +523,16 @@ export class ScanRunner {
       const replaceIds = new Set(registeredCheckIds(result.inventory.cloud));
       const collected =
         result.inventory.cloud === "azure"
-          ? await this.collectAzureHarvests(current.subscriptionId, signal)
+          ? await this.collectAzureHarvests(current.subscriptionId, signal, remainingMs)
           : {};
-      if (!collected) {
+      if (!collected || signal.aborted) {
+        return cancelled();
+      }
+      const live = this.store.getJob(orgId, jobId);
+      if (live?.status !== "running") {
+        return live ?? cancelled();
+      }
+      if (connectedAtStart && !this.store.isConnected(orgId, current.subscriptionId)) {
         return cancelled();
       }
       const fresh = this.store.snapshot(orgId);
@@ -486,42 +592,23 @@ export class ScanRunner {
       if (signal.aborted) {
         return cancelled();
       }
-      const covered = error instanceof ScanFailedError ? error.coveredScopes : [];
-      const checks = checksFromFailure(covered, current.subscriptionId);
-      const finishedAt = this.clock();
       const errorCode = failureCode(error, harvesting);
-      const errorId = randomUUID();
-      const failed = this.store.patchJob(orgId, jobId, {
-        status: "failed",
-        complete: false,
-        coveredScopes: covered,
-        finishedAt,
-        error: error instanceof ProviderNotConfiguredError ? PROVIDER_NOT_CONFIGURED : errorCode,
-        errorId,
-        durationMs: durationMsFrom(startedAt, finishedAt),
-        coverageSummary: coverageSummaryFrom(checks),
-        checks,
+      return this.recordFailure(orgId, current, startedAt, {
+        error,
+        errorCode,
+        stored: error instanceof ProviderNotConfiguredError ? PROVIDER_NOT_CONFIGURED : errorCode,
+        covered: error instanceof ScanFailedError ? error.coveredScopes : [],
       });
-      this.log.error(
-        {
-          event: "scan.failed",
-          ...scanFields,
-          durationMs: failed.durationMs,
-          checkCount: checks.length,
-          coverageSummary: failed.coverageSummary,
-          errorCode,
-          errorId,
-          err: error,
-        },
-        "scan.failed",
-      );
-      return failed;
     } finally {
       release();
     }
   }
 
-  private async collectAzureHarvests(subscriptionId: string, signal: AbortSignal): Promise<AzureHarvests | null> {
+  private async collectAzureHarvests(
+    subscriptionId: string,
+    signal: AbortSignal,
+    remainingMs: () => number,
+  ): Promise<AzureHarvests | null> {
     const billingScope = `/subscriptions/${subscriptionId}`;
     const collected: AzureHarvests = {};
     if (this.harvestClients.costClient) {
@@ -534,6 +621,7 @@ export class ScanRunner {
         agreementType: "payg",
         asOf: this.clock(),
         }),
+        remainingMs(),
       );
       if (signal.aborted) {
         return null;
@@ -547,6 +635,7 @@ export class ScanRunner {
         subscriptionId,
         billingScope,
         }),
+        remainingMs(),
       );
       if (signal.aborted) {
         return null;
@@ -559,6 +648,7 @@ export class ScanRunner {
         client: this.harvestClients.budgetClient,
         lastConfirmed: this.clock(),
         }),
+        remainingMs(),
       );
       if (signal.aborted) {
         return null;
