@@ -33,10 +33,7 @@ export function stripProviderPayload(item: Record<string, unknown>): Record<stri
   return out;
 }
 
-export function toInventoryRecord(
-  item: GroundTruthItem,
-  ownerTagKey: string,
-): InventoryRecord {
+export function toInventoryRecord(item: GroundTruthItem, ownerTagKey: string): InventoryRecord {
   const owner = item.tags[ownerTagKey];
   return {
     resourceUri: `/subscriptions/${item.subscription}/resourceGroups/farside-seed/providers/${item.type}/${item.id}`,
@@ -74,6 +71,32 @@ export function noOwnerTotal(inventory: Inventory): {
   return {
     total: missing.length,
     resourceUris: missing.map((resource) => resource.resourceUri),
+  };
+}
+
+export const MAX_TAG_VALUE_LENGTH = 256;
+
+function projectRecord(record: InventoryRecord): InventoryRecord {
+  const tags: Record<string, string> = {};
+  for (const [key, value] of Object.entries(record.tags)) {
+    if (typeof value === "string") {
+      tags[key] = value.slice(0, MAX_TAG_VALUE_LENGTH);
+    }
+  }
+  return {
+    resourceUri: record.resourceUri,
+    resourceType: record.resourceType,
+    region: record.region,
+    displayName: record.displayName,
+    tags,
+  };
+}
+
+export function projectInventory(inventory: Inventory): Inventory {
+  return {
+    cloud: inventory.cloud,
+    observedAt: inventory.observedAt,
+    resources: inventory.resources.map(projectRecord),
   };
 }
 
@@ -120,7 +143,10 @@ export function filterInventory(
     if (filters.service && resource.resourceType !== filters.service) {
       return [];
     }
-    if (filters.subscription && scopeOf(inventory.cloud, resource.resourceUri) !== filters.subscription) {
+    if (
+      filters.subscription &&
+      scopeOf(inventory.cloud, resource.resourceUri) !== filters.subscription
+    ) {
       return [];
     }
     if (filters.region && resource.region !== filters.region) {
