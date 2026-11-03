@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { REQUIRED_TAG_KEYS } from "./tags.js";
-import { PublicApiError, assertAuthenticatedEdge, planDevStack, untaggedResources } from "./plan.js";
+import {
+  PublicApiError,
+  assertAuthenticatedEdge,
+  planDevStack,
+  storeDeletionProtection,
+  untaggedResources,
+} from "./plan.js";
 
 describe("dev deploy plan", () => {
   const plan = planDevStack({
@@ -15,6 +21,7 @@ describe("dev deploy plan", () => {
     expect(plan.resources.map((resource) => resource.kind)).toEqual([
       "iam-role",
       "ssm-parameter",
+      "dynamodb-table",
       "log-group",
       "lambda",
       "lambda-url",
@@ -75,6 +82,15 @@ describe("dev deploy plan", () => {
     expect(plan.servesV1).toBe(true);
     expect(() => assertAuthenticatedEdge(open)).toThrow(PublicApiError);
     expect(() => assertAuthenticatedEdge({ ...open, servesV1: false })).not.toThrow();
+  });
+
+  it("plans one tagged store table and protects it from deletion outside dev", () => {
+    const tables = plan.resources.filter((resource) => resource.kind === "dynamodb-table");
+    expect(tables.map((resource) => resource.name)).toEqual(["farside-moonaan-dev-store"]);
+    expect(storeDeletionProtection("dev")).toBe(false);
+    for (const environment of ["non-prod", "prod", "prod-critical"] as const) {
+      expect(storeDeletionProtection(environment)).toBe(true);
+    }
   });
 
   it("tags every resource with the standard Moonaan set", () => {

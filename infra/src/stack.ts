@@ -1,6 +1,12 @@
 import * as aws from "@pulumi/aws";
 import * as pulumi from "@pulumi/pulumi";
-import { CDN_BEHAVIORS, SCHEDULE_RATE, assertAuthenticatedEdge, type DeployPlan } from "./plan.js";
+import {
+  CDN_BEHAVIORS,
+  SCHEDULE_RATE,
+  assertAuthenticatedEdge,
+  storeDeletionProtection,
+  type DeployPlan,
+} from "./plan.js";
 import { PRODUCT_KEY } from "./product.js";
 
 export type StackInputs = {
@@ -13,6 +19,15 @@ export type StackInputs = {
 
 const CACHING_OPTIMIZED = "658327ea-f89d-4fab-a63d-7e88639e58f6";
 const CLOUDFRONT = "cloudfront.amazonaws.com";
+const ORG_INDEX = "gsi1";
+const TABLE_ACTIONS = [
+  "dynamodb:GetItem",
+  "dynamodb:PutItem",
+  "dynamodb:UpdateItem",
+  "dynamodb:DeleteItem",
+  "dynamodb:BatchWriteItem",
+  "dynamodb:Query",
+];
 
 function assumeRole(service: string, sourceAccount?: string) {
   return aws.iam.getPolicyDocumentOutput({
@@ -48,6 +63,21 @@ function lambdaRole(name: string, logGroupArn: pulumi.Input<string>, tags: Deplo
   return role;
 }
 
+function grantTable(name: string, role: aws.iam.Role, tableArn: pulumi.Input<string>) {
+  new aws.iam.RolePolicy(`${name}-store`, {
+    role: role.id,
+    policy: pulumi.output(tableArn).apply((arn) =>
+      JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          { Effect: "Allow", Action: TABLE_ACTIONS, Resource: arn },
+          { Effect: "Allow", Action: "dynamodb:Query", Resource: `${arn}/index/${ORG_INDEX}` },
+        ],
+      }),
+    ),
+  });
+}
+
 function lambdaFunction(input: {
   name: string;
   bundle: string;
@@ -80,7 +110,29 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
   const prefix = `${PRODUCT_KEY}-${plan.customerName}`;
   const apiName = `${prefix}-api`;
   const tickName = `${prefix}-tick`;
-  const environment = { FARSIDE_LOG_LEVEL: "info" };
+  const store = new aws.dynamodb.Table(`${prefix}-store`, {
+    name: `${prefix}-store`,
+    billingMode: "PAY_PER_REQUEST",
+    hashKey: "pk",
+    rangeKey: "sk",
+    attributes: [
+      { name: "pk", type: "S" },
+      { name: "sk", type: "S" },
+      { name: "gsi1pk", type: "S" },
+      { name: "gsi1sk", type: "S" },
+    ],
+    globalSecondaryIndexes: [
+      { name: ORG_INDEX, hashKey: "gsi1pk", rangeKey: "gsi1sk", projectionType: "KEYS_ONLY" },
+    ],
+    pointInTimeRecovery: { enabled: true },
+    deletionProtectionEnabled: storeDeletionProtection(tags.environment),
+    tags,
+  });
+  const environment = {
+    FARSIDE_LOG_LEVEL: "info",
+    FARSIDE_STORE: "dynamo",
+    FARSIDE_TABLE_NAME: store.name,
+  };
   const tokenParameter = new aws.ssm.Parameter(`${prefix}-operator-token`, {
     name: `/${PRODUCT_KEY}/${plan.customerName}/operator-token`,
     type: "SecureString",
@@ -96,6 +148,7 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     tags,
   });
   const apiRole = lambdaRole(apiName, apiLogs.arn, tags);
+  grantTable(apiName, apiRole, store.arn);
   const api = lambdaFunction({
     name: apiName,
     bundle: apiBundle,
@@ -134,12 +187,14 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     retentionInDays: logRetentionDays,
     tags,
   });
+  const tickRole = lambdaRole(tickName, tickLogs.arn, tags);
+  grantTable(tickName, tickRole, store.arn);
   const tick = lambdaFunction({
     name: tickName,
     bundle: tickBundle,
     file: "scheduled.mjs",
     handler: "scheduled.handler",
-    role: lambdaRole(tickName, tickLogs.arn, tags),
+    role: tickRole,
     logGroup: tickLogs,
     environment: { ...environment, FARSIDE_EMIT_EMF: "1" },
     timeout: 300,
@@ -235,5 +290,6 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     apiUrl: apiUrl.functionUrl,
     consoleBucket: consoleBucket.bucket,
     scheduleName: schedule.name,
+    tableName: store.name,
   };
 }

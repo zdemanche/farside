@@ -141,6 +141,52 @@ describe("deployStack", () => {
     }
   });
 
+  it("creates one on-demand store table with PITR, a keys-only org index and no CMK", () => {
+    const tables = ofType("aws:dynamodb/table:Table");
+    expect(tables).toHaveLength(1);
+    expect(tables[0]?.inputs).toMatchObject({
+      name: "farside-moonaan-dev-store",
+      billingMode: "PAY_PER_REQUEST",
+      hashKey: "pk",
+      rangeKey: "sk",
+      pointInTimeRecovery: { enabled: true },
+      deletionProtectionEnabled: false,
+      globalSecondaryIndexes: [{ name: "gsi1", hashKey: "gsi1pk", rangeKey: "gsi1sk", projectionType: "KEYS_ONLY" }],
+      tags: { product: "farside", managedBy: "pulumi" },
+    });
+    expect(tables[0]?.inputs.serverSideEncryption).toBeUndefined();
+    expect(tables[0]?.inputs.readCapacity).toBeUndefined();
+  });
+
+  it("points both lambdas at the store and grants them only that table and its org index", async () => {
+    for (const fn of ofType("aws:lambda/function:Function")) {
+      const variables = (fn.inputs.environment as { variables: Record<string, string> }).variables;
+      expect(variables.FARSIDE_STORE, fn.name).toBe("dynamo");
+      expect(variables.FARSIDE_TABLE_NAME, fn.name).toBe("farside-moonaan-dev-store");
+    }
+    const grants = ofType("aws:iam/rolePolicy:RolePolicy").filter((policy) => policy.name.endsWith("-store"));
+    expect(grants.map((grant) => grant.name).sort()).toEqual(["farside-moonaan-dev-api-store", "farside-moonaan-dev-tick-store"]);
+    const table = "arn:aws:mock:us-east-2:123456789012:farside-moonaan-dev-store";
+    for (const grant of grants) {
+      const policy = JSON.parse(await resolved(pulumi.output(grant.inputs.policy as pulumi.Input<string>)));
+      expect(policy.Statement).toEqual([
+        {
+          Effect: "Allow",
+          Action: [
+            "dynamodb:GetItem",
+            "dynamodb:PutItem",
+            "dynamodb:UpdateItem",
+            "dynamodb:DeleteItem",
+            "dynamodb:BatchWriteItem",
+            "dynamodb:Query",
+          ],
+          Resource: table,
+        },
+        { Effect: "Allow", Action: "dynamodb:Query", Resource: `${table}/index/gsi1` },
+      ]);
+    }
+  });
+
   it("keeps the operator token out of the Lambda environment", async () => {
     const api = ofType("aws:lambda/function:Function").find((fn) => fn.name.endsWith("-api"));
     const variables = (api?.inputs.environment as { variables: Record<string, string> }).variables;
@@ -177,5 +223,6 @@ describe("deployStack", () => {
       }),
     ]);
     expect(await resolved(outputs.apiUrl)).toBe("https://abc.lambda-url.us-east-2.on.aws/");
+    expect(await resolved(outputs.tableName)).toBe("farside-moonaan-dev-store");
   });
 });
