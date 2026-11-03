@@ -57,3 +57,27 @@ it("bundles the scheduled tick handler", async () => {
   const bundled = (await import(join(dir, "scheduled.mjs"))) as typeof import("./scheduled.js");
   expect(await bundled.handler()).toEqual({ orgs: [], retired: 0 });
 });
+
+it("runs a fixture scan from the bundled CLI", () => {
+  const workspace = mkdtempSync(join(tmpdir(), "farside-cli-ws-"));
+  try {
+    const output = execFileSync(
+      "node",
+      [
+        join(dir, "farside-cli.mjs"),
+        "scan",
+        "--cloud",
+        "azure",
+        "--scope",
+        "main",
+        "--workspace",
+        workspace,
+        "--fixture",
+      ],
+      { encoding: "utf8" },
+    );
+    expect(JSON.parse(output).status).toBe("succeeded");
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
