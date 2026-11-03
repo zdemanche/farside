@@ -231,3 +231,103 @@ describe("headline route", () => {
     expect(body.figures.every((figure) => figure.value === null)).toBe(true);
   });
 });
+
+describe("headline two clouds", () => {
+  const gcpWaste = "gcp-waste-unattached-disks";
+  const gcpSpend = "gcp-cost-spend-by-service";
+  const gcpLifecycle = "gcp-lifecycle-sql-gke-support";
+  const gcpDisk: Finding = {
+    checkId: gcpWaste,
+    result: "fail",
+    evidence: { fields: { diskId: "disk-parked", usersCount: 0 } },
+    scope: {
+      id: "farside-test:gcp-waste-unattached-disks",
+      cloud: "gcp",
+      subscriptionOrProject: "farside-test",
+    },
+    savings: { min: "4.00", max: "6.00", currency: "EUR" },
+  };
+  const gcpLifecycleFail: Finding = {
+    checkId: gcpLifecycle,
+    result: "fail",
+    evidence: { fields: { resourceKind: "sql", version: "MYSQL_5_6" } },
+    scope: {
+      id: "farside-test:gcp-lifecycle-sql-gke-support",
+      cloud: "gcp",
+      subscriptionOrProject: "farside-test",
+    },
+  };
+  const gcpCost: CostSnapshot = {
+    ...cost,
+    subscriptionId: "farside-test",
+    billingScope: "//billing.googleapis.com/projects/farside-test",
+    currency: "EUR",
+    months: [
+      {
+        billingScope: "//billing.googleapis.com/projects/farside-test",
+        currency: "EUR",
+        agreementType: "payg",
+        serviceName: "all",
+        periodStart: "2026-10-01",
+        periodEnd: "2026-10-31",
+        costAmount: "40.00",
+        provisional: false,
+      },
+    ],
+  };
+
+  it("keeps money figures per cloud and does not sum USD with EUR", () => {
+    const headline = buildHeadline({
+      costs: { azure: cost, gcp: gcpCost },
+      findings: [diskFail, gcpDisk, lifecycleFail, gcpLifecycleFail],
+      coverage: [
+        ...assessed,
+        recordCoverageScope({
+          subscriptionOrProject: "farside-test",
+          checkId: gcpSpend,
+          state: "assessed",
+        }),
+        recordCoverageScope({
+          subscriptionOrProject: "farside-test",
+          checkId: gcpWaste,
+          state: "assessed",
+        }),
+        recordCoverageScope({
+          subscriptionOrProject: "farside-test",
+          checkId: gcpLifecycle,
+          state: "assessed",
+        }),
+      ],
+      records: [
+        spendRecord,
+        wasteDiskRecord,
+        lifecycleRecord,
+        { checkId: gcpSpend, liveRunAt: "2026-10-01T00:00:00Z" },
+        { checkId: gcpWaste, liveRunAt: "2026-10-01T00:00:00Z" },
+        { checkId: gcpLifecycle, liveRunAt: "2026-10-01T00:00:00Z" },
+      ],
+    });
+    expect(headline.clouds.map((entry) => entry.cloud)).toEqual(["azure", "gcp"]);
+    const azureFigures = headline.clouds.find((entry) => entry.cloud === "azure")?.figures ?? [];
+    const gcpFigures = headline.clouds.find((entry) => entry.cloud === "gcp")?.figures ?? [];
+    expect(figureOf({ figures: azureFigures }, "waste")).toMatchObject({
+      status: "ok",
+      value: { min: "8.00", max: "12.00", currency: "USD" },
+    });
+    expect(figureOf({ figures: gcpFigures }, "waste")).toMatchObject({
+      status: "ok",
+      value: { min: "4.00", max: "6.00", currency: "EUR" },
+    });
+    const orgWaste = figureOf(headline, "waste");
+    expect(orgWaste.status).toBe("ok");
+    expect(orgWaste.value).toMatchObject({ mixedCurrencies: true });
+    expect(orgWaste.value).not.toHaveProperty("min");
+    expect(orgWaste.value).not.toHaveProperty("max");
+    expect(JSON.stringify(orgWaste.value)).not.toMatch(/"min":"12\.00"|"max":"18\.00"/);
+    const orgCost = figureOf(headline, "monthlyCost");
+    expect(orgCost.value).toMatchObject({ mixedCurrencies: true });
+    expect(orgCost.value).not.toHaveProperty("amount");
+    expect(JSON.stringify(orgCost.value)).not.toMatch(/"amount":"102\.00"/);
+    expect(figureOf(headline, "lifecycle").value).toEqual({ count: 2 });
+  });
+});

@@ -501,6 +501,10 @@ export function buildApp(
     if (!requireOrg(request, reply, store)) {
       return reply;
     }
+    const cloud = readCloud(request.query, reply);
+    if (!cloud.ok) {
+      return reply;
+    }
     const org = store.snapshot(request.params.orgId);
     return sendClean(
       reply,
@@ -509,6 +513,7 @@ export function buildApp(
         cost: org.cost,
         findings: org.findings,
         coverage: org.coverage,
+        ...(cloud.cloud ? { cloud: cloud.cloud } : {}),
       }),
     );
   });
