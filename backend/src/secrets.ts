@@ -25,14 +25,12 @@ const SECRET_VALUE = new RegExp(
 const SAS_KEY = /^sas(token|url|uri|key|signature)|sas$/;
 const NON_SECRET_NUMBER_SUFFIXES = ["count", "total", "days", "hours", "limit"];
 
-const JWT_START = /(?<![A-Za-z0-9])eyJ/;
-
 function hasJwt(value: string): boolean {
   const segments = value
     .split(/[^A-Za-z0-9_.-]+/)
     .flatMap((token) => token.split("."));
   return segments.some((segment, index) => {
-    const start = segment.search(JWT_START);
+    const start = segment.indexOf("eyJ");
     return (
       start >= 0 &&
       segment.length - start >= 23 &&

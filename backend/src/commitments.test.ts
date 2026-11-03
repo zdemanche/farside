@@ -13,6 +13,7 @@ import {
 } from "./commitments.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 const PERIOD = { subscriptionId: "main", periodStart: "2026-10-01", periodEnd: "2026-10-31" };
@@ -128,8 +129,8 @@ describe("commitment harvest", () => {
 });
 
 describe("commitment routes", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store);
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, TEST_APP_OPTIONS);
 
   afterAll(async () => {
     await app.close();
@@ -153,5 +154,16 @@ describe("commitment routes", () => {
       headers: ORG,
     });
     expect(stored.json().reservations[0].reservationId).toBe("res-low");
+    const issues = await app.inject({
+      method: "GET",
+      url: "/v1/orgs/org-a/issues",
+      headers: ORG,
+    });
+    const reservation = (issues.json().issues as Array<{
+      checkId: string;
+      resourceId: string;
+      status: string;
+    }>).find((issue) => issue.checkId === RESERVATION_USE && issue.resourceId === "res-low");
+    expect(reservation?.status).toBe("open");
   });
 });

@@ -19,6 +19,7 @@ import { MemoryStore } from "./store.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
 const MANIFEST = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/gcp/ground-truth.json"), "utf8"),
@@ -158,8 +159,8 @@ describe("gcp old snapshots and images", () => {
 });
 
 describe("gcp waste scan", () => {
-  const store = new MemoryStore();
-  const app = buildApp(store, { harvester: fixtureHarvester(inventory, facts) });
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: fixtureHarvester(inventory, facts) });
 
   afterAll(async () => {
     await app.close();

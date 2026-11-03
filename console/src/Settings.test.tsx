@@ -1,7 +1,7 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import axe from "axe-core";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Settings, THEME_STORAGE_KEY } from "./Settings";
+import { expectAxeClean, renderScreen } from "./test-utils";
 
 describe("Settings appearance", () => {
   beforeEach(() => {
@@ -15,19 +15,19 @@ describe("Settings appearance", () => {
   });
 
   it("has no axe violations", async () => {
-    const { container } = render(<Settings />);
-    const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
-    expect(results.violations).toEqual([]);
+    const { container } = renderScreen(<Settings />);
+    await screen.findByLabelText("Owner tag key");
+    await expectAxeClean(container);
   });
 
   it("starts from the theme the guard set on the document", () => {
     document.documentElement.setAttribute("data-theme", "daylight");
-    render(<Settings />);
+    renderScreen(<Settings />);
     expect(screen.getByRole<HTMLInputElement>("radio", { name: "Daylight" }).checked).toBe(true);
   });
 
   it("switches the document theme and stores the choice under the shared key", () => {
-    render(<Settings />);
+    renderScreen(<Settings />);
     expect(screen.getByRole<HTMLInputElement>("radio", { name: "Moonaan dark" }).checked).toBe(
       true,
     );
@@ -43,7 +43,7 @@ describe("Settings appearance", () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new Error("blocked");
     });
-    render(<Settings />);
+    renderScreen(<Settings />);
     fireEvent.click(screen.getByRole("radio", { name: "Daylight" }));
     expect(document.documentElement.getAttribute("data-theme")).toBe("daylight");
   });

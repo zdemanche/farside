@@ -4,6 +4,15 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    ignore:
+      # Runtime is Node 22; @types/node majors above 22 expose APIs this
+      # process does not have. Stay on 22.x until engines/CI move.
+      - dependency-name: "@types/node"
+        versions: [">=23"]
+      # TypeScript 7 is the Go rewrite. typescript-eslint 8 peers
+      # typescript <6.1.0, so npm ci fails. Revisit when eslint supports it.
+      - dependency-name: "typescript"
+        versions: [">=7"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

@@ -1,4 +1,7 @@
 import { useEffect, useState, type MouseEvent } from "react";
+import { apiSource } from "./data/api";
+import { DataProvider } from "./data/context";
+import type { DataSource } from "./data/types";
 import { BlindSpots } from "./BlindSpots";
 import { Connect } from "./Connect";
 import { Estate } from "./Estate";
@@ -8,8 +11,21 @@ import { Lifecycle } from "./Lifecycle";
 import { Recovery } from "./Recovery";
 import { Scans } from "./Scans";
 import { Settings } from "./Settings";
-import { EMPTY_OVERVIEW, SEEDED_OVERVIEW } from "./estate-data";
-import { DEMO_LABEL, EMPTY_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
+import { DEMO_LABEL, EMPTY_STATE, NOT_CONNECTED_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
+
+function configuredSource(): DataSource | null {
+  const baseUrl: string | undefined = import.meta.env.VITE_FARSIDE_API_URL;
+  const orgId: string | undefined = import.meta.env.VITE_FARSIDE_ORG;
+  return baseUrl && orgId ? apiSource({ baseUrl, orgId }) : null;
+}
+
+async function resolveSource(demo: boolean | undefined): Promise<DataSource | null> {
+  if (demo ?? import.meta.env.VITE_FARSIDE_DEMO === "1") {
+    const { demoSource } = await import("./data/demo");
+    return demoSource();
+  }
+  return configuredSource();
+}
 
 function currentHash(): string {
   return window.location.hash.replace(/^#\/?/, "");
@@ -20,9 +36,25 @@ function skipToMain(event: MouseEvent<HTMLAnchorElement>) {
   document.getElementById("main")?.focus();
 }
 
-export function App({ demo }: { demo?: boolean } = {}) {
-  const demoMode = demo ?? import.meta.env.VITE_FARSIDE_DEMO === "1";
+export function App({ demo, source }: { demo?: boolean; source?: DataSource | null } = {}) {
+  const [resolved, setResolved] = useState<DataSource | null | undefined>(source);
   const [hash, setHash] = useState(currentHash);
+
+  useEffect(() => {
+    if (source !== undefined) {
+      setResolved(source);
+      return;
+    }
+    let cancelled = false;
+    void resolveSource(demo).then((next) => {
+      if (!cancelled) {
+        setResolved(next);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [demo, source]);
 
   useEffect(() => {
     const onHash = () => setHash(currentHash());
@@ -62,7 +94,7 @@ export function App({ demo }: { demo?: boolean } = {}) {
       </a>
       <header className="topbar">
         <p className="brand">{PRODUCT_NAME}</p>
-        {demoMode ? (
+        {resolved?.mode === "demo" ? (
           <p className="chip chip-warn" role="status">
             {DEMO_LABEL}
           </p>
@@ -84,31 +116,53 @@ export function App({ demo }: { demo?: boolean } = {}) {
           </ul>
         </nav>
         <main className="main" id="main" tabIndex={-1}>
-          {page === "connect" ? (
-            <Connect />
-          ) : page === "blind-spots" ? (
-            <BlindSpots />
-          ) : page === "estate" ? (
-            <Estate overview={demoMode ? SEEDED_OVERVIEW : EMPTY_OVERVIEW} />
-          ) : page === "inventory" ? (
-            <Inventory />
-          ) : page === "issues" ? (
-            <Issues />
-          ) : page === "settings" ? (
-            <Settings />
-          ) : page === "recovery" ? (
-            <Recovery />
-          ) : page === "lifecycle" ? (
-            <Lifecycle />
-          ) : page === "scans" ? (
-            <Scans />
-          ) : (
+          {resolved === undefined ? (
             <>
               <h1 className="page-title" id="page-title" tabIndex={-1}>
                 {PRODUCT_NAME}
               </h1>
-              <p className="screen-state">{EMPTY_STATE}</p>
+              <p className="screen-state" role="status">
+                Loading
+              </p>
             </>
+          ) : resolved === null ? (
+            <>
+              <h1 className="page-title" id="page-title" tabIndex={-1}>
+                {PRODUCT_NAME}
+              </h1>
+              <p className="screen-state" role="alert">
+                {NOT_CONNECTED_STATE}
+              </p>
+            </>
+          ) : (
+            <DataProvider source={resolved}>
+              {page === "connect" ? (
+                <Connect />
+              ) : page === "blind-spots" ? (
+                <BlindSpots />
+              ) : page === "estate" ? (
+                <Estate />
+              ) : page === "inventory" ? (
+                <Inventory />
+              ) : page === "issues" ? (
+                <Issues />
+              ) : page === "settings" ? (
+                <Settings />
+              ) : page === "recovery" ? (
+                <Recovery />
+              ) : page === "lifecycle" ? (
+                <Lifecycle />
+              ) : page === "scans" ? (
+                <Scans />
+              ) : (
+                <>
+                  <h1 className="page-title" id="page-title" tabIndex={-1}>
+                    {PRODUCT_NAME}
+                  </h1>
+                  <p className="screen-state">{EMPTY_STATE}</p>
+                </>
+              )}
+            </DataProvider>
           )}
         </main>
       </div>

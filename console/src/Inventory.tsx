@@ -1,14 +1,21 @@
-import { useMemo, useState } from "react";
-import { SEEDED_RESOURCES } from "./estate-data";
+import { useId, useMemo, useState } from "react";
 import type { InventoryRecord } from "@farside/scan-contracts";
+import { useSource } from "./data/context";
+import { useResource } from "./data/use-resource";
+import { ScreenState } from "./ScreenState";
 
-function matches(
-  resource: InventoryRecord,
-  owner: string,
-  service: string,
-  subscription: string,
-  region: string,
-): boolean {
+type Filters = { owner: string; service: string; subscription: string; region: string };
+
+const NO_FILTERS: Filters = { owner: "", service: "", subscription: "", region: "" };
+
+function subscriptionOf(resource: InventoryRecord): string {
+  const parts = resource.resourceUri.split("/");
+  const at = parts.findIndex((part) => part === "subscriptions" || part === "projects");
+  return at === -1 ? "" : (parts[at + 1] ?? "");
+}
+
+function matches(resource: InventoryRecord, filters: Filters): boolean {
+  const { owner, service, subscription, region } = filters;
   if (owner === "none" && resource.ownerTag) {
     return false;
   }
@@ -18,7 +25,7 @@ function matches(
   if (service && resource.resourceType !== service) {
     return false;
   }
-  if (subscription && !resource.resourceUri.includes(`/subscriptions/${subscription}/`)) {
+  if (subscription && subscriptionOf(resource) !== subscription) {
     return false;
   }
   if (region && resource.region !== region) {
@@ -27,14 +34,24 @@ function matches(
   return true;
 }
 
-export function Inventory({ resources = SEEDED_RESOURCES }: { resources?: InventoryRecord[] }) {
-  const [owner, setOwner] = useState("");
-  const [service, setService] = useState("");
-  const [subscription, setSubscription] = useState("");
-  const [region, setRegion] = useState("");
+const distinct = (values: (string | null | undefined)[]) =>
+  [...new Set(values.filter((value): value is string => Boolean(value)))].sort();
+
+function InventoryBody({ resources }: { resources: InventoryRecord[] }) {
+  const ids = { owner: useId(), service: useId(), subscription: useId(), region: useId() };
+  const [filters, setFilters] = useState(NO_FILTERS);
   const filtered = useMemo(
-    () => resources.filter((resource) => matches(resource, owner, service, subscription, region)),
-    [resources, owner, service, subscription, region],
+    () => resources.filter((resource) => matches(resource, filters)),
+    [resources, filters],
+  );
+  const options = useMemo(
+    () => ({
+      owner: distinct(resources.map((resource) => resource.ownerTag)),
+      service: distinct(resources.map((resource) => resource.resourceType)),
+      subscription: distinct(resources.map(subscriptionOf)),
+      region: distinct(resources.map((resource) => resource.region)),
+    }),
+    [resources],
   );
   const byOwner = new Map<string, number>();
   const byService = new Map<string, number>();
@@ -43,115 +60,161 @@ export function Inventory({ resources = SEEDED_RESOURCES }: { resources?: Invent
     byOwner.set(key, (byOwner.get(key) ?? 0) + 1);
     byService.set(resource.resourceType, (byService.get(resource.resourceType) ?? 0) + 1);
   }
+  const change = (key: keyof Filters) => (event: { target: { value: string } }) =>
+    setFilters((current) => ({ ...current, [key]: event.target.value }));
 
   return (
     <>
-      <h1 className="page-title" id="page-title" tabIndex={-1}>
-        Inventory
-      </h1>
       <p className="page-meta" role="status" aria-live="polite">
         {filtered.length} resources
       </p>
       <form className="panel filters">
         <div className="field">
-          <label htmlFor="filter-owner">Owner</label>
-          <select
-            className="input"
-            id="filter-owner"
-            value={owner}
-            onChange={(event) => setOwner(event.target.value)}
-          >
+          <label htmlFor={ids.owner}>Owner</label>
+          <select className="input" id={ids.owner} value={filters.owner} onChange={change("owner")}>
             <option value="">Any owner</option>
             <option value="none">No owner</option>
-            <option value="farside-test">farside-test</option>
+            {options.owner.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
           </select>
         </div>
         <div className="field">
-          <label htmlFor="filter-service">Service</label>
+          <label htmlFor={ids.service}>Service</label>
           <select
             className="input"
-            id="filter-service"
-            value={service}
-            onChange={(event) => setService(event.target.value)}
+            id={ids.service}
+            value={filters.service}
+            onChange={change("service")}
           >
             <option value="">Any service</option>
-            <option value="Microsoft.Compute/disks">Microsoft.Compute/disks</option>
-            <option value="Microsoft.Compute/virtualMachines">
-              Microsoft.Compute/virtualMachines
-            </option>
-            <option value="Microsoft.Network/publicIPAddresses">
-              Microsoft.Network/publicIPAddresses
-            </option>
+            {options.service.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
           </select>
         </div>
         <div className="field">
-          <label htmlFor="filter-subscription">Subscription</label>
+          <label htmlFor={ids.subscription}>Subscription</label>
           <select
             className="input"
-            id="filter-subscription"
-            value={subscription}
-            onChange={(event) => setSubscription(event.target.value)}
+            id={ids.subscription}
+            value={filters.subscription}
+            onChange={change("subscription")}
           >
             <option value="">Any subscription</option>
-            <option value="main">main</option>
-            <option value="empty-no-budget">empty-no-budget</option>
+            {options.subscription.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
           </select>
         </div>
         <div className="field">
-          <label htmlFor="filter-region">Region</label>
+          <label htmlFor={ids.region}>Region</label>
           <select
             className="input"
-            id="filter-region"
-            value={region}
-            onChange={(event) => setRegion(event.target.value)}
+            id={ids.region}
+            value={filters.region}
+            onChange={change("region")}
           >
             <option value="">Any region</option>
-            <option value="eastus">eastus</option>
-            <option value="westus">westus</option>
+            {options.region.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
           </select>
         </div>
       </form>
-      <h2>By owner</h2>
-      <ul className="tag-list" role="list">
-        {[...byOwner.entries()].map(([key, count]) => (
-          <li className="chip chip-neutral" key={key}>
-            {key} {count}
-          </li>
-        ))}
-      </ul>
-      <h2>By service</h2>
-      <ul className="tag-list" role="list">
-        {[...byService.entries()].map(([key, count]) => (
-          <li className="chip chip-neutral" key={key}>
-            {key} {count}
-          </li>
-        ))}
-      </ul>
-      <div className="table-wrap" role="region" aria-labelledby="inventory-caption" tabIndex={0}>
-        <table>
-          <caption id="inventory-caption">Inventory resources</caption>
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Service</th>
-              <th scope="col">Subscription</th>
-              <th scope="col">Region</th>
-              <th scope="col">Owner</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((resource) => (
-              <tr key={resource.resourceUri}>
-                <th scope="row">{resource.displayName}</th>
-                <td>{resource.resourceType}</td>
-                <td>{resource.resourceUri.split("/")[2]}</td>
-                <td>{resource.region}</td>
-                <td>{resource.ownerTag ?? "none"}</td>
-              </tr>
+      {filtered.length === 0 ? (
+        <p className="screen-state">
+          No resources match these filters.{" "}
+          <button
+            className="action action-secondary"
+            type="button"
+            onClick={() => setFilters(NO_FILTERS)}
+          >
+            Clear filters
+          </button>
+        </p>
+      ) : (
+        <>
+          <h2>By owner</h2>
+          <ul className="tag-list" role="list">
+            {[...byOwner.entries()].map(([key, count]) => (
+              <li className="chip chip-neutral" key={key}>
+                {key} {count}
+              </li>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </ul>
+          <h2>By service</h2>
+          <ul className="tag-list" role="list">
+            {[...byService.entries()].map(([key, count]) => (
+              <li className="chip chip-neutral" key={key}>
+                {key} {count}
+              </li>
+            ))}
+          </ul>
+          <div
+            className="table-wrap"
+            role="region"
+            aria-labelledby="inventory-caption"
+            tabIndex={0}
+          >
+            <table>
+              <caption id="inventory-caption">Inventory resources</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Service</th>
+                  <th scope="col">Subscription</th>
+                  <th scope="col">Region</th>
+                  <th scope="col">Owner</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((resource) => (
+                  <tr key={resource.resourceUri}>
+                    <th scope="row">{resource.displayName}</th>
+                    <td>{resource.resourceType}</td>
+                    <td>{subscriptionOf(resource)}</td>
+                    <td>{resource.region}</td>
+                    <td>{resource.ownerTag ?? "none"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+export function Inventory() {
+  const source = useSource();
+  const resources = useResource((signal) => source.inventory(signal), [source]);
+  return (
+    <>
+      <h1 className="page-title" id="page-title" tabIndex={-1}>
+        Inventory
+      </h1>
+      <ScreenState
+        label="the inventory"
+        resource={resources}
+        partial
+        empty={(data) =>
+          data.length === 0
+            ? "No resources have been inventoried yet. Connect a cloud estate and run a scan."
+            : null
+        }
+      >
+        {(data) => <InventoryBody resources={data} />}
+      </ScreenState>
     </>
   );
 }

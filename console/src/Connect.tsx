@@ -1,18 +1,36 @@
 import { useId, useState, type FormEvent } from "react";
 import { CONNECT_STEPS, REQUIRED_AZURE_ROLES } from "./connect-data";
+import { useSource } from "./data/context";
+import { failureMessage, toDataError } from "./data/error";
 
 export function Connect() {
+  const source = useSource();
   const tenantFieldId = useId();
   const subscriptionFieldId = useId();
   const [tenantId, setTenantId] = useState("");
   const [subscriptionId, setSubscriptionId] = useState("");
   const [status, setStatus] = useState("");
+  const [failure, setFailure] = useState("");
+  const [connecting, setConnecting] = useState(false);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setStatus(
-      `Ready to connect tenant ${tenantId} and subscription ${subscriptionId}. First scan started.`,
-    );
+    setConnecting(true);
+    setStatus("");
+    setFailure("");
+    try {
+      const result = await source.connect({ tenantId, subscriptionId });
+      const connected = `Connected tenant ${tenantId} and subscription ${subscriptionId}.`;
+      setStatus(
+        result.scanStarted
+          ? `${connected} First scan started.`
+          : (result.attention ?? `${connected} No scan was started.`),
+      );
+    } catch (error) {
+      setFailure(failureMessage(toDataError(error), "connect this subscription"));
+    } finally {
+      setConnecting(false);
+    }
   }
 
   return (
@@ -69,7 +87,7 @@ export function Connect() {
           />
         </div>
         <div>
-          <button className="action action-primary" type="submit">
+          <button className="action action-primary" type="submit" disabled={connecting}>
             Connect subscription
           </button>
         </div>
@@ -77,6 +95,11 @@ export function Connect() {
       <p className="notice" role="status" aria-live="polite">
         {status}
       </p>
+      {failure ? (
+        <p className="notice notice-alert" role="alert">
+          {failure}
+        </p>
+      ) : null}
     </>
   );
 }

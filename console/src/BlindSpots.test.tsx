@@ -1,86 +1,36 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import axe from "axe-core";
+import { cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { HEALTH_SCORE_FORMULA, scoreHealth } from "@farside/scan-contracts";
-import { App } from "./App";
-import { BLIND_SPOT_HEALTH, BLIND_SPOT_ROWS } from "./blind-spots";
+import { HEALTH_SCORE_FORMULA } from "@farside/scan-contracts";
+import { BlindSpots } from "./BlindSpots";
+import { expectAxeClean, renderScreen } from "./test-utils";
 
 describe("Blind spots screen", () => {
   beforeEach(() => {
     document.documentElement.lang = "en";
     document.title = "Farside";
-    window.location.hash = "#blind-spots";
   });
 
   afterEach(() => {
     cleanup();
-    window.location.hash = "";
   });
 
-  it("lists what could not be checked, why, and what would close it", () => {
-    render(<App />);
+  it("lists what could not be checked, why, and what would close it", async () => {
+    renderScreen(<BlindSpots />);
     expect(screen.getByRole("heading", { name: "Blind spots" })).toBeTruthy();
-    expect(screen.getByText(HEALTH_SCORE_FORMULA)).toBeTruthy();
-    expect(
-      screen.getByRole("status").textContent,
-    ).toContain(`${BLIND_SPOT_HEALTH.unassessedScopes} of`);
+    expect(await screen.findByText(HEALTH_SCORE_FORMULA)).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("5 of 20 scopes were left out of the score.");
     const table = screen.getByRole("table", { name: "What Farside could not check" });
-    for (const spot of BLIND_SPOT_ROWS) {
-      expect(table.textContent).toContain(spot.checkId);
-      expect(table.textContent).toContain(spot.reason);
-      expect(table.textContent).toContain(spot.closer);
-    }
-    const undetermined = screen.getByRole("row", {
-      name: /azure-resilience-prod-vms-outside-backup/,
-    });
+    expect(table.textContent).toContain("azure-cost-spend-by-service");
+    expect(table.textContent).toContain("Azure throttled the API call");
+    const undetermined = screen.getByRole("row", { name: /azure-cost-reservation-use/ });
     expect(undetermined.textContent).toMatch(/missing a required Azure role/);
-    expect(undetermined.textContent).toMatch(/Grant the missing read-only role/);
-  });
-
-  it("uses the contract scoring helper and does not reimplement it", () => {
-    const baseline = scoreHealth(
-      {
-        scopes: [{ id: "a:check", checkId: "check", assessed: true }],
-      },
-      [
-        {
-          checkId: "check",
-          result: "fail",
-          evidence: { fields: { ok: false } },
-          scope: { id: "a:check", cloud: "azure", subscriptionOrProject: "a" },
-        },
-      ],
-    );
-    const withUnassessed = scoreHealth(
-      {
-        scopes: [
-          { id: "a:check", checkId: "check", assessed: true },
-          { id: "b:check", checkId: "check", assessed: false },
-        ],
-      },
-      [
-        {
-          checkId: "check",
-          result: "fail",
-          evidence: { fields: { ok: false } },
-          scope: { id: "a:check", cloud: "azure", subscriptionOrProject: "a" },
-        },
-      ],
-    );
-    expect(withUnassessed.score).toBe(baseline.score);
-    expect(BLIND_SPOT_HEALTH.score).toBeNull();
+    expect(undetermined.textContent).toMatch(/Grant Reservations Reader/);
   });
 
   it("has no axe violations and labels every row", async () => {
-    const { container } = render(<App />);
-    const rows = screen.getAllByRole("row");
-    expect(rows.length).toBe(BLIND_SPOT_ROWS.length + 1);
-    for (const spot of BLIND_SPOT_ROWS) {
-      expect(screen.getByRole("row", { name: new RegExp(spot.checkId) })).toBeTruthy();
-    }
-    const results = await axe.run(container, {
-      rules: { "color-contrast": { enabled: false } },
-    });
-    expect(results.violations).toEqual([]);
+    const { container } = renderScreen(<BlindSpots />);
+    await screen.findByRole("table");
+    expect(screen.getAllByRole("row")).toHaveLength(5 + 1);
+    await expectAxeClean(container);
   });
 });

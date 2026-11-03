@@ -245,6 +245,17 @@ p {
   border-radius: var(--radius-surface);
 }
 
+.screen-state-alert {
+  color: var(--color-alert-text);
+  background: var(--color-alert-wash);
+  border-color: var(--color-alert-edge);
+  border-style: solid;
+}
+
+.screen-state-alert > :last-child {
+  margin-bottom: 0;
+}
+
 .stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--measure-field-note)), 1fr));
@@ -484,6 +495,12 @@ legend {
   box-shadow: var(--glow-primary);
 }
 
+.action-secondary {
+  color: var(--color-text-primary);
+  background: var(--color-bg-canvas);
+  border: var(--rule-width) solid var(--color-border-strong);
+}
+
 .action-primary:hover {
   box-shadow: var(--glow-primary-hover);
 }
@@ -494,6 +511,12 @@ legend {
   background: var(--color-record-wash);
   border: var(--rule-width) solid var(--color-record-edge);
   border-radius: var(--radius-control);
+}
+
+.notice-alert {
+  color: var(--color-alert-text);
+  background: var(--color-alert-wash);
+  border-color: var(--color-alert-edge);
 }
 
 .notice:empty {
