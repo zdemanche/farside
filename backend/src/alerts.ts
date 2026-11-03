@@ -69,12 +69,46 @@ type ReplayFile = {
   rows: DailyCost[];
 };
 
+export type GcpDailyCost = {
+  date: string;
+  projectId: string;
+  serviceName: string;
+  costAmount: string;
+  currency: string;
+};
+
+type GcpReplayFile = {
+  cloud: "gcp";
+  windowDays: number;
+  asOf: string;
+  expectedNewAlerts: number;
+  rows: GcpDailyCost[];
+};
+
+const GCP_REPLAY = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/gcp/alert-replay.json"), "utf8"),
+) as GcpReplayFile;
+
 const REPLAY = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/alert-replay.json"), "utf8"),
 ) as ReplayFile;
 
 export function replayFixture(): ReplayFile {
   return REPLAY;
+}
+
+export function gcpReplayFixture(): GcpReplayFile {
+  return GCP_REPLAY;
+}
+
+export function gcpRowsToDailyCost(rows: GcpDailyCost[]): DailyCost[] {
+  return rows.map((row) => ({
+    date: row.date,
+    subscriptionId: row.projectId,
+    serviceName: row.serviceName,
+    costAmount: row.costAmount,
+    currency: row.currency,
+  }));
 }
 
 function toNumber(amount: string): number {

@@ -5,6 +5,8 @@ import {
   backtest,
   evaluateAlerts,
   floorBurst,
+  gcpReplayFixture,
+  gcpRowsToDailyCost,
   historyDays,
   replayFixture,
 } from "./alerts.js";
@@ -86,6 +88,31 @@ describe("relative alert rules", () => {
     const second = evaluateAlerts(extra, "2026-10-16", first).alerts;
     expect(second.find((alert) => alert.kind === "ORG_SPIKE")?.isNew).toBe(false);
     expect(second.find((alert) => alert.kind === "SUBSCRIPTION_SPIKE")?.isNew).toBe(false);
+  });
+});
+
+describe("gcp floor burst and alerts", () => {
+  const gcp = gcpReplayFixture();
+  const rows = gcpRowsToDailyCost(gcp.rows);
+
+  it("reuses the relative rules on a GCP project series", () => {
+    const points = floorBurst(rows, gcp.asOf);
+    expect(points.find((point) => point.date === gcp.asOf)).toMatchObject({
+      actual: "260.00",
+      floor: "100.00",
+      burst: "160.00",
+    });
+    const { alerts, undetermined, historyDays: available } = evaluateAlerts(rows, gcp.asOf);
+    expect(undetermined).toBeNull();
+    expect(available).toBe(WINDOW_DAYS);
+    expect(alerts.map((alert) => alert.kind).sort()).toEqual([
+      "NEW_SERVICE",
+      "ORG_SPIKE",
+      "SERVICE_SPIKE",
+      "SUBSCRIPTION_SPIKE",
+    ]);
+    expect(alerts.find((alert) => alert.kind === "SUBSCRIPTION_SPIKE")?.scope).toBe("farside-test");
+    expect(backtest(rows, gcp.asOf)).toBe(gcp.expectedNewAlerts);
   });
 });
 
