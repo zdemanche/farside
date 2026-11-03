@@ -1,6 +1,6 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
-import { fixtureHarvester } from "./scans.js";
+import { fixtureHarvester, type ScanJob } from "./scans.js";
 import { addHours, decideTick } from "./scheduler.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
@@ -126,22 +126,53 @@ describe("schedule decisions", () => {
   });
 });
 
-describe("schedule routes", () => {
-  const store = new MemoryStore(fixedClock);
-  const inventory = inventoryFromManifest(MANIFEST);
-  const app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: fixtureHarvester(inventory) });
+async function waitForJob(
+  store: MemoryStore,
+  orgId: string,
+  scanId: string,
+  status: ScanJob["status"],
+): Promise<ScanJob> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const job = store.getJob(orgId, scanId);
+    if (job?.status === status) {
+      return job;
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error(`scan ${scanId} did not reach ${status}`);
+}
 
-  afterAll(async () => {
+describe("schedule routes", () => {
+  const inventory = inventoryFromManifest(MANIFEST);
+  let store: MemoryStore;
+  let app: ReturnType<typeof buildApp>;
+
+  beforeEach(() => {
+    store = new MemoryStore(fixedClock);
+    app = buildApp(store, { ...TEST_APP_OPTIONS, harvester: fixtureHarvester(inventory) });
+  });
+
+  afterEach(async () => {
     await app.close();
   });
 
-  it("starts an unattended scan when the scheduled time arrives", async () => {
-    await app.inject({
+  async function connectAt(asOf = T0): Promise<void> {
+    const created = await app.inject({
       method: "PUT",
       url: "/v1/orgs/org-a/connections",
       headers: ORG,
-      payload: { tenantId: "tenant-1", subscriptionId: "main", asOf: T0 },
+      payload: { tenantId: "tenant-1", subscriptionId: "main", asOf },
     });
+    expect(created.statusCode).toBe(201);
+    const scanId = created.json().scan?.id as string | undefined;
+    if (scanId) {
+      const finished = await waitForJob(store, "org-a", scanId, "succeeded");
+      expect(finished.status).toBe("succeeded");
+    }
+  }
+
+  it("starts an unattended scan when the scheduled time arrives", async () => {
+    await connectAt();
     const due = await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/schedule/tick",
@@ -152,15 +183,13 @@ describe("schedule routes", () => {
     expect(due.json().action).toBe("started");
     expect(due.json().scanStarted).toBe(true);
     expect(due.json().scan.actor).toBe("system");
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      if (store.snapshot("org-a").scans.some((scan) => scan.status === "succeeded")) {
-        break;
-      }
-      await new Promise((resolve) => setImmediate(resolve));
-    }
+    const finished = await waitForJob(store, "org-a", due.json().scan.id, "succeeded");
+    expect(finished.status).toBe("succeeded");
+    expect(finished.actor).toBe("system");
   });
 
   it("skips and records overlap, then retries a failed run", async () => {
+    await connectAt();
     store.putJob({
       orgId: "org-a",
       subscriptionId: "main",
@@ -186,14 +215,13 @@ describe("schedule routes", () => {
     expect(overlap.json().action).toBe("skipped_overlap");
     expect(overlap.json().record.action).toBe("skipped_overlap");
     const running = store.runningScan("org-a", "main");
-    if (running) {
-      store.patchJob("org-a", running.id, {
-        status: "failed",
-        complete: false,
-        error: "Resource Graph call failed",
-        finishedAt: addHours(T0, 48),
-      });
-    }
+    expect(running).toBeTruthy();
+    store.patchJob("org-a", running!.id, {
+      status: "failed",
+      complete: false,
+      error: "Resource Graph call failed",
+      finishedAt: addHours(T0, 48),
+    });
     const retry = await app.inject({
       method: "POST",
       url: "/v1/orgs/org-a/schedule/tick",
@@ -202,9 +230,12 @@ describe("schedule routes", () => {
     });
     expect(retry.json().action).toBe("retried");
     expect(retry.json().scanStarted).toBe(true);
+    const finished = await waitForJob(store, "org-a", retry.json().scan.id, "succeeded");
+    expect(finished.status).toBe("succeeded");
   });
 
   it("does not start when the connection is marked unhealthy", async () => {
+    await connectAt();
     const connection = store.snapshot("org-a").connections[0];
     expect(connection).toBeTruthy();
     store.patchConnection("org-a", connection!.id, { healthy: false });
@@ -226,7 +257,7 @@ describe("schedule routes", () => {
   });
 
   it("moves the next run when the interval changes in settings", async () => {
-    store.patchConnection("org-a", store.snapshot("org-a").connections[0]!.id, { healthy: true });
+    await connectAt();
     const saved = await app.inject({
       method: "PUT",
       url: "/v1/orgs/org-a/settings",
@@ -256,5 +287,7 @@ describe("schedule routes", () => {
       payload: { now: addHours(T0, 112) },
     });
     expect(later.json().action).toBe("started");
+    const finished = await waitForJob(store, "org-a", later.json().scan.id, "succeeded");
+    expect(finished.status).toBe("succeeded");
   });
 });
