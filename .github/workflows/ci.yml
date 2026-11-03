@@ -22,6 +22,15 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      - name: Reject paths that differ only by case
+        run: |
+          files=$(git ls-files | tr 'A-Z' 'a-z' | sort | uniq -d)
+          dirs=$(git ls-files | xargs -n1 dirname | sort -u | tr 'A-Z' 'a-z' | sort | uniq -d)
+          collisions="$files$dirs"
+          if [ -n "$collisions" ]; then
+            echo "$collisions"
+            exit 1
+          fi
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck

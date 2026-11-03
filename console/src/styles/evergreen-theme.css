@@ -1,0 +1,336 @@
+/* Vendored unchanged from Moonaan/moonaan-identity ui/packages/tokens/evergreen-theme.css (originally Moonaan/moonaan-reflow @ 981d5cbc0a3ba17b791c031524011ee241a35e8b). Do not edit; see docs/console-design.md. */
+/* Vendored from @moonaan/evergreen-design-system 0.5.0 (dist/theme.css, built from
+   Moonaan/moonaan-evergreen-design-system f535a18), the token engine Prism imports. Kept
+   byte-for-byte so Reflow renders Prism's palette exactly. Replace this file with
+   `@import '@moonaan/evergreen-design-system/theme.css'` once CI can read the @moonaan
+   GitHub Packages scope; until then, update it only by copying a newer build. */
+
+/* Evergreen design system — generated theme engine (Pixel-Spec §2). DO NOT EDIT BY HAND.
+   Regenerate with `npm run gen:css`; a drift test guards it. */
+
+:root {
+  /* base tokens — moonaan (default mode) */
+  --bg: #07080B;
+  --panel: #0B0C10;
+  --surface: #12141A;
+  --surface-2: #171A22;
+  --surface-3: #1D2029;
+  --card: rgba(18,20,26,0.72);
+  --card-2: rgba(18,20,26,0.5);
+  --bar: rgba(11,12,16,0.85);
+  --ink: #E6E7EB;
+  --muted: #A7ADBB;
+  --faint: #6B7180;
+  --line: color-mix(in srgb, var(--indigo) 14%, transparent);
+  --line-2: color-mix(in srgb, var(--indigo) 30%, transparent);
+  --overlay: rgba(4,5,8,0.7);
+  --shadow-strong: rgba(0,0,0,0.58);
+  --shadow-med: rgba(0,0,0,0.5);
+  --indigo: #6A7CF7;
+  --pink: #E68EF4;
+  --ever: #2EE6A8;
+  --coral: #FF7A70;
+  --amber: #F4C95D;
+  --fed: #9AA8FF;
+
+  /* derived: gradient + alpha token set (retint from base vars) */
+  --grad: linear-gradient(90deg, var(--indigo), var(--pink));
+  --indigo-5: color-mix(in srgb, var(--indigo) 5%, transparent);
+  --indigo-6: color-mix(in srgb, var(--indigo) 6%, transparent);
+  --indigo-7: color-mix(in srgb, var(--indigo) 7%, transparent);
+  --indigo-8: color-mix(in srgb, var(--indigo) 8%, transparent);
+  --indigo-10: color-mix(in srgb, var(--indigo) 10%, transparent);
+  --indigo-12: color-mix(in srgb, var(--indigo) 12%, transparent);
+  --indigo-14: color-mix(in srgb, var(--indigo) 14%, transparent);
+  --indigo-18: color-mix(in srgb, var(--indigo) 18%, transparent);
+  --indigo-20: color-mix(in srgb, var(--indigo) 20%, transparent);
+  --indigo-22: color-mix(in srgb, var(--indigo) 22%, transparent);
+  --indigo-30: color-mix(in srgb, var(--indigo) 30%, transparent);
+  --indigo-35: color-mix(in srgb, var(--indigo) 35%, transparent);
+  --indigo-40: color-mix(in srgb, var(--indigo) 40%, transparent);
+  --indigo-45: color-mix(in srgb, var(--indigo) 45%, transparent);
+  --indigo-50: color-mix(in srgb, var(--indigo) 50%, transparent);
+  --indigo-55: color-mix(in srgb, var(--indigo) 55%, transparent);
+  --pink-5: color-mix(in srgb, var(--pink) 5%, transparent);
+  --pink-6: color-mix(in srgb, var(--pink) 6%, transparent);
+  --pink-7: color-mix(in srgb, var(--pink) 7%, transparent);
+  --pink-8: color-mix(in srgb, var(--pink) 8%, transparent);
+  --pink-10: color-mix(in srgb, var(--pink) 10%, transparent);
+  --pink-12: color-mix(in srgb, var(--pink) 12%, transparent);
+  --pink-14: color-mix(in srgb, var(--pink) 14%, transparent);
+  --pink-18: color-mix(in srgb, var(--pink) 18%, transparent);
+  --pink-20: color-mix(in srgb, var(--pink) 20%, transparent);
+  --pink-22: color-mix(in srgb, var(--pink) 22%, transparent);
+  --pink-30: color-mix(in srgb, var(--pink) 30%, transparent);
+  --pink-35: color-mix(in srgb, var(--pink) 35%, transparent);
+  --pink-40: color-mix(in srgb, var(--pink) 40%, transparent);
+  --pink-45: color-mix(in srgb, var(--pink) 45%, transparent);
+  --pink-50: color-mix(in srgb, var(--pink) 50%, transparent);
+  --pink-55: color-mix(in srgb, var(--pink) 55%, transparent);
+  --ever-5: color-mix(in srgb, var(--ever) 5%, transparent);
+  --ever-6: color-mix(in srgb, var(--ever) 6%, transparent);
+  --ever-7: color-mix(in srgb, var(--ever) 7%, transparent);
+  --ever-8: color-mix(in srgb, var(--ever) 8%, transparent);
+  --ever-10: color-mix(in srgb, var(--ever) 10%, transparent);
+  --ever-12: color-mix(in srgb, var(--ever) 12%, transparent);
+  --ever-14: color-mix(in srgb, var(--ever) 14%, transparent);
+  --ever-18: color-mix(in srgb, var(--ever) 18%, transparent);
+  --ever-20: color-mix(in srgb, var(--ever) 20%, transparent);
+  --ever-22: color-mix(in srgb, var(--ever) 22%, transparent);
+  --ever-30: color-mix(in srgb, var(--ever) 30%, transparent);
+  --ever-35: color-mix(in srgb, var(--ever) 35%, transparent);
+  --ever-40: color-mix(in srgb, var(--ever) 40%, transparent);
+  --ever-45: color-mix(in srgb, var(--ever) 45%, transparent);
+  --ever-50: color-mix(in srgb, var(--ever) 50%, transparent);
+  --ever-55: color-mix(in srgb, var(--ever) 55%, transparent);
+  --coral-5: color-mix(in srgb, var(--coral) 5%, transparent);
+  --coral-6: color-mix(in srgb, var(--coral) 6%, transparent);
+  --coral-7: color-mix(in srgb, var(--coral) 7%, transparent);
+  --coral-8: color-mix(in srgb, var(--coral) 8%, transparent);
+  --coral-10: color-mix(in srgb, var(--coral) 10%, transparent);
+  --coral-12: color-mix(in srgb, var(--coral) 12%, transparent);
+  --coral-14: color-mix(in srgb, var(--coral) 14%, transparent);
+  --coral-18: color-mix(in srgb, var(--coral) 18%, transparent);
+  --coral-20: color-mix(in srgb, var(--coral) 20%, transparent);
+  --coral-22: color-mix(in srgb, var(--coral) 22%, transparent);
+  --coral-30: color-mix(in srgb, var(--coral) 30%, transparent);
+  --coral-35: color-mix(in srgb, var(--coral) 35%, transparent);
+  --coral-40: color-mix(in srgb, var(--coral) 40%, transparent);
+  --coral-45: color-mix(in srgb, var(--coral) 45%, transparent);
+  --coral-50: color-mix(in srgb, var(--coral) 50%, transparent);
+  --coral-55: color-mix(in srgb, var(--coral) 55%, transparent);
+  --amber-5: color-mix(in srgb, var(--amber) 5%, transparent);
+  --amber-6: color-mix(in srgb, var(--amber) 6%, transparent);
+  --amber-7: color-mix(in srgb, var(--amber) 7%, transparent);
+  --amber-8: color-mix(in srgb, var(--amber) 8%, transparent);
+  --amber-10: color-mix(in srgb, var(--amber) 10%, transparent);
+  --amber-12: color-mix(in srgb, var(--amber) 12%, transparent);
+  --amber-14: color-mix(in srgb, var(--amber) 14%, transparent);
+  --amber-18: color-mix(in srgb, var(--amber) 18%, transparent);
+  --amber-20: color-mix(in srgb, var(--amber) 20%, transparent);
+  --amber-22: color-mix(in srgb, var(--amber) 22%, transparent);
+  --amber-30: color-mix(in srgb, var(--amber) 30%, transparent);
+  --amber-35: color-mix(in srgb, var(--amber) 35%, transparent);
+  --amber-40: color-mix(in srgb, var(--amber) 40%, transparent);
+  --amber-45: color-mix(in srgb, var(--amber) 45%, transparent);
+  --amber-50: color-mix(in srgb, var(--amber) 50%, transparent);
+  --amber-55: color-mix(in srgb, var(--amber) 55%, transparent);
+  --fed-5: color-mix(in srgb, var(--fed) 5%, transparent);
+  --fed-6: color-mix(in srgb, var(--fed) 6%, transparent);
+  --fed-7: color-mix(in srgb, var(--fed) 7%, transparent);
+  --fed-8: color-mix(in srgb, var(--fed) 8%, transparent);
+  --fed-10: color-mix(in srgb, var(--fed) 10%, transparent);
+  --fed-12: color-mix(in srgb, var(--fed) 12%, transparent);
+  --fed-14: color-mix(in srgb, var(--fed) 14%, transparent);
+  --fed-18: color-mix(in srgb, var(--fed) 18%, transparent);
+  --fed-20: color-mix(in srgb, var(--fed) 20%, transparent);
+  --fed-22: color-mix(in srgb, var(--fed) 22%, transparent);
+  --fed-30: color-mix(in srgb, var(--fed) 30%, transparent);
+  --fed-35: color-mix(in srgb, var(--fed) 35%, transparent);
+  --fed-40: color-mix(in srgb, var(--fed) 40%, transparent);
+  --fed-45: color-mix(in srgb, var(--fed) 45%, transparent);
+  --fed-50: color-mix(in srgb, var(--fed) 50%, transparent);
+  --fed-55: color-mix(in srgb, var(--fed) 55%, transparent);
+
+  /* geometry scales (Pixel §4) */
+  --radius-rungSeg: 4px;
+  --radius-ctag: 5px;
+  --radius-etag: 6px;
+  --radius-miniBtn: 8px;
+  --radius-tbBtn: 9px;
+  --radius-nav: 10px;
+  --radius-toast: 11px;
+  --radius-doctrine: 12px;
+  --radius-cell: 13px;
+  --radius-tblwrap: 14px;
+  --radius-card: 15px;
+  --radius-modal: 18px;
+  --radius-pill: 9999px;
+  --border-hairline: 1px;
+  --border-rail: 3px;
+  --border-trackNode: 1.5px;
+  --border-kernelFrame: 1.6px;
+  --border-focus: 2px;
+  --blur-backdrop: 14px;
+  --focus-ring: 2px solid var(--indigo);
+  --focus-offset: 2px;
+  --focus-radius: 6px;
+  --shadow-modal: 0 30px 90px var(--shadow-strong);
+  --shadow-toast: 0 12px 40px var(--shadow-med);
+  --shadow-drawer: -20px 0 60px var(--shadow-med);
+  --shadow-card-light: 0 1px 2px var(--shadow-med), 0 6px 22px color-mix(in srgb, var(--shadow-med) 55%, transparent);
+  --glow-rung4: 0 0 8px var(--ever-50);
+
+  /* motion scales (Pixel §5) */
+  --dur-pulse: 2.2s;
+  --ease-pulse: ease-out;
+  --dur-view-in: 280ms;
+  --dur-evt-new: 500ms;
+  --dur-toast-in: 300ms;
+  --dur-drawer-in: 240ms;
+  --dur-hover: 140ms;
+  --ease-motion: ease;
+  --pulse-play: running;
+}
+
+[data-theme="brand"] {
+  --bg: #22252B;
+  --panel: #282C33;
+  --surface: #30343D;
+  --surface-2: #3B404B;
+  --surface-3: #454B57;
+  --card: rgba(48,52,61,0.72);
+  --card-2: rgba(48,52,61,0.5);
+  --bar: rgba(40,44,51,0.85);
+  --ink: #F5F6F8;
+  --muted: #CBD0DA;
+  --faint: #8890A0;
+  --line: rgba(150,162,188,0.16);
+  --line-2: rgba(150,162,188,0.32);
+  --overlay: rgba(15,17,20,0.7);
+  --shadow-strong: rgba(0,0,0,0.55);
+  --shadow-med: rgba(0,0,0,0.48);
+  --indigo: #6A7CF7;
+  --pink: #E68EF4;
+  --ever: #2EE6A8;
+  --coral: #FF7A70;
+  --amber: #FFB020;
+  --fed: #9AA8FF;
+}
+
+[data-theme="graphite"] {
+  --bg: #16181D;
+  --panel: #1B1E24;
+  --surface: #23262E;
+  --surface-2: #2A2E38;
+  --surface-3: #323744;
+  --card: rgba(38,41,50,0.9);
+  --card-2: rgba(38,41,50,0.65);
+  --bar: rgba(27,30,36,0.9);
+  --ink: #EDEEF2;
+  --muted: #B4BAC6;
+  --faint: #7F8695;
+  --line: rgba(255,255,255,0.09);
+  --line-2: rgba(255,255,255,0.18);
+  --overlay: rgba(4,5,8,0.7);
+  --shadow-strong: rgba(0,0,0,0.58);
+  --shadow-med: rgba(0,0,0,0.5);
+  --indigo: #8B9AFC;
+  --pink: #EC9FF6;
+  --ever: #3AEEB2;
+  --coral: #FF8A80;
+  --amber: #F4C95D;
+  --fed: #9AA8FF;
+}
+
+[data-theme="carbon"] {
+  --bg: #000000;
+  --panel: #0A0A0B;
+  --surface: #1C1C1E;
+  --surface-2: #242426;
+  --surface-3: #2E2E31;
+  --card: #2A2A2D;
+  --card-2: #232326;
+  --bar: rgba(10,10,11,0.92);
+  --ink: #F5F5F7;
+  --muted: #B9BAC1;
+  --faint: #7F8089;
+  --line: rgba(255,255,255,0.1);
+  --line-2: rgba(255,255,255,0.2);
+  --overlay: rgba(0,0,0,0.78);
+  --shadow-strong: rgba(0,0,0,0.7);
+  --shadow-med: rgba(0,0,0,0.55);
+  --indigo: #8A97FF;
+  --pink: #EF9DF7;
+  --ever: #31EFAE;
+  --coral: #FF8A80;
+  --amber: #F4C95D;
+  --fed: #9AA8FF;
+}
+
+[data-theme="dusk"] {
+  --bg: #151831;
+  --panel: #191D3A;
+  --surface: #212648;
+  --surface-2: #282E56;
+  --surface-3: #303764;
+  --card: rgba(33,38,72,0.82);
+  --card-2: rgba(33,38,72,0.6);
+  --bar: rgba(25,29,58,0.9);
+  --ink: #E9EBF7;
+  --muted: #AEB4D2;
+  --faint: #7A80A4;
+  --line: color-mix(in srgb, var(--indigo) 18%, transparent);
+  --line-2: color-mix(in srgb, var(--indigo) 34%, transparent);
+  --overlay: rgba(8,10,26,0.72);
+  --shadow-strong: rgba(0,0,0,0.58);
+  --shadow-med: rgba(0,0,0,0.5);
+  --indigo: #8B96FF;
+  --pink: #F09BF8;
+  --ever: #35ECAE;
+  --coral: #FF8A80;
+  --amber: #F4C95D;
+  --fed: #9AA8FF;
+}
+
+[data-theme="daylight"] {
+  --bg: #F4F5F8;
+  --panel: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-2: #EEF0F5;
+  --surface-3: #E4E7EE;
+  --card: rgba(255,255,255,0.92);
+  --card-2: rgba(255,255,255,0.75);
+  --bar: rgba(255,255,255,0.88);
+  --ink: #1A1D26;
+  --muted: #4C5364;
+  --faint: #8B92A3;
+  --line: color-mix(in srgb, var(--indigo) 15%, transparent);
+  --line-2: color-mix(in srgb, var(--indigo) 30%, transparent);
+  --overlay: rgba(26,29,38,0.45);
+  --shadow-strong: rgba(28,34,56,0.22);
+  --shadow-med: rgba(28,34,56,0.16);
+  --indigo: #4656D6;
+  --pink: #AB34C4;
+  --ever: #0A9C6E;
+  --coral: #D6483C;
+  --amber: #8F6400;
+  --fed: #5163CF;
+}
+
+[data-theme="mist"] {
+  --bg: #FBFBFD;
+  --panel: #F3F5F8;
+  --surface: #EEF1F6;
+  --surface-2: #E4E8F0;
+  --surface-3: #D9DEEA;
+  --card: #EEF1F6;
+  --card-2: #F3F5F9;
+  --bar: rgba(243,245,248,0.92);
+  --ink: #20242E;
+  --muted: #525A6B;
+  --faint: #8F96A7;
+  --line: rgba(32,36,46,0.1);
+  --line-2: rgba(32,36,46,0.2);
+  --overlay: rgba(30,34,44,0.4);
+  --shadow-strong: rgba(35,42,64,0.18);
+  --shadow-med: rgba(35,42,64,0.12);
+  --indigo: #4A5AD0;
+  --pink: #A23BBA;
+  --ever: #0D9068;
+  --coral: #CF4A3E;
+  --amber: #8F6400;
+  --fed: #4F61CC;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-pulse: 0.01ms;
+    --dur-view-in: 0.01ms;
+    --dur-evt-new: 0.01ms;
+    --dur-toast-in: 0.01ms;
+    --dur-drawer-in: 0.01ms;
+    --dur-hover: 0.01ms;
+    --pulse-play: paused;
+  }
+}

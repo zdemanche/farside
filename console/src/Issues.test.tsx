@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
-import { ISSUE_ROWS } from "./issues";
+import { ISSUE_ROWS } from "./issues-data";
 
 describe("Issues screen", () => {
   beforeEach(() => {

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
-import { CONNECT_STEPS, REQUIRED_AZURE_ROLES } from "./connect";
+import { CONNECT_STEPS, REQUIRED_AZURE_ROLES } from "./connect-data";
 
 describe("Connect screen", () => {
   beforeEach(() => {

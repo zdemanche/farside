@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
-import { LIFECYCLE_ROWS, LIFECYCLE_WITHIN_90 } from "./lifecycle";
+import { LIFECYCLE_ROWS, LIFECYCLE_WITHIN_90 } from "./lifecycle-data";
 
 describe("Lifecycle screen", () => {
   beforeEach(() => {

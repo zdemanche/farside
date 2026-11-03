@@ -46,16 +46,17 @@ export function Inventory({ resources = SEEDED_RESOURCES }: { resources?: Invent
 
   return (
     <>
-      <h1 id="page-title" tabIndex={-1}>
+      <h1 className="page-title" id="page-title" tabIndex={-1}>
         Inventory
       </h1>
-      <p role="status" aria-live="polite">
+      <p className="page-meta" role="status" aria-live="polite">
         {filtered.length} resources
       </p>
-      <form>
-        <div>
+      <form className="panel filters">
+        <div className="field">
           <label htmlFor="filter-owner">Owner</label>
           <select
+            className="input"
             id="filter-owner"
             value={owner}
             onChange={(event) => setOwner(event.target.value)}
@@ -65,9 +66,10 @@ export function Inventory({ resources = SEEDED_RESOURCES }: { resources?: Invent
             <option value="farside-test">farside-test</option>
           </select>
         </div>
-        <div>
+        <div className="field">
           <label htmlFor="filter-service">Service</label>
           <select
+            className="input"
             id="filter-service"
             value={service}
             onChange={(event) => setService(event.target.value)}
@@ -82,9 +84,10 @@ export function Inventory({ resources = SEEDED_RESOURCES }: { resources?: Invent
             </option>
           </select>
         </div>
-        <div>
+        <div className="field">
           <label htmlFor="filter-subscription">Subscription</label>
           <select
+            className="input"
             id="filter-subscription"
             value={subscription}
             onChange={(event) => setSubscription(event.target.value)}
@@ -94,9 +97,14 @@ export function Inventory({ resources = SEEDED_RESOURCES }: { resources?: Invent
             <option value="empty-no-budget">empty-no-budget</option>
           </select>
         </div>
-        <div>
+        <div className="field">
           <label htmlFor="filter-region">Region</label>
-          <select id="filter-region" value={region} onChange={(event) => setRegion(event.target.value)}>
+          <select
+            className="input"
+            id="filter-region"
+            value={region}
+            onChange={(event) => setRegion(event.target.value)}
+          >
             <option value="">Any region</option>
             <option value="eastus">eastus</option>
             <option value="westus">westus</option>
@@ -104,44 +112,46 @@ export function Inventory({ resources = SEEDED_RESOURCES }: { resources?: Invent
         </div>
       </form>
       <h2>By owner</h2>
-      <ul>
+      <ul className="tag-list" role="list">
         {[...byOwner.entries()].map(([key, count]) => (
-          <li key={key}>
+          <li className="chip chip-neutral" key={key}>
             {key} {count}
           </li>
         ))}
       </ul>
       <h2>By service</h2>
-      <ul>
+      <ul className="tag-list" role="list">
         {[...byService.entries()].map(([key, count]) => (
-          <li key={key}>
+          <li className="chip chip-neutral" key={key}>
             {key} {count}
           </li>
         ))}
       </ul>
-      <table>
-        <caption>Inventory resources</caption>
-        <thead>
-          <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Service</th>
-            <th scope="col">Subscription</th>
-            <th scope="col">Region</th>
-            <th scope="col">Owner</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.map((resource) => (
-            <tr key={resource.resourceUri}>
-              <th scope="row">{resource.displayName}</th>
-              <td>{resource.resourceType}</td>
-              <td>{resource.resourceUri.split("/")[2]}</td>
-              <td>{resource.region}</td>
-              <td>{resource.ownerTag ?? "none"}</td>
+      <div className="table-wrap" role="region" aria-labelledby="inventory-caption" tabIndex={0}>
+        <table>
+          <caption id="inventory-caption">Inventory resources</caption>
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Service</th>
+              <th scope="col">Subscription</th>
+              <th scope="col">Region</th>
+              <th scope="col">Owner</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {filtered.map((resource) => (
+              <tr key={resource.resourceUri}>
+                <th scope="row">{resource.displayName}</th>
+                <td>{resource.resourceType}</td>
+                <td>{resource.resourceUri.split("/")[2]}</td>
+                <td>{resource.region}</td>
+                <td>{resource.ownerTag ?? "none"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

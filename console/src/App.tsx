@@ -56,51 +56,62 @@ export function App({ demo }: { demo?: boolean } = {}) {
                       : "empty";
 
   return (
-    <div>
-      <a href="#main" onClick={skipToMain}>
+    <div className="app">
+      <a className="skip-link" href="#main" onClick={skipToMain}>
         Skip to content
       </a>
-      <header>
-        <p>{PRODUCT_NAME}</p>
-        {demoMode ? <p role="status">{DEMO_LABEL}</p> : null}
-        <nav aria-label="Farside">
+      <header className="topbar">
+        <p className="brand">{PRODUCT_NAME}</p>
+        {demoMode ? (
+          <p className="chip chip-warn" role="status">
+            {DEMO_LABEL}
+          </p>
+        ) : null}
+      </header>
+      <div className="layout">
+        <nav className="sidenav" aria-label="Farside">
           <ul>
-            {SHELL_NAV.map((item) => (
-              <li key={item}>
-                <a href={`#${item.toLowerCase().replaceAll(" ", "-")}`}>{item}</a>
-              </li>
-            ))}
+            {SHELL_NAV.map((item) => {
+              const slug = item.toLowerCase().replaceAll(" ", "-");
+              return (
+                <li key={item}>
+                  <a href={`#${slug}`} aria-current={slug === hash.split("/")[0] ? "page" : undefined}>
+                    {item}
+                  </a>
+                </li>
+              );
+            })}
           </ul>
         </nav>
-      </header>
-      <main id="main" tabIndex={-1}>
-        {page === "connect" ? (
-          <Connect />
-        ) : page === "blind-spots" ? (
-          <BlindSpots />
-        ) : page === "estate" ? (
-          <Estate overview={demoMode ? SEEDED_OVERVIEW : EMPTY_OVERVIEW} />
-        ) : page === "inventory" ? (
-          <Inventory />
-        ) : page === "issues" ? (
-          <Issues />
-        ) : page === "settings" ? (
-          <Settings />
-        ) : page === "recovery" ? (
-          <Recovery />
-        ) : page === "lifecycle" ? (
-          <Lifecycle />
-        ) : page === "scans" ? (
-          <Scans />
-        ) : (
-          <>
-            <h1 id="page-title" tabIndex={-1}>
-              {PRODUCT_NAME}
-            </h1>
-            <p>{EMPTY_STATE}</p>
-          </>
-        )}
-      </main>
+        <main className="main" id="main" tabIndex={-1}>
+          {page === "connect" ? (
+            <Connect />
+          ) : page === "blind-spots" ? (
+            <BlindSpots />
+          ) : page === "estate" ? (
+            <Estate overview={demoMode ? SEEDED_OVERVIEW : EMPTY_OVERVIEW} />
+          ) : page === "inventory" ? (
+            <Inventory />
+          ) : page === "issues" ? (
+            <Issues />
+          ) : page === "settings" ? (
+            <Settings />
+          ) : page === "recovery" ? (
+            <Recovery />
+          ) : page === "lifecycle" ? (
+            <Lifecycle />
+          ) : page === "scans" ? (
+            <Scans />
+          ) : (
+            <>
+              <h1 className="page-title" id="page-title" tabIndex={-1}>
+                {PRODUCT_NAME}
+              </h1>
+              <p className="screen-state">{EMPTY_STATE}</p>
+            </>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

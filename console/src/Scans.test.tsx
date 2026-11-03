@@ -3,7 +3,7 @@ import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { Scans } from "./Scans";
-import { RUNNING_SCAN, SCAN_ROWS } from "./scans";
+import { RUNNING_SCAN, SCAN_ROWS } from "./scans-data";
 
 describe("Scans screen", () => {
   beforeEach(() => {
@@ -31,6 +31,8 @@ describe("Scans screen", () => {
     expect(failed.textContent).toContain("failed");
     expect(failed.textContent).toContain("Resource Graph call failed");
     expect(failed.textContent).not.toContain("current");
+    expect(current.querySelector(".chip-good")?.textContent).toBe("succeeded");
+    expect(failed.querySelector(".chip-crit")?.textContent).toBe("failed");
     const results = await axe.run(container, {
       rules: { "color-contrast": { enabled: false } },
     });
