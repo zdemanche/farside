@@ -91,6 +91,7 @@ function grantBlobs(name: string, role: aws.iam.Role, bucketArn: pulumi.Input<st
             Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
             Resource: `${arn}/${BLOB_PREFIX}*`,
           },
+          // Unconditional ListBucket: dedicated Farside bucket, all objects under ORG#; the role already has Get/Delete on ORG#*, so listing exposes nothing new; an s3:prefix condition makes missing keys return 403 and breaks blob re-read (#278)
           { Effect: "Allow", Action: "s3:ListBucket", Resource: arn },
         ],
       }),
