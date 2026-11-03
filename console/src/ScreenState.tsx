@@ -45,6 +45,7 @@ export function ScreenState<T>({
   empty,
   missing,
   partial = false,
+  silentLoading = false,
   children,
 }: {
   label: string;
@@ -52,9 +53,13 @@ export function ScreenState<T>({
   empty?: (data: T) => ReactNode;
   missing?: ReactNode;
   partial?: boolean;
+  silentLoading?: boolean;
   children: (data: T) => ReactNode;
 }) {
   if (resource.status === "loading") {
+    if (silentLoading) {
+      return null;
+    }
     return (
       <p className="screen-state" role="status">
         Loading {label}

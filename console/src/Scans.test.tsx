@@ -178,6 +178,25 @@ describe("Scans screen", () => {
     const region = liveRegion(container);
     await screen.findByRole("alert");
     expect(liveRegion(container)).toBe(region);
+    expect(region.textContent).toBe("");
+    expect(region.hasAttribute("data-busy")).toBe(false);
+    expect(screen.getAllByRole("status")).toEqual([region]);
+  });
+
+  it("keeps a single status region while Retry reloads the history", async () => {
+    let release: (rows: ScanRow[]) => void = () => {};
+    const scans = vi
+      .fn<() => Promise<ScanRow[]>>()
+      .mockResolvedValueOnce([RUNNING])
+      .mockRejectedValueOnce(new DataError("failed", 503, "503 Service Unavailable"))
+      .mockImplementation(() => new Promise((resolve) => (release = resolve)));
+    const { container } = renderScreen(<Scans hash="scans" pollMs={20} />, sourceWith({ scans }));
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    const region = liveRegion(container);
+    await waitFor(() => expect(region.textContent).toBe("Loading scan history"));
+    expect(screen.getAllByRole("status")).toEqual([region]);
+    release([FINISHED]);
+    await waitFor(() => expect(region.textContent).toBe("scan-3 succeeded"));
   });
 
   it("names the scan and the plain-language reason when a polled scan fails", async () => {

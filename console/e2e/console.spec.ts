@@ -1,6 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+const DEMO_DISK =
+  "/subscriptions/main/resourceGroups/farside-seed/providers/Microsoft.Compute/disks/disk-unattached";
+
 const ROUTES = [
   "estate",
   "connect",
@@ -11,7 +14,12 @@ const ROUTES = [
   "lifecycle",
   "recovery",
   "blind-spots",
+  "scans/scan-1",
+  "issues/disk-unattached",
+  `inventory?resource=${encodeURIComponent(DEMO_DISK)}`,
 ] as const;
+
+const THEMES = ["moonaan", "daylight"] as const;
 
 const NAV_ITEMS = [
   "Estate",
@@ -36,19 +44,21 @@ async function violationsOf(page: Page) {
   return violations.map(({ id, nodes }) => ({ id, targets: nodes.map((node) => node.target) }));
 }
 
-const activeElementId = (page: Page) => page.evaluate(() => document.activeElement?.id ?? "");
-
 for (const route of ROUTES) {
   test.describe(`#${route}`, () => {
-    test.beforeEach(async ({ page }) => {
-      await open(page, route);
-    });
-
-    test("has no accessibility violations, contrast included", async ({ page }) => {
-      expect(await violationsOf(page)).toEqual([]);
-    });
+    for (const theme of THEMES) {
+      test(`has no accessibility violations in the ${theme} theme, contrast included`, async ({
+        page,
+      }) => {
+        await page.addInitScript((value) => localStorage.setItem("reflow-theme", value), theme);
+        await open(page, route);
+        expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme);
+        expect(await violationsOf(page)).toEqual([]);
+      });
+    }
 
     test("does not scroll the page sideways", async ({ page }) => {
+      await open(page, route);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
@@ -63,7 +73,7 @@ test("the skip link is the first tab stop and moves focus to the main region", a
   const skip = page.getByRole("link", { name: "Skip to content" });
   await expect(skip).toBeFocused();
   await page.keyboard.press("Enter");
-  expect(await activeElementId(page)).toBe("main");
+  await expect(page.locator("#main")).toBeFocused();
 });
 
 test("the navigation is reachable and operable from the keyboard", async ({ page }) => {

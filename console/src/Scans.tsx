@@ -176,8 +176,6 @@ export function Scans({
       setFinished(outcomes.join("; "));
     }
   }
-  const announced = rows ?? tracked.rows;
-  const announcedInFlight = announced?.find(isInFlight);
 
   useEffect(() => {
     if (openedWith.current === "ready") {
@@ -216,13 +214,15 @@ export function Scans({
         aria-live="polite"
         data-busy={inFlight ? "true" : undefined}
       >
-        {announced && announced.length > 0 ? (
+        {scans.status === "loading" ? (
+          `Loading scan history`
+        ) : rows && rows.length > 0 ? (
           <>
-            <span>{finished || (announcedInFlight ? "" : plural(announced.length, "scan"))}</span>
-            {announcedInFlight ? (
+            <span>{finished || (inFlight ? "" : plural(rows.length, "scan"))}</span>
+            {inFlight ? (
               <span>
                 {finished ? "; " : ""}
-                {outcomeText(announcedInFlight)}
+                {outcomeText(inFlight)}
               </span>
             ) : null}
           </>
@@ -231,6 +231,7 @@ export function Scans({
       <ScreenState
         label="scan history"
         resource={scans}
+        silentLoading
         empty={(data) =>
           data.length === 0
             ? "No scans have run yet. Connect a subscription to start the first scan."
