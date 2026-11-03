@@ -35,8 +35,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 18. **E4-S3** — merged (#245).
 19. **E4-S4** — merged (#246).
 20. **E4-S5** — merged (#247). Console page waits on #243.
-21. **E4-S6** — this change: headline API and exclude unproven checks. Estate render waits on #243.
-22. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+21. **E4-S6** — merged (#248). Estate render waits on #243.
+22. **E5-S1** — this change: synthetic demo estate, demo org that blocks provider calls, and a Demo label. Keep the label functional so #243 can restyle it.
+23. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -239,10 +240,10 @@ Sell-ready path uses iac-hub, Identity, billing (D8), and a test tenant.
 | Key | Issue | Title | Class | Why |
 |---|---|---|---|---|
 | `E5` | #158 | Ready to sell | (d) external system or repo | Sell-ready path uses iac-hub, Identity, billing (D8), and a test tenant. |
-| `E5-S1` | #159 | Demo mode with synthetic data | (a) doable in code now | Synthetic demo estate generated in-repo. Must not call providers. |
-| `E5-S1-T1` | #160 | Generate a synthetic estate fixture | (a) doable in code now | Synthetic fixture generator. |
-| `E5-S1-T2` | #161 | Add demo org mode with a visible label | (a) doable in code now | Demo org mode that blocks outbound calls. |
-| `E5-S1-T3` | #162 | Run the end-to-end suite against demo mode | (a) doable in code now | E2E suite on demo data. |
+| `E5-S1` | #159 | Demo mode with synthetic data | (a) this change | Synthetic demo estate, demo org, Demo label. |
+| `E5-S1-T1` | #160 | Generate a synthetic estate fixture | (a) this change | Synthetic fixture generator. |
+| `E5-S1-T2` | #161 | Add demo org mode with a visible label | (a) this change | Demo org mode that blocks outbound calls. |
+| `E5-S1-T3` | #162 | Run the end-to-end suite against demo mode | (a) this change | Vitest walk of every existing screen on demo data. |
 | `E5-S2` | #163 | Scheduled scans that run on their own | (a) doable in code now | Scheduler and Settings can be tested with time control. Soak week is (c). |
 | `E5-S2-T1` | #164 | Build the recurring scheduler | (a) doable in code now | Recurring scheduler. |
 | `E5-S2-T2` | #165 | Add overlap skip, retry and missed-run detection | (a) doable in code now | Overlap skip, retry, missed-run. |

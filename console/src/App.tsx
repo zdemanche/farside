@@ -8,7 +8,8 @@ import { Lifecycle } from "./Lifecycle";
 import { Recovery } from "./Recovery";
 import { Scans } from "./Scans";
 import { Settings } from "./Settings";
-import { EMPTY_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
+import { EMPTY_OVERVIEW, SEEDED_OVERVIEW } from "./estate-data";
+import { DEMO_LABEL, EMPTY_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
 
 function currentHash(): string {
   return window.location.hash.replace(/^#\/?/, "");
@@ -19,7 +20,8 @@ function skipToMain(event: MouseEvent<HTMLAnchorElement>) {
   document.getElementById("main")?.focus();
 }
 
-export function App() {
+export function App({ demo }: { demo?: boolean } = {}) {
+  const demoMode = demo ?? import.meta.env.VITE_FARSIDE_DEMO === "1";
   const [hash, setHash] = useState(currentHash);
 
   useEffect(() => {
@@ -60,6 +62,7 @@ export function App() {
       </a>
       <header>
         <p>{PRODUCT_NAME}</p>
+        {demoMode ? <p role="status">{DEMO_LABEL}</p> : null}
         <nav aria-label="Farside">
           <ul>
             {SHELL_NAV.map((item) => (
@@ -76,7 +79,7 @@ export function App() {
         ) : page === "blind-spots" ? (
           <BlindSpots />
         ) : page === "estate" ? (
-          <Estate />
+          <Estate overview={demoMode ? SEEDED_OVERVIEW : EMPTY_OVERVIEW} />
         ) : page === "inventory" ? (
           <Inventory />
         ) : page === "issues" ? (
