@@ -17,6 +17,7 @@ export type StoredIssue = {
   firstSeen: string;
   lastConfirmed: string;
   closingScanId?: string;
+  closedReason?: string;
   notConfirmedReason?: string;
 };
 
@@ -38,7 +39,7 @@ const RESOURCE_KEYS = [
   "resourceId",
 ] as const;
 
-export function resourceIdFromFinding(finding: Finding): string {
+function legacyResourceIdFromFinding(finding: Finding): string {
   for (const key of RESOURCE_KEYS) {
     const value = finding.evidence.fields[key];
     if (typeof value === "string" && value.length > 0) {
@@ -48,8 +49,30 @@ export function resourceIdFromFinding(finding: Finding): string {
   return finding.scope.id;
 }
 
+export function resourceIdFromFinding(finding: Finding): string {
+  const uri = finding.evidence.fields.resourceUri;
+  return typeof uri === "string" && uri.length > 0 ? uri : legacyResourceIdFromFinding(finding);
+}
+
 export function issueIdentity(checkId: string, resourceId: string, scopeId: string): string {
   return `${checkId}:${resourceId}:${scopeId}`;
+}
+
+function rekeyLegacyIssues(byId: Map<string, StoredIssue>, findings: Finding[]): void {
+  for (const finding of findings) {
+    if (finding.result === "pass") {
+      continue;
+    }
+    const resourceId = resourceIdFromFinding(finding);
+    const id = issueIdentity(finding.checkId, resourceId, finding.scope.id);
+    const legacyId = issueIdentity(finding.checkId, legacyResourceIdFromFinding(finding), finding.scope.id);
+    const legacy = byId.get(legacyId);
+    if (legacyId === id || !legacy || byId.has(id)) {
+      continue;
+    }
+    byId.delete(legacyId);
+    byId.set(id, { ...legacy, id, resourceId });
+  }
 }
 
 function coverageFor(entries: CoverageEntry[], scopeId: string): CoverageEntry | undefined {
@@ -66,6 +89,10 @@ export function applyScanToIssues(input: {
 }): StoredIssue[] {
   const limit = input.checkIds ? new Set(input.checkIds) : null;
   const byId = new Map(input.issues.map((issue) => [issue.id, { ...issue }]));
+  rekeyLegacyIssues(
+    byId,
+    limit ? input.findings.filter((finding) => limit.has(finding.checkId)) : input.findings,
+  );
   const seen = new Set<string>();
   const undetermined = new Map<string, string | undefined>();
 

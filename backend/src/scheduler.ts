@@ -22,11 +22,12 @@ export type ScheduleState = {
   nextRunAt: string | null;
   lastTickAt: string | null;
   retryCount: number;
+  retryCounts: Record<string, number>;
   records: ScheduleRecord[];
 };
 
 export function emptySchedule(): ScheduleState {
-  return { nextRunAt: null, lastTickAt: null, retryCount: 0, records: [] };
+  return { nextRunAt: null, lastTickAt: null, retryCount: 0, retryCounts: {}, records: [] };
 }
 
 export function addHours(iso: string, hours: number): string {
@@ -43,6 +44,7 @@ export type ScheduleTick = {
   record: ScheduleRecord | null;
   scan: ScanJob | null;
   scanStarted: boolean;
+  scans: { scan: ScanJob; started: boolean }[];
   schedule: ScheduleState;
 };
 
@@ -67,8 +69,8 @@ function recordOf(
   return record;
 }
 
-function healthyConnection(connections: Connection[]): Connection | null {
-  return connections.find((connection) => connection.healthy) ?? null;
+function healthyConnections(connections: Connection[]): Connection[] {
+  return connections.filter((connection) => connection.healthy);
 }
 
 export function decideTick(input: {
@@ -130,19 +132,29 @@ export class ScanScheduler {
   tick(orgId: string, now: string = this.clock()): ScheduleTick {
     const org = this.store.org(orgId);
     org.schedule.lastTickAt = now;
-    const connection = healthyConnection(org.connections);
+    const healthy = healthyConnections(org.connections);
+    const connection = healthy[0] ?? null;
     const subscriptionId = connection?.subscriptionId ?? org.connections[0]?.subscriptionId ?? null;
-    const lastSystem = [...org.scans].reverse().find((scan) => scan.actor === "system");
+    const failedRetryable = healthy.filter((item) => {
+      const last = [...org.scans]
+        .reverse()
+        .find((scan) => scan.actor === "system" && scan.subscriptionId === item.subscriptionId);
+      return last?.status === "failed";
+    });
+    const retryCountOf = (item: Connection) => org.schedule.retryCounts[item.subscriptionId] ?? 0;
+    const retryable = failedRetryable.filter((item) => retryCountOf(item) < org.settings.scanRetryLimit);
     const decision = decideTick({
       now,
       enabled: org.settings.scanScheduleEnabled,
       intervalHours: org.settings.scanIntervalHours,
       retryLimit: org.settings.scanRetryLimit,
       nextRunAt: org.schedule.nextRunAt,
-      retryCount: org.schedule.retryCount,
+      retryCount: failedRetryable.length > 0 ? Math.min(...failedRetryable.map(retryCountOf)) : 0,
       connection,
-      running: subscriptionId ? Boolean(this.store.runningScan(orgId, subscriptionId)) : false,
-      lastSystemFailed: lastSystem?.status === "failed",
+      running:
+        healthy.length > 0 &&
+        healthy.every((item) => Boolean(this.store.runningScan(orgId, item.subscriptionId))),
+      lastSystemFailed: failedRetryable.length > 0,
     });
     if (decision.action === "idle") {
       return {
@@ -151,49 +163,52 @@ export class ScanScheduler {
         record: null,
         scan: null,
         scanStarted: false,
+        scans: [],
         schedule: org.schedule,
       };
     }
-    let scan: ScanJob | null = null;
-    let scanStarted = false;
-    if (
-      (decision.action === "started" || decision.action === "retried" || decision.action === "missed") &&
-      subscriptionId
-    ) {
-      const started = this.runner.start({ orgId, subscriptionId, actor: "system" });
-      scan = started.job;
-      scanStarted = started.started;
-      if (decision.action === "retried") {
-        org.schedule.retryCount += 1;
+    const action = decision.action;
+    const scans: ScheduleTick["scans"] = [];
+    if ((action === "started" || action === "retried" || action === "missed") && healthy.length > 0) {
+      const targets = action === "retried" ? retryable : healthy;
+      for (const item of targets) {
+        const started = this.runner.start({ orgId, subscriptionId: item.subscriptionId, actor: "system" });
+        scans.push({ scan: started.job, started: started.started });
+      }
+      if (action === "retried") {
+        for (const item of targets) {
+          org.schedule.retryCounts[item.subscriptionId] = retryCountOf(item) + 1;
+        }
       } else {
-        org.schedule.retryCount = 0;
+        org.schedule.retryCounts = {};
       }
-      if (lastSystem?.status === "failed" && decision.action !== "retried") {
-        org.schedule.retryCount = 0;
-      }
+      org.schedule.retryCount = Math.max(0, ...Object.values(org.schedule.retryCounts));
       org.schedule.nextRunAt =
-        decision.action === "retried"
+        action === "retried"
           ? addHours(now, RETRY_DELAY_HOURS)
           : addHours(now, org.settings.scanIntervalHours);
     } else {
       org.schedule.nextRunAt = addHours(now, org.settings.scanIntervalHours);
     }
-    const record = recordOf(
-      orgId,
-      now,
-      decision.action,
-      subscriptionId,
-      decision.reason,
-      scan?.id ?? null,
-      org.schedule.records.length,
+    const records = (scans.length > 0 ? scans : [null]).map((target, offset) =>
+      recordOf(
+        orgId,
+        now,
+        action,
+        target?.scan.subscriptionId ?? subscriptionId,
+        decision.reason,
+        target?.scan.id ?? null,
+        org.schedule.records.length + offset,
+      ),
     );
-    org.schedule.records.push(record);
+    org.schedule.records.push(...records);
     return {
-      action: decision.action,
+      action,
       attention: decision.attention,
-      record,
-      scan,
-      scanStarted,
+      record: records[0] ?? null,
+      scan: scans[0]?.scan ?? null,
+      scanStarted: scans[0]?.started ?? false,
+      scans,
       schedule: org.schedule,
     };
   }

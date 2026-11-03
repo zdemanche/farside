@@ -55,6 +55,7 @@ export function checkGcpUnattachedDisks(
           closer: "A disk read that includes the users list",
           evidence: {
             fields: {
+              resourceUri: disk.resourceUri,
               diskId,
               usersCount: null,
               sizeGb: typeof sizeGb === "number" ? sizeGb : null,
@@ -70,7 +71,15 @@ export function checkGcpUnattachedDisks(
             checkId: GCP_UNATTACHED_DISKS,
             result: "undetermined",
             closer: "A disk read that includes sizeGb",
-            evidence: { fields: { diskId, usersCount, sizeGb: null, zone } },
+            evidence: {
+              fields: {
+                resourceUri: disk.resourceUri,
+                diskId,
+                usersCount,
+                sizeGb: null,
+                zone,
+              },
+            },
             scope,
           });
         }
@@ -79,7 +88,14 @@ export function checkGcpUnattachedDisks(
           checkId: GCP_UNATTACHED_DISKS,
           result: "fail",
           evidence: {
-            fields: { diskId, usersCount, sizeGb, zone, savingsBasis: savings.basis },
+            fields: {
+              resourceUri: disk.resourceUri,
+              diskId,
+              usersCount,
+              sizeGb,
+              zone,
+              savingsBasis: savings.basis,
+            },
           },
           scope,
           savings: { min: savings.min, max: savings.max, currency: savings.currency },
@@ -90,6 +106,7 @@ export function checkGcpUnattachedDisks(
         result: "pass",
         evidence: {
           fields: {
+            resourceUri: disk.resourceUri,
             diskId,
             usersCount,
             sizeGb: typeof sizeGb === "number" ? sizeGb : null,
@@ -124,6 +141,7 @@ export function checkGcpUnusedIps(
           closer: "An address read that includes status and users",
           evidence: {
             fields: {
+              resourceUri: address.resourceUri,
               addressId,
               address: ip,
               status: typeof status === "string" ? status : null,
@@ -141,6 +159,7 @@ export function checkGcpUnusedIps(
           result: "fail",
           evidence: {
             fields: {
+              resourceUri: address.resourceUri,
               addressId,
               address: ip,
               status,
@@ -157,7 +176,14 @@ export function checkGcpUnusedIps(
         checkId: GCP_UNUSED_IPS,
         result: "pass",
         evidence: {
-          fields: { addressId, address: ip, status, usersCount, region },
+          fields: {
+            resourceUri: address.resourceUri,
+            addressId,
+            address: ip,
+            status,
+            usersCount,
+            region,
+          },
         },
         scope,
       });
@@ -185,7 +211,13 @@ export function checkGcpOldSnapshotsAndImages(
           result: "undetermined",
           closer: "Set snapshot retention days in Settings",
           evidence: {
-            fields: { snapshotOrImageId, creationTimestamp, ageDays: null, retentionDays: null },
+            fields: {
+              resourceUri: item.resourceUri,
+              snapshotOrImageId,
+              creationTimestamp,
+              ageDays: null,
+              retentionDays: null,
+            },
           },
           scope,
         });
@@ -197,7 +229,13 @@ export function checkGcpOldSnapshotsAndImages(
           result: "undetermined",
           closer: "A snapshot or image read that includes creationTimestamp",
           evidence: {
-            fields: { snapshotOrImageId, creationTimestamp, ageDays: null, retentionDays: threshold },
+            fields: {
+              resourceUri: item.resourceUri,
+              snapshotOrImageId,
+              creationTimestamp,
+              ageDays: null,
+              retentionDays: threshold,
+            },
           },
           scope,
         });
@@ -210,7 +248,13 @@ export function checkGcpOldSnapshotsAndImages(
             result: "undetermined",
             closer: "A snapshot or image read that includes sizeGb",
             evidence: {
-              fields: { snapshotOrImageId, creationTimestamp, ageDays, retentionDays: threshold },
+              fields: {
+                resourceUri: item.resourceUri,
+                snapshotOrImageId,
+                creationTimestamp,
+                ageDays,
+                retentionDays: threshold,
+              },
             },
             scope,
           });
@@ -221,6 +265,7 @@ export function checkGcpOldSnapshotsAndImages(
           result: "fail",
           evidence: {
             fields: {
+              resourceUri: item.resourceUri,
               snapshotOrImageId,
               creationTimestamp,
               ageDays,
@@ -236,7 +281,13 @@ export function checkGcpOldSnapshotsAndImages(
         checkId: GCP_OLD_SNAPSHOTS_AND_IMAGES,
         result: "pass",
         evidence: {
-          fields: { snapshotOrImageId, creationTimestamp, ageDays, retentionDays: threshold },
+          fields: {
+            resourceUri: item.resourceUri,
+            snapshotOrImageId,
+            creationTimestamp,
+            ageDays,
+            retentionDays: threshold,
+          },
         },
         scope,
       });

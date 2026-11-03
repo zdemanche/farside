@@ -118,7 +118,13 @@ export function checkGcpSqlGkeSupport(
           result: "undetermined",
           closer: "An instance or cluster read that includes the engine version",
           evidence: {
-            fields: { resourceName, resourceKind: kind, version: null, supportEnd: null },
+            fields: {
+              resourceUri: resource.resourceUri,
+              resourceName,
+              resourceKind: kind,
+              version: null,
+              supportEnd: null,
+            },
           },
           scope,
         }),
@@ -132,6 +138,7 @@ export function checkGcpSqlGkeSupport(
           result: "fail",
           evidence: {
             fields: {
+              resourceUri: resource.resourceUri,
               resourceName,
               resourceKind: kind,
               version,
@@ -149,6 +156,7 @@ export function checkGcpSqlGkeSupport(
         result: "pass",
         evidence: {
           fields: {
+            resourceUri: resource.resourceUri,
             resourceName,
             resourceKind: kind,
             version,

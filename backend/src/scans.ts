@@ -9,7 +9,7 @@ import {
   mergeBudgetFindings,
   type BudgetClient,
 } from "./budgets.js";
-import { registeredCheckIds, runChecks } from "./checks.js";
+import { registeredCheckIds, runChecks, scopeKey } from "./checks.js";
 import {
   applyCommitmentCoverage,
   harvestCommitments,
@@ -175,7 +175,10 @@ export function mergeScanFindings(
   return [
     ...existing.filter(
       (finding) =>
-        !(replaceCheckIds.has(finding.checkId) && finding.scope.subscriptionOrProject === subscriptionId),
+        !(
+          replaceCheckIds.has(finding.checkId) &&
+          finding.scope.subscriptionOrProject.toLowerCase() === subscriptionId.toLowerCase()
+        ),
     ),
     ...next,
   ];
@@ -188,7 +191,11 @@ export function mergeScanCoverage(
   subscriptionId: string,
 ): CoverageEntry[] {
   const kept = existing.filter(
-    (entry) => !(replaceCheckIds.has(entry.checkId) && entry.subscriptionOrProject === subscriptionId),
+    (entry) =>
+      !(
+        replaceCheckIds.has(entry.checkId) &&
+        entry.subscriptionOrProject.toLowerCase() === subscriptionId.toLowerCase()
+      ),
   );
   return next.reduce((coverage, entry) => applyCoverageResult(coverage, entry), kept);
 }
@@ -198,6 +205,56 @@ function failureCode(error: unknown, harvesting: boolean): string {
     return "harvest_timeout";
   }
   return error instanceof ScanFailedError || harvesting ? "harvest_failed" : "scan_failed";
+}
+
+function scannedScopes(inventory: Inventory, subscriptionId: string): Set<string> {
+  return new Set(
+    [subscriptionId, ...inventory.resources.map((resource) => scopeKey(resource.resourceUri, inventory.cloud))]
+      .filter((key) => key.length > 0)
+      .map((key) => key.toLowerCase()),
+  );
+}
+
+function replacedByScan(scopes: Set<string>, key: string, incomingHasEmptyKey: boolean): boolean {
+  return key.length === 0 ? incomingHasEmptyKey : scopes.has(key.toLowerCase());
+}
+
+export function mergeScanInventory(
+  existing: Inventory | undefined,
+  next: Inventory,
+  subscriptionId: string,
+): Inventory {
+  if (!existing) {
+    return next;
+  }
+  const scopes = scannedScopes(next, subscriptionId);
+  const incomingHasEmptyKey = next.resources.some((resource) => scopeKey(resource.resourceUri, next.cloud) === "");
+  return {
+    ...next,
+    resources: [
+      ...existing.resources.filter(
+        (resource) =>
+          !replacedByScan(scopes, scopeKey(resource.resourceUri, existing.cloud), incomingHasEmptyKey),
+      ),
+      ...next.resources,
+    ],
+  };
+}
+
+export function mergeScanFacts(
+  existing: ResourceFacts[],
+  next: ResourceFacts[],
+  inventory: Inventory,
+  subscriptionId: string,
+): ResourceFacts[] {
+  const scopes = scannedScopes(inventory, subscriptionId);
+  const incomingHasEmptyKey = next.some((row) => scopeKey(row.resourceUri, inventory.cloud) === "");
+  return [
+    ...existing.filter(
+      (row) => !replacedByScan(scopes, scopeKey(row.resourceUri, inventory.cloud), incomingHasEmptyKey),
+    ),
+    ...next,
+  ];
 }
 
 export class ScanFailedError extends Error {
@@ -248,7 +305,26 @@ export function unconfiguredHarvester(): Harvester {
   };
 }
 
+function abortable<T>(signal: AbortSignal, work: Promise<T>): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(new Error("scan aborted"));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new Error("scan aborted"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
+
+type AzureHarvests = {
+  cost?: Awaited<ReturnType<typeof harvestCost>>;
+  commitments?: Awaited<ReturnType<typeof harvestCommitments>>;
+  budgets?: Awaited<ReturnType<typeof harvestBudgets>>;
+};
+
 export class ScanRunner {
+  #queues = new Map<string, Promise<unknown>>();
+
   constructor(
     private readonly store: MemoryStore,
     private readonly harvester: Harvester,
@@ -282,7 +358,22 @@ export class ScanRunner {
       coverageSummary: EMPTY_COVERAGE_SUMMARY,
       checks: [],
     });
-    const done = this.execute(input.orgId, job.id);
+    const tail = this.#queues.get(input.orgId);
+    if (tail) {
+      this.log.info({ event: "scan.queued", orgId: input.orgId, scanId: job.id }, "scan.queued");
+    }
+    const done = tail
+      ? tail.then((): Promise<ScanJob> | ScanJob =>
+          this.store.deletion(input.orgId) ? this.cancelQueued(input.orgId, job) : this.execute(input.orgId, job.id),
+        )
+      : this.execute(input.orgId, job.id);
+    const settled = done.catch(() => undefined);
+    this.#queues.set(input.orgId, settled);
+    void settled.then(() => {
+      if (this.#queues.get(input.orgId) === settled) {
+        this.#queues.delete(input.orgId);
+      }
+    });
     done.catch((error: unknown) => {
       this.log.error(
         { event: "scan.execution_failed", orgId: input.orgId, scanId: job.id, err: error },
@@ -290,6 +381,11 @@ export class ScanRunner {
       );
     });
     return { job, started: true, done };
+  }
+
+  private cancelQueued(orgId: string, job: ScanJob): ScanJob {
+    this.log.info({ event: "scan.cancelled", orgId, scanId: job.id }, "scan.cancelled");
+    return { ...job, status: "cancelled" };
   }
 
   private async execute(orgId: string, jobId: string): Promise<ScanJob> {
@@ -309,17 +405,18 @@ export class ScanRunner {
     let harvesting = true;
     try {
       const settings = this.store.snapshot(orgId).settings;
-      const result = await this.harvester.harvest({
-        orgId,
-        subscriptionId: current.subscriptionId,
-        settings,
-      });
+      const result = await abortable(
+        signal,
+        this.harvester.harvest({
+          orgId,
+          subscriptionId: current.subscriptionId,
+          settings,
+        }),
+      );
       harvesting = false;
       if (signal.aborted) {
         return cancelled();
       }
-      this.store.putInventory(orgId, result.inventory);
-      this.store.putFacts(orgId, result.facts);
       this.store.patchJob(orgId, jobId, { cloud: result.inventory.cloud });
       const checked = runChecks({
         inventory: result.inventory,
@@ -329,34 +426,37 @@ export class ScanRunner {
         settings,
       });
       const replaceIds = new Set(registeredCheckIds(result.inventory.cloud));
-      const existing = this.store.snapshot(orgId);
-      let findings = mergeScanFindings(
-        existing.findings,
-        checked.findings,
-        replaceIds,
-        current.subscriptionId,
+      const collected =
+        result.inventory.cloud === "azure"
+          ? await this.collectAzureHarvests(current.subscriptionId, signal)
+          : {};
+      if (!collected) {
+        return cancelled();
+      }
+      const fresh = this.store.snapshot(orgId);
+      this.store.putInventory(
+        orgId,
+        mergeScanInventory(fresh.inventories[result.inventory.cloud], result.inventory, current.subscriptionId),
       );
-      let coverage = mergeScanCoverage(
-        existing.coverage,
-        checked.coverage,
-        replaceIds,
-        current.subscriptionId,
+      this.store.putFacts(
+        orgId,
+        mergeScanFacts(fresh.facts, result.facts, result.inventory, current.subscriptionId),
       );
+      let findings = mergeScanFindings(fresh.findings, checked.findings, replaceIds, current.subscriptionId);
+      let coverage = mergeScanCoverage(fresh.coverage, checked.coverage, replaceIds, current.subscriptionId);
       if (result.inventory.cloud === "azure") {
-        const harvested = await this.runAzureHarvests(orgId, current.subscriptionId, findings, coverage);
-        if (signal.aborted) {
-          return cancelled();
-        }
-        findings = harvested.findings;
-        coverage = harvested.coverage;
-        coverage = fillUnrunLaunchCoverage(coverage, current.subscriptionId);
+        const applied = this.applyAzureHarvests(orgId, current.subscriptionId, collected, findings, coverage);
+        findings = applied.findings;
+        coverage = fillUnrunLaunchCoverage(applied.coverage, current.subscriptionId);
       }
       this.store.putFindings(orgId, findings);
       this.store.putCoverage(orgId, coverage);
+      const written = this.store.snapshot(orgId);
+      coverage = written.coverage;
       this.store.putIssues(
         orgId,
         applyScanToIssues({
-          issues: this.store.snapshot(orgId).issues,
+          issues: written.issues,
           findings,
           coverage,
           scanId: jobId,
@@ -425,46 +525,76 @@ export class ScanRunner {
     }
   }
 
-  private async runAzureHarvests(
-    orgId: string,
-    subscriptionId: string,
-    findings: Finding[],
-    coverage: CoverageEntry[],
-  ): Promise<{ findings: Finding[]; coverage: CoverageEntry[] }> {
+  private async collectAzureHarvests(subscriptionId: string, signal: AbortSignal): Promise<AzureHarvests | null> {
     const billingScope = `/subscriptions/${subscriptionId}`;
+    const collected: AzureHarvests = {};
     if (this.harvestClients.costClient) {
-      const harvested = await harvestCost({
+      collected.cost = await abortable(
+        signal,
+        harvestCost({
         client: this.harvestClients.costClient,
         subscriptionId,
         billingScope,
         agreementType: "payg",
         asOf: this.clock(),
-      });
-      coverage = applyCostCoverage(coverage, harvested.coverage);
-      this.store.putCost(orgId, harvested.ok ? harvested.snapshot : null);
+        }),
+      );
+      if (signal.aborted) {
+        return null;
+      }
     }
     if (this.harvestClients.commitmentClient) {
-      const harvested = await harvestCommitments({
+      collected.commitments = await abortable(
+        signal,
+        harvestCommitments({
         client: this.harvestClients.commitmentClient,
         subscriptionId,
         billingScope,
-      });
-      coverage = applyCommitmentCoverage(coverage, harvested.coverage);
-      if (harvested.ok) {
-        this.store.putCommitments(orgId, harvested.snapshot);
-        findings = mergeCommitmentFindings(findings, harvested.findings);
-      } else {
-        this.store.putCommitments(orgId, null);
+        }),
+      );
+      if (signal.aborted) {
+        return null;
       }
     }
     if (this.harvestClients.budgetClient) {
-      const harvested = await harvestBudgets({
+      collected.budgets = await abortable(
+        signal,
+        harvestBudgets({
         client: this.harvestClients.budgetClient,
         lastConfirmed: this.clock(),
-      });
-      coverage = applyBudgetCoverage(coverage, harvested.coverage);
-      this.store.putBudgets(orgId, harvested.snapshot);
-      findings = mergeBudgetFindings(findings, harvested.findings);
+        }),
+      );
+      if (signal.aborted) {
+        return null;
+      }
+    }
+    return collected;
+  }
+
+  private applyAzureHarvests(
+    orgId: string,
+    subscriptionId: string,
+    collected: AzureHarvests,
+    findings: Finding[],
+    coverage: CoverageEntry[],
+  ): { findings: Finding[]; coverage: CoverageEntry[] } {
+    if (collected.cost) {
+      coverage = applyCostCoverage(coverage, collected.cost.coverage);
+      this.store.putCost(orgId, collected.cost.ok ? collected.cost.snapshot : null, subscriptionId);
+    }
+    if (collected.commitments) {
+      coverage = applyCommitmentCoverage(coverage, collected.commitments.coverage);
+      if (collected.commitments.ok) {
+        this.store.putCommitments(orgId, collected.commitments.snapshot, subscriptionId);
+        findings = mergeCommitmentFindings(findings, collected.commitments.findings, subscriptionId);
+      } else {
+        this.store.putCommitments(orgId, null, subscriptionId);
+      }
+    }
+    if (collected.budgets) {
+      coverage = applyBudgetCoverage(coverage, collected.budgets.coverage);
+      this.store.putBudgets(orgId, collected.budgets.snapshot);
+      findings = mergeBudgetFindings(findings, collected.budgets.findings);
     }
     return { findings, coverage };
   }
