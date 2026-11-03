@@ -114,6 +114,8 @@ export function factsFromGcpManifest(manifest: GcpGroundTruthManifest): Resource
     }
     if (item.type === "sqladmin.googleapis.com/Instance") {
       fields.resourceKind = "sql";
+      fields.instanceName = item.id;
+      fields.projectId = item.project;
     }
     if (item.type === "container.googleapis.com/Cluster") {
       fields.resourceKind = "gke";

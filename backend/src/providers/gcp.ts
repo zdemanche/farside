@@ -8,6 +8,7 @@ import {
   inventoryFromGcpManifest,
   type GcpGroundTruthManifest,
 } from "../gcp-inventory.js";
+import { checkGcpSqlHaOrBackup } from "../gcp-resilience.js";
 import { checkGcpSqlGkeSupport } from "../gcp-support.js";
 import docGcpGroundTruth from "../../../docs/gcp/ground-truth.json" with { type: "json" };
 import { fixtureHarvester } from "./fixture-harvester.js";
@@ -26,5 +27,11 @@ export const gcpProvider: CloudProvider = {
     const manifest = docGcpGroundTruth as GcpGroundTruthManifest;
     return fixtureHarvester(inventoryFromGcpManifest(manifest), factsFromGcpManifest(manifest), clock);
   },
-  checks: [checkGcpUnattachedDisks, checkGcpUnusedIps, checkGcpOldSnapshotsAndImages, checkGcpSqlGkeSupport],
+  checks: [
+    checkGcpUnattachedDisks,
+    checkGcpUnusedIps,
+    checkGcpOldSnapshotsAndImages,
+    checkGcpSqlHaOrBackup,
+    checkGcpSqlGkeSupport,
+  ],
 };
