@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import type { Finding } from "@farside/scan-contracts";
 import { buildApp } from "./app.js";
+import { parseContract } from "./billing.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
 import { GRANTS_TO_REMOVE } from "./offboard.js";
 import { addHours } from "./scheduler.js";
@@ -158,5 +159,58 @@ describe("offboard", () => {
     expect(other.statusCode).toBe(200);
     expect(other.json().connections).toHaveLength(1);
     expect(store.hasOrg("org-b")).toBe(true);
+  });
+});
+
+describe("deletion record as erasure evidence", () => {
+  const SERVER_NOW = "2026-10-05T12:00:00.000Z";
+  const store = new MemoryStore(() => SERVER_NOW);
+  const app = buildApp(store, { clock: () => SERVER_NOW });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it("stamps the server clock, the actor, the trigger and purge counts, ignoring body time", async () => {
+    store.putInventory("org-a", inventoryFromManifest(MANIFEST));
+    store.putFindings("org-a", [fail]);
+    store.putConnection("org-a", { tenantId: "tenant-a", subscriptionId: "main" });
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/offboard",
+      headers: ORG,
+      payload: { confirm: true, exportOffered: true, now: "1970-01-01T00:00:00.000Z" },
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toMatchObject({
+      deletedAt: SERVER_NOW,
+      requestedBy: "actor-a",
+      trigger: "customer",
+    });
+    expect(body.rowsPurged).toMatchObject({
+      connections: 1,
+      inventoryResources: inventoryFromManifest(MANIFEST).resources.length,
+      findings: 1,
+      settings: 1,
+      scans: 0,
+      contract: 0,
+    });
+    expect(body.rowsPurged.inventoryResources).toBeGreaterThan(0);
+    expect(store.deletion("org-a")?.rowsPurged).toEqual(body.rowsPurged);
+  });
+
+  it("records the system as requester on a retention offboard", () => {
+    const contract = parseContract({ plan: "farside-standard", startDate: SERVER_NOW, unpaidAt: SERVER_NOW }, SERVER_NOW);
+    store.putContract("org-r", contract);
+    const elapsed = new Date(Date.parse(SERVER_NOW) + 51 * 86_400_000).toISOString();
+    const [record] = store.sweepRetention(elapsed);
+    expect(record).toMatchObject({
+      orgId: "org-r",
+      trigger: "retention",
+      requestedBy: "system",
+      deletedAt: elapsed,
+    });
+    expect(record?.rowsPurged.contract).toBe(1);
   });
 });

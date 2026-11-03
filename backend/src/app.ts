@@ -1015,7 +1015,8 @@ export function buildApp(
   );
 
   app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/offboard", async (request, reply) => {
-    if (!requireOrg(request, reply, store, { allowDeleted: true })) {
+    const session = requireOrg(request, reply, store, { allowDeleted: true });
+    if (!session) {
       return reply;
     }
     const existing = store.deletion(request.params.orgId);
@@ -1034,7 +1035,7 @@ export function buildApp(
       });
     }
     const now = clientTime(body.now);
-    const record = store.offboard(request.params.orgId, now);
+    const record = store.offboard(request.params.orgId, now, "customer", session.actorId);
     return sendClean(reply, 200, deletionView(record));
   });
 

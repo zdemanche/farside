@@ -11,7 +11,7 @@ import { retentionElapsed, type Contract } from "./billing.js";
 import type { BudgetSnapshot } from "./budgets.js";
 import type { CommitmentSnapshot } from "./commitments.js";
 import type { CostSnapshot } from "./cost.js";
-import { DeletedOrgError, type DeletionRecord } from "./offboard.js";
+import { DeletedOrgError, type DeletionRecord, type RowsPurged } from "./offboard.js";
 import type { ScanJob } from "./scans.js";
 import { emptySchedule, type ScheduleState } from "./scheduler.js";
 import { assertNoSecrets } from "./secrets.js";
@@ -130,10 +130,33 @@ export class MemoryStore {
     );
   }
 
+  #rowsPurged(org: OrgState | undefined): RowsPurged {
+    const inventories = [
+      ...Object.values(org?.inventories ?? {}),
+      ...(org?.inventory && !org.inventories[org.inventory.cloud] ? [org.inventory] : []),
+    ];
+    return {
+      connections: org?.connections.length ?? 0,
+      inventoryResources: inventories.reduce((sum, inventory) => sum + inventory.resources.length, 0),
+      facts: org?.facts.length ?? 0,
+      findings: org?.findings.length ?? 0,
+      coverage: org?.coverage.length ?? 0,
+      issues: org?.issues.length ?? 0,
+      scans: org?.scans.length ?? 0,
+      costSnapshots: org?.cost ? 1 : 0,
+      commitments: org?.commitments ? 1 : 0,
+      budgets: org?.budgets ? 1 : 0,
+      alerts: org?.alerts ? 1 : 0,
+      settings: org ? 1 : 0,
+      contract: org?.contract ? 1 : 0,
+    };
+  }
+
   offboard(
     orgId: string,
     now: string = this.clock(),
     trigger: DeletionRecord["trigger"] = "customer",
+    requestedBy: string = trigger === "retention" ? "system" : "unknown",
   ): DeletionRecord {
     const existing = this.#deletions.get(orgId);
     if (existing) {
@@ -152,7 +175,9 @@ export class MemoryStore {
     this.#runningScans.delete(orgId);
     const record: DeletionRecord = {
       orgId,
+      requestedBy,
       deletedAt: now,
+      rowsPurged: this.#rowsPurged(org),
       connectionsRemoved,
       scansStopped,
       scheduleCancelled: schedulePending || Boolean(org?.settings.scanScheduleEnabled),
