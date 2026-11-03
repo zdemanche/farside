@@ -34,8 +34,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 17. **E4-S2** — merged (#244).
 18. **E4-S3** — merged (#245).
 19. **E4-S4** — merged (#246).
-20. **E4-S5** — this change: cost/waste API and assessed-only totals. Console page waits on #243.
-21. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+20. **E4-S5** — merged (#247). Console page waits on #243.
+21. **E4-S6** — this change: headline API and exclude unproven checks. Estate render waits on #243.
+22. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -221,10 +222,10 @@ Azure Cost Management and reservations need a live subscription. Floor/burst mat
 | `E4-S5-T1` | #146 | Expose cost and waste in the API | (a) this change | Cost/waste API. |
 | `E4-S5-T2` | #147 | Build the Cost and waste page | (a) leftover | Left for the design-system pass (#243). |
 | `E4-S5-T3` | #148 | Compute waste totals from assessed findings only | (a) this change | Waste totals from assessed findings only. |
-| `E4-S6` | #149 | CTO headline on the Estate overview | (a) doable in code now | CTO headline from stored figures. |
-| `E4-S6-T1` | #150 | Build the headline data endpoint | (a) doable in code now | Headline endpoint. |
-| `E4-S6-T2` | #151 | Render the headline with drill-through links | (a) doable in code now | Headline UI with drill-through. |
-| `E4-S6-T3` | #152 | Label unproven checks and exclude them from figures | (a) doable in code now | Exclude checks without a live run record. |
+| `E4-S6` | #149 | CTO headline on the Estate overview | (a) this change | Headline API and unproven-check exclusion. Estate render is #151 / #243. |
+| `E4-S6-T1` | #150 | Build the headline data endpoint | (a) this change | Headline endpoint. |
+| `E4-S6-T2` | #151 | Render the headline with drill-through links | (a) leftover | Left for the design-system pass (#243). |
+| `E4-S6-T3` | #152 | Label unproven checks and exclude them from figures | (a) this change | Exclude checks without a live run record. |
 | `E4-S7` | #153 | Every Azure cost check run live and accuracy measured | (c) live Azure / GCP / test tenant | Every Azure cost check live. D3 (#3). |
 | `E4-S7-T1` | #154 | Run all cost checks live and record results | (c) live Azure / GCP / test tenant | Run cost checks on the test subscription. |
 | `E4-S7-T2` | #155 | Diff findings against the manifest | (c) live Azure / GCP / test tenant | Diff against the manifest. |

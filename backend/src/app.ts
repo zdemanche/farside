@@ -37,6 +37,7 @@ import {
   type CostQueryClient,
 } from "./cost.js";
 import { estateOverview } from "./estate.js";
+import { buildHeadline } from "./headline.js";
 import { costWasteView } from "./waste.js";
 import { applyOwnerTag, filterInventory, groupInventory, noOwnerTotal } from "./inventory.js";
 import { SecretLeakError, assertNoSecrets } from "./secrets.js";
@@ -328,6 +329,22 @@ export function buildApp(
         cost: org.cost,
         alerts: org.alerts,
         commitments: org.commitments,
+        findings: org.findings,
+        coverage: org.coverage,
+      }),
+    );
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/headline", async (request, reply) => {
+    if (!requireOrg(request, reply)) {
+      return reply;
+    }
+    const org = store.snapshot(request.params.orgId);
+    return sendClean(
+      reply,
+      200,
+      buildHeadline({
+        cost: org.cost,
         findings: org.findings,
         coverage: org.coverage,
       }),
