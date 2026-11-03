@@ -16,6 +16,8 @@ In-repo Cost Management harvest against a multi-page fake, billing scope and cur
 | E4-S4-T1 | #141 | Floor is the rolling 14-day minimum; burst is actual minus floor. |
 | E4-S4-T2 | #142 | Org, subscription, service, and new-service rules use relative multiples of the customer's own history. |
 | E4-S4-T3 | #143 | Synthetic replay in `docs/azure/alert-replay.json` pins four new alerts. A quieter series must change that count on purpose. |
+| E4-S5-T1 | #146 | GET `/v1/orgs/:orgId/cost-waste` returns spend, floor/burst, commitments, and named waste. Failed cost harvest returns no figures. |
+| E4-S5-T3 | #148 | Waste totals are a range from assessed findings only and count unassessed waste scopes. |
 
 ## Leftovers
 
@@ -34,6 +36,10 @@ The test estate will not buy commitments. Fixture utilization in `docs/azure/com
 ### Live budget harvest (#137)
 
 Budget definitions are read from the ground-truth manifest. A live Cost Management budgets list stays leftover.
+
+### Cost and waste page (#147)
+
+The API is ready. The console page is left for the design-system pass (#243) so this change does not restyle the shell.
 
 ### Email digest (#144)
 

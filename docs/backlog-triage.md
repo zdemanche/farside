@@ -33,8 +33,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 16. **E4-S1** — merged (#242).
 17. **E4-S2** — merged (#244).
 18. **E4-S3** — merged (#245).
-19. **E4-S4** — this change: floor/burst, relative alert rules, synthetic backtest. Email send is leftover.
-20. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+19. **E4-S4** — merged (#246).
+20. **E4-S5** — this change: cost/waste API and assessed-only totals. Console page waits on #243.
+21. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -216,10 +217,10 @@ Azure Cost Management and reservations need a live subscription. Floor/burst mat
 | `E4-S4-T2` | #142 | Implement the four alert rules with relative thresholds | (a) this change | Four relative alert rules. |
 | `E4-S4-T3` | #143 | Add a backtest regression suite | (a) this change | Synthetic replay suite; live history is (c). |
 | `E4-S4-T4` | #144 | Deliver one digest per run by email | (d) external system or repo | Customer-configured email delivery (SES or equivalent in the tenant account). |
-| `E4-S5` | #145 | Cost and waste page with named waste | (a) doable in code now | Cost and waste page over stored figures and findings. |
-| `E4-S5-T1` | #146 | Expose cost and waste in the API | (a) doable in code now | Cost/waste API. |
-| `E4-S5-T2` | #147 | Build the Cost and waste page | (a) doable in code now | Cost and waste page. |
-| `E4-S5-T3` | #148 | Compute waste totals from assessed findings only | (a) doable in code now | Waste totals from assessed findings only. |
+| `E4-S5` | #145 | Cost and waste page with named waste | (a) this change | API and assessed totals. Console page is #147 / #243. |
+| `E4-S5-T1` | #146 | Expose cost and waste in the API | (a) this change | Cost/waste API. |
+| `E4-S5-T2` | #147 | Build the Cost and waste page | (a) leftover | Left for the design-system pass (#243). |
+| `E4-S5-T3` | #148 | Compute waste totals from assessed findings only | (a) this change | Waste totals from assessed findings only. |
 | `E4-S6` | #149 | CTO headline on the Estate overview | (a) doable in code now | CTO headline from stored figures. |
 | `E4-S6-T1` | #150 | Build the headline data endpoint | (a) doable in code now | Headline endpoint. |
 | `E4-S6-T2` | #151 | Render the headline with drill-through links | (a) doable in code now | Headline UI with drill-through. |
