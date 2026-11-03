@@ -1,7 +1,10 @@
-export type DataErrorKind = "denied" | "not-found" | "network" | "failed";
-
-export const ROLE_READ = "Farside Reader";
-export const ROLE_WRITE = "Farside Admin";
+export type DataErrorKind =
+  | "unauthenticated"
+  | "denied"
+  | "gone"
+  | "not-found"
+  | "network"
+  | "failed";
 
 export class DataError extends Error {
   readonly kind: DataErrorKind;
@@ -15,10 +18,15 @@ export class DataError extends Error {
   }
 }
 
+const KIND_BY_STATUS: Record<number, DataErrorKind> = {
+  401: "unauthenticated",
+  403: "denied",
+  404: "not-found",
+  410: "gone",
+};
+
 export function errorFromStatus(status: number, title: string): DataError {
-  const kind: DataErrorKind =
-    status === 401 || status === 403 ? "denied" : status === 404 ? "not-found" : "failed";
-  return new DataError(kind, status, `${status} ${title}`.trim());
+  return new DataError(KIND_BY_STATUS[status] ?? "failed", status, `${status} ${title}`.trim());
 }
 
 export function toDataError(error: unknown): DataError {
@@ -29,12 +37,21 @@ export function toDataError(error: unknown): DataError {
   return new DataError("network", null, message);
 }
 
-export function failureMessage(error: DataError, action: string, role: string = ROLE_READ): string {
-  if (error.kind === "denied") {
-    return `You do not have permission to ${action}. Ask your Farside administrator for the ${role} role.`;
+export function isRetryable(error: DataError): boolean {
+  return error.kind !== "unauthenticated" && error.kind !== "denied" && error.kind !== "gone";
+}
+
+export function failureMessage(error: DataError, action: string): string {
+  switch (error.kind) {
+    case "unauthenticated":
+      return `Not signed in. Sign in to ${action}.`;
+    case "denied":
+      return `This session doesn't have access to this organisation, so you cannot ${action}.`;
+    case "gone":
+      return "This organisation has been deleted.";
+    case "network":
+      return `Could not reach the Farside API to ${action}.`;
+    default:
+      return `Could not ${action}: ${error.message}`;
   }
-  if (error.kind === "network") {
-    return `Could not reach the Farside API to ${action}.`;
-  }
-  return `Could not ${action}: ${error.message}`;
 }

@@ -145,8 +145,8 @@ describe.each(CASES)("$name states", ({ loader, screen: view, populated, empty }
   it("names the role to request when access is denied", async () => {
     renderScreen(view(), failing(loader, new DataError("denied", 403, "403 Forbidden")));
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/do not have permission/);
-    expect(alert.textContent).toMatch(/Farside Reader/);
+    expect(alert.textContent).toMatch(/doesn't have access to this organisation/);
+    expect(alert.textContent).not.toMatch(/Farside (Reader|Admin)/);
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   });
 

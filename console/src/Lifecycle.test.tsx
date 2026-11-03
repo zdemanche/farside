@@ -1,7 +1,7 @@
 import { cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Lifecycle } from "./Lifecycle";
-import { expectAxeClean, renderScreen } from "./test-utils";
+import { expectAxeClean, renderScreen, sourceWith } from "./test-utils";
 
 describe("Lifecycle screen", () => {
   beforeEach(() => {
@@ -25,5 +25,23 @@ describe("Lifecycle screen", () => {
     expect(table.textContent).toContain("Standard_B1ls");
     expect(table.textContent).toContain("docs/azure/retiring-skus.json");
     await expectAxeClean(container);
+  });
+
+  it("says not checked yet on a never-scanned org", async () => {
+    renderScreen(
+      <Lifecycle />,
+      sourceWith({
+        overview: async () => ({
+          empty: true,
+          resourceTotal: 0,
+          noOwnerTotal: 0,
+          coverage: { assessed: 0, unassessed: 0, undetermined: 0 },
+          healthScore: null,
+        }),
+        lifecycle: async () => ({ rows: [], within90: 0 }),
+      }),
+    );
+    expect(await screen.findByText(/Not checked yet/)).toBeTruthy();
+    expect(screen.queryByText(/Nothing is losing support/)).toBeNull();
   });
 });

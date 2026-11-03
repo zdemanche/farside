@@ -29,7 +29,7 @@ describe("demo mode screens", () => {
   it.each(PAGES)("shows the Demo label and populated $heading", async ({ hash, heading, populated }) => {
     window.location.hash = hash;
     render(<App demo />);
-    expect(screen.getByText(DEMO_LABEL)).toBeTruthy();
+    expect(await screen.findByText(DEMO_LABEL)).toBeTruthy();
     expect(screen.getByRole("heading", { name: heading })).toBeTruthy();
     expect(await screen.findByText(populated)).toBeTruthy();
   });

@@ -25,7 +25,7 @@ const FIRST_SCAN_AT = "2026-10-14T12:00:00.000Z";
 const NOT_RUN = "This check has not run on this subscription yet.";
 const NOT_RUN_CLOSER = "Run a scan after connect, or wait for the unattended scan.";
 
-export const DEMO_RESOURCES: InventoryRecord[] = [
+const DEMO_RESOURCES: InventoryRecord[] = [
   {
     resourceUri:
       "/subscriptions/main/resourceGroups/farside-seed/providers/Microsoft.Compute/disks/disk-unattached",

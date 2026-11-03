@@ -9,10 +9,10 @@ describe("console shell", () => {
     window.location.hash = "";
   });
 
-  it("renders the product name and empty state", () => {
+  it("renders the product name and empty state", async () => {
     render(<App demo />);
     expect(screen.getByRole("heading", { name: PRODUCT_NAME })).toBeTruthy();
-    expect(screen.getByText(EMPTY_STATE)).toBeTruthy();
+    expect(await screen.findByText(EMPTY_STATE)).toBeTruthy();
   });
 
   it("says it is not connected instead of showing data when no source is configured", () => {
@@ -48,9 +48,9 @@ describe("console shell", () => {
     expect(document.querySelector("[aria-current]")).toBeNull();
   });
 
-  it("opens Connect from the hash", () => {
+  it("opens Connect from the hash", async () => {
     window.location.hash = "#connect";
     render(<App demo />);
-    expect(screen.getByRole("heading", { name: "Connect Azure" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Connect Azure" })).toBeTruthy();
   });
 });

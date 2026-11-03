@@ -1,10 +1,22 @@
 import { Chip, coverageTone } from "./Chip";
-import { useSource } from "./data/context";
+import { useOverview, useSource } from "./data/context";
+import type { RecoveryView } from "./data/types";
 import { useResource } from "./data/use-resource";
-import { ScreenState } from "./ScreenState";
+import { ScreenState, gapsMessage } from "./ScreenState";
+
+function backupSummary({ unprotected, checked, undetermined }: RecoveryView): string {
+  if (undetermined === 0) {
+    return `${unprotected} of ${checked} production systems lack backup`;
+  }
+  const unchecked = `${undetermined} could not be checked`;
+  return checked === 0
+    ? `${unchecked} for backup`
+    : `${unprotected} of ${checked} checked lack backup; ${unchecked}`;
+}
 
 export function Recovery() {
   const source = useSource();
+  const overview = useOverview();
   const view = useResource((signal) => source.recovery(signal), [source]);
   return (
     <>
@@ -20,14 +32,14 @@ export function Recovery() {
         partial
         empty={(data) =>
           data.rows.length === 0
-            ? "No backup or redundancy gaps were found on the scopes that were assessed."
+            ? gapsMessage(overview, "No backup or redundancy gaps were found on the scopes that were assessed.")
             : null
         }
       >
         {(data) => (
           <>
             <p className="page-meta" role="status" aria-live="polite">
-              {data.unprotected} of {data.production} production systems lack backup
+              {backupSummary(data)}
             </p>
             <div
               className="table-wrap"

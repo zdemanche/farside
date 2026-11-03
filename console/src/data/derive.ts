@@ -13,6 +13,7 @@ const RESOURCE_KEYS = [
   "natGatewayId",
   "sqlResourceId",
   "databaseId",
+  "resourceName",
   "certificateId",
   "gatewayId",
   "resourceId",
@@ -21,7 +22,7 @@ const RESOURCE_KEYS = [
 const DAY_MS = 86_400_000;
 const LIFECYCLE_WINDOW_DAYS = 90;
 
-export function resourceIdOf(fields: Fields, fallback: string): string {
+function resourceIdOf(fields: Fields, fallback: string): string {
   for (const key of RESOURCE_KEYS) {
     const value = fields[key];
     if (typeof value === "string" && value.length > 0) {
@@ -57,11 +58,20 @@ export function recoveryFrom(findings: Finding[]): RecoveryView {
         coverage: finding.result === "fail" ? ("assessed" as const) : ("undetermined" as const),
       };
     });
+  const undetermined = backup.filter((finding) => finding.result === "undetermined").length;
   return {
     rows,
     unprotected: backup.filter((finding) => finding.result === "fail").length,
-    production: backup.length,
+    checked: backup.length - undetermined,
+    undetermined,
   };
+}
+
+function lifecycleKind(checkId: string): string {
+  if (checkId.endsWith("-retiring-skus")) {
+    return "sku";
+  }
+  return checkId.endsWith("-support") ? "support" : "certificate";
 }
 
 export function lifecycleFrom(findings: Finding[], asOf: string): LifecycleView {
@@ -70,7 +80,7 @@ export function lifecycleFrom(findings: Finding[], asOf: string): LifecycleView 
     .filter((finding) => finding.checkId.includes("-lifecycle-") && finding.result === "fail")
     .flatMap((finding) => {
       const fields = finding.evidence.fields;
-      const dated = fields.retirementDate ?? fields.expirationDate;
+      const dated = fields.retirementDate ?? fields.expirationDate ?? fields.supportEnd;
       if (typeof dated !== "string") {
         return [];
       }
@@ -82,7 +92,7 @@ export function lifecycleFrom(findings: Finding[], asOf: string): LifecycleView 
         {
           id: `${finding.checkId}:${resourceId}`,
           date: dated.slice(0, 10),
-          kind: finding.checkId.endsWith("-retiring-skus") ? "sku" : "certificate",
+          kind: lifecycleKind(finding.checkId),
           title: title ?? resourceId,
           source: typeof fields.source === "string" ? fields.source : finding.checkId,
         },

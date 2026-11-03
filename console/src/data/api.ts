@@ -13,7 +13,7 @@ import type {
   ScanRow,
 } from "./types";
 
-export const ORG_HEADER = "x-farside-org";
+const ORG_HEADER = "x-farside-org";
 
 type StoredIssue = {
   id: string;

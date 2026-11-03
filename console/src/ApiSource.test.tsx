@@ -2,8 +2,34 @@ import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { apiSource } from "./data/api";
+import { demoSource } from "./data/demo";
 
-const FIXTURE_NAMES = ["disk-unattached", "vm-prod-no-backup", "scan-1"];
+async function fixtureSentinels(): Promise<string[]> {
+  const demo = demoSource();
+  const [inventory, issues, scans, blind, recovery, lifecycle] = await Promise.all([
+    demo.inventory(),
+    demo.issues(),
+    demo.scans(),
+    demo.blindSpots(),
+    demo.recovery(),
+    demo.lifecycle(),
+  ]);
+  return [
+    "disk-unattached",
+    "vm-prod-no-backup",
+    "scan-1",
+    "Health score 13",
+    "Resources 4",
+    "Assessed scopes 15",
+    "15 assessed",
+    ...inventory.map((resource) => resource.displayName),
+    ...issues.flatMap((issue) => [issue.id, issue.resourceId]),
+    ...scans.map((scan) => scan.id),
+    ...blind.spots.map((spot) => spot.checkId),
+    ...recovery.rows.map((row) => row.system),
+    ...lifecycle.rows.map((row) => row.title),
+  ];
+}
 
 const PAYLOADS: Record<string, unknown> = {
   "/estate": {
@@ -77,7 +103,7 @@ describe("App against the API source", () => {
     );
     await waitFor(() => expect(container.textContent).not.toMatch(/Loading /));
     const text = container.textContent ?? "";
-    for (const name of FIXTURE_NAMES) {
+    for (const name of await fixtureSentinels()) {
       expect(text).not.toContain(name);
     }
     expect(text).not.toContain("Demo");
@@ -102,7 +128,8 @@ describe("apiSource", () => {
   });
 
   it.each([
-    [401, "denied"],
+    [401, "unauthenticated"],
+    [410, "gone"],
     [403, "denied"],
     [404, "not-found"],
     [503, "failed"],
@@ -177,7 +204,8 @@ describe("apiSource", () => {
     expect(await source.recovery()).toEqual({
       rows: [expect.objectContaining({ system: "vm-1", coverage: "assessed" })],
       unprotected: 1,
-      production: 1,
+      checked: 1,
+      undetermined: 0,
     });
   });
 });

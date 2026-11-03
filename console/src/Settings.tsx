@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 import { useSource } from "./data/context";
-import { ROLE_WRITE, failureMessage, toDataError } from "./data/error";
+import { failureMessage, toDataError } from "./data/error";
 import type { OrgSettings } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { ScreenState } from "./ScreenState";
@@ -64,11 +64,12 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
     setStatus("");
     try {
       const saved = await source.saveSettings(next);
+      const demoPrefix = source.mode === "demo" ? "Saved for this demo session only. " : "";
       setStatus(
-        `Saved owner tag ${saved.ownerTagKey}, production marker ${saved.productionTagKey}=${saved.productionTagValue}, and snapshot retention ${saved.snapshotRetentionDays} days. The next scan will use these conventions. Next run follows the ${saved.scanIntervalHours}-hour schedule.`,
+        `${demoPrefix}Saved owner tag ${saved.ownerTagKey}, production marker ${saved.productionTagKey}=${saved.productionTagValue}, and snapshot retention ${saved.snapshotRetentionDays} days. The next scan will use these conventions. Next run follows the ${saved.scanIntervalHours}-hour schedule.`,
       );
     } catch (error) {
-      setFailure(failureMessage(toDataError(error), "save settings", ROLE_WRITE));
+      setFailure(failureMessage(toDataError(error), "save settings"));
     } finally {
       setSaving(false);
     }

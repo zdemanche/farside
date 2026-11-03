@@ -1,11 +1,18 @@
 import type { ReactNode } from "react";
-import { useSource } from "./data/context";
-import { failureMessage } from "./data/error";
-import { useResource, type Resource } from "./data/use-resource";
+import { useOverview } from "./data/context";
+import { failureMessage, isRetryable } from "./data/error";
+import type { EstateOverview } from "./data/types";
+import type { Resource } from "./data/use-resource";
 
 function PartialNotice() {
-  const source = useSource();
-  const overview = useResource((signal) => source.overview(signal), [source]);
+  const overview = useOverview();
+  if (overview.status === "error") {
+    return (
+      <p className="notice">
+        Coverage unknown: coverage could not be loaded, so these results may be partial.
+      </p>
+    );
+  }
   if (overview.status !== "ready") {
     return null;
   }
@@ -20,6 +27,15 @@ function PartialNotice() {
       covers assessed scopes only. <a href="#blind-spots">See blind spots</a>
     </p>
   );
+}
+
+export function gapsMessage(overview: Resource<EstateOverview>, noneFound: string): string {
+  if (overview.status !== "ready") {
+    return "Coverage is unknown, so an empty list does not mean nothing is wrong.";
+  }
+  return overview.data.empty || overview.data.coverage.assessed === 0
+    ? "Not checked yet. Connect a cloud estate and run a scan."
+    : noneFound;
 }
 
 export function ScreenState<T>({
@@ -52,11 +68,11 @@ export function ScreenState<T>({
     return (
       <div className="screen-state screen-state-alert" role="alert">
         <p>{failureMessage(error, `load ${label}`)}</p>
-        {error.kind === "denied" ? null : (
+        {isRetryable(error) ? (
           <button className="action action-primary" type="button" onClick={resource.retry}>
             Retry
           </button>
-        )}
+        ) : null}
       </div>
     );
   }

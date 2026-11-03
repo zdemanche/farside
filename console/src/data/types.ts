@@ -80,7 +80,8 @@ export type RecoveryRow = {
 export type RecoveryView = {
   rows: RecoveryRow[];
   unprotected: number;
-  production: number;
+  checked: number;
+  undetermined: number;
 };
 
 export type LifecycleRow = {

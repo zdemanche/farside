@@ -37,7 +37,7 @@ Every screen reads from one `DataSource` (`console/src/data/`), passed down by R
 
 Fixtures are imported only by `data/demo.ts` and tests. Recovery and Lifecycle have no backend route of their own; both are derived from `GET /findings`.
 
-`useResource` gives `loading | error | ready`, and `<ScreenState>` renders each: `role="status"` while loading, `role="alert"` with Retry on failure, an explanatory empty message, a "Partial: N scopes not assessed" notice on screens that list assessed-scope results, and a permission message that names the role to request on 401/403.
+`useResource` gives `loading | error | ready`, and `<ScreenState>` renders each: `role="status"` while loading, `role="alert"` with Retry on failure, an explanatory empty message, a "Partial: N scopes not assessed" notice on screens that list assessed-scope results, and distinct messages for not signed in (401), no access to the organisation (403) and a deleted organisation (410), none of which offer Retry. The demo source is a separate chunk, loaded only in demo mode. The overview is fetched once and shared, so a never-scanned org reads "Not checked yet" instead of "no gaps".
 
 ## Upgrading the vendored files
 

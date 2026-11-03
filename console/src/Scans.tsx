@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Chip, coverageTone, type Tone } from "./Chip";
 import { useSource } from "./data/context";
 import type { ScanCoverageSummary, ScanRow, ScanStatus } from "./data/types";
@@ -11,6 +11,9 @@ const STATUS_TONE: Record<ScanStatus, Tone> = {
   succeeded: "good",
   failed: "crit",
 };
+
+const MAX_POLLS = 100;
+const MAX_DELAY_MS = 60_000;
 
 const isInFlight = (scan: ScanRow) => scan.status === "queued" || scan.status === "running";
 
@@ -104,11 +107,21 @@ export function Scans({
   const inFlight = rows?.find(isInFlight);
   const detailId = selectedId(hash);
 
+  const polls = useRef(0);
+
   useEffect(() => {
     if (!inFlight) {
+      polls.current = 0;
       return;
     }
-    const timer = window.setTimeout(refresh, pollMs);
+    if (polls.current >= MAX_POLLS) {
+      return;
+    }
+    const delay = Math.min(pollMs * 2 ** Math.min(polls.current, 16), MAX_DELAY_MS);
+    const timer = window.setTimeout(() => {
+      polls.current += 1;
+      refresh();
+    }, delay);
     return () => window.clearTimeout(timer);
   }, [rows, inFlight, pollMs, refresh]);
 
@@ -180,7 +193,12 @@ export function Scans({
           </>
         )}
       </ScreenState>
-      {detailId ? <ScanDetail id={detailId} /> : null}
+      {detailId ? (
+        <ScanDetail
+          key={`${detailId}:${rows?.find((scan) => scan.id === detailId)?.status}`}
+          id={detailId}
+        />
+      ) : null}
     </>
   );
 }

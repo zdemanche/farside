@@ -1,16 +1,24 @@
 import { createContext, useContext, type ReactNode } from "react";
-import type { DataSource } from "./types";
+import type { DataSource, EstateOverview } from "./types";
+import { useResource, type Resource } from "./use-resource";
 
-const SourceContext = createContext<DataSource | null>(null);
+type Shared = { source: DataSource; overview: Resource<EstateOverview> };
+
+const SharedContext = createContext<Shared | null>(null);
 
 export function DataProvider({ source, children }: { source: DataSource; children: ReactNode }) {
-  return <SourceContext.Provider value={source}>{children}</SourceContext.Provider>;
+  const overview = useResource((signal) => source.overview(signal), [source]);
+  return <SharedContext.Provider value={{ source, overview }}>{children}</SharedContext.Provider>;
 }
 
-export function useSource(): DataSource {
-  const source = useContext(SourceContext);
-  if (!source) {
+function useShared(): Shared {
+  const shared = useContext(SharedContext);
+  if (!shared) {
     throw new Error("useSource needs a DataProvider above it");
   }
-  return source;
+  return shared;
 }
+
+export const useSource = (): DataSource => useShared().source;
+
+export const useOverview = (): Resource<EstateOverview> => useShared().overview;

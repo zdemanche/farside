@@ -117,6 +117,7 @@ describe("Estate, Inventory and Settings", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
     await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/cost-center/));
+    expect(screen.getByRole("status").textContent).toMatch(/^Saved for this demo session only\./);
     expect(screen.getByRole("status").textContent).toMatch(/45 days/);
     expect(screen.getByRole("status").textContent).toMatch(/next scan/);
     expect(saveSettings.mock.calls[0]?.[0]).toMatchObject({
@@ -137,7 +138,38 @@ describe("Estate, Inventory and Settings", () => {
     renderScreen(<Settings />, sourceWith({ saveSettings }));
     await screen.findByLabelText("Owner tag key");
     fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
-    expect((await screen.findByRole("alert")).textContent).toMatch(/Farside Admin/);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/doesn't have access/);
     expect(screen.getByRole("status").textContent).toBe("");
+  });
+
+  it("reads the project from a GCP resource URI for the column and the filter", async () => {
+    const gcp = {
+      resourceUri: "//compute.googleapis.com/projects/proj-9/zones/us-east1-b/disks/pd-1",
+      resourceType: "compute.googleapis.com/Disk",
+      region: "us-east1",
+      displayName: "GCP disk",
+      tags: {},
+      ownerTag: null,
+    };
+    renderScreen(<Inventory />, sourceWith({ inventory: async () => [gcp] }));
+    const row = await screen.findByRole("row", { name: /GCP disk/ });
+    expect(row.textContent).toContain("proj-9");
+    fireEvent.change(screen.getByLabelText("Subscription"), { target: { value: "proj-9" } });
+    expect(screen.getByRole("row", { name: /GCP disk/ })).toBeTruthy();
+  });
+
+  it("says coverage is unknown when the overview cannot load", async () => {
+    renderScreen(
+      <Inventory />,
+      sourceWith({ overview: () => Promise.reject(new DataError("failed", 500, "500 Boom")) }),
+    );
+    expect(await screen.findByText(/Coverage unknown/)).toBeTruthy();
+  });
+
+  it("fetches the overview once for the whole provider", async () => {
+    const overview = vi.fn(async () => EMPTY_OVERVIEW);
+    renderScreen(<Inventory />, sourceWith({ overview }));
+    await screen.findByText(/\d+ resources$/);
+    expect(overview).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,7 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { apiSource } from "./data/api";
 import { DataProvider } from "./data/context";
-import { demoSource } from "./data/demo";
 import type { DataSource } from "./data/types";
 import { BlindSpots } from "./BlindSpots";
 import { Connect } from "./Connect";
@@ -20,9 +19,12 @@ function configuredSource(): DataSource | null {
   return baseUrl && orgId ? apiSource({ baseUrl, orgId }) : null;
 }
 
-function resolveSource(demo: boolean | undefined): DataSource | null {
-  const demoMode = demo ?? import.meta.env.VITE_FARSIDE_DEMO === "1";
-  return demoMode ? demoSource() : configuredSource();
+async function resolveSource(demo: boolean | undefined): Promise<DataSource | null> {
+  if (demo ?? import.meta.env.VITE_FARSIDE_DEMO === "1") {
+    const { demoSource } = await import("./data/demo");
+    return demoSource();
+  }
+  return configuredSource();
 }
 
 function currentHash(): string {
@@ -35,8 +37,24 @@ function skipToMain(event: MouseEvent<HTMLAnchorElement>) {
 }
 
 export function App({ demo, source }: { demo?: boolean; source?: DataSource | null } = {}) {
-  const [resolved] = useState(() => (source !== undefined ? source : resolveSource(demo)));
+  const [resolved, setResolved] = useState<DataSource | null | undefined>(source);
   const [hash, setHash] = useState(currentHash);
+
+  useEffect(() => {
+    if (source !== undefined) {
+      setResolved(source);
+      return;
+    }
+    let cancelled = false;
+    void resolveSource(demo).then((next) => {
+      if (!cancelled) {
+        setResolved(next);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [demo, source]);
 
   useEffect(() => {
     const onHash = () => setHash(currentHash());
@@ -98,7 +116,16 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
           </ul>
         </nav>
         <main className="main" id="main" tabIndex={-1}>
-          {resolved === null ? (
+          {resolved === undefined ? (
+            <>
+              <h1 className="page-title" id="page-title" tabIndex={-1}>
+                {PRODUCT_NAME}
+              </h1>
+              <p className="screen-state" role="status">
+                Loading
+              </p>
+            </>
+          ) : resolved === null ? (
             <>
               <h1 className="page-title" id="page-title" tabIndex={-1}>
                 {PRODUCT_NAME}

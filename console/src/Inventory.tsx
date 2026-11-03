@@ -8,7 +8,11 @@ type Filters = { owner: string; service: string; subscription: string; region: s
 
 const NO_FILTERS: Filters = { owner: "", service: "", subscription: "", region: "" };
 
-const subscriptionOf = (resource: InventoryRecord) => resource.resourceUri.split("/")[2] ?? "";
+function subscriptionOf(resource: InventoryRecord): string {
+  const parts = resource.resourceUri.split("/");
+  const at = parts.findIndex((part) => part === "subscriptions" || part === "projects");
+  return at === -1 ? "" : (parts[at + 1] ?? "");
+}
 
 function matches(resource: InventoryRecord, filters: Filters): boolean {
   const { owner, service, subscription, region } = filters;

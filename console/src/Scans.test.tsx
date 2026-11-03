@@ -97,4 +97,21 @@ describe("Scans screen", () => {
     renderScreen(<Scans hash="scans" pollMs={20} />, sourceWith({ scans }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/503/);
   });
+
+  it("stops polling when the screen unmounts", async () => {
+    const scans = vi.fn<() => Promise<ScanRow[]>>().mockResolvedValue([RUNNING]);
+    const { unmount } = renderScreen(<Scans hash="scans" pollMs={10} />, sourceWith({ scans }));
+    await waitFor(() => expect(scans.mock.calls.length).toBeGreaterThanOrEqual(2));
+    unmount();
+    const calls = scans.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(scans).toHaveBeenCalledTimes(calls);
+  });
+
+  it("backs off between polls", async () => {
+    const scans = vi.fn<() => Promise<ScanRow[]>>().mockResolvedValue([RUNNING]);
+    renderScreen(<Scans hash="scans" pollMs={10} />, sourceWith({ scans }));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(scans.mock.calls.length).toBeLessThan(8);
+  });
 });

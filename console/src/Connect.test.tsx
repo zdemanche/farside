@@ -46,6 +46,7 @@ describe("Connect screen", () => {
 
   it("does not claim a scan started when the source says none did", async () => {
     render(<App demo />);
+    await screen.findByLabelText("Azure tenant id");
     fillAndSubmit();
     await waitFor(() =>
       expect(screen.getAllByRole("status").map((node) => node.textContent).join(" ")).toContain(
@@ -65,6 +66,16 @@ describe("Connect screen", () => {
 
   it("has no axe violations on the Connect screen", async () => {
     const { container } = render(<App demo />);
+    await screen.findByLabelText("Azure tenant id");
     await expectAxeClean(container);
+  });
+
+  it("shows only the attention text when no scan started because scans are paused", async () => {
+    const connect = vi.fn().mockResolvedValue({ scanStarted: false, attention: "scans paused" });
+    render(<App source={sourceWith({ connect })} />);
+    fillAndSubmit();
+    await waitFor(() =>
+      expect(within(screen.getByRole("main")).getByRole("status").textContent).toBe("scans paused"),
+    );
   });
 });

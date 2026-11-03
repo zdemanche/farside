@@ -1,10 +1,8 @@
-import { useSource } from "./data/context";
-import { useResource } from "./data/use-resource";
+import { useOverview } from "./data/context";
 import { ScreenState } from "./ScreenState";
 
 export function Estate() {
-  const source = useSource();
-  const overview = useResource((signal) => source.overview(signal), [source]);
+  const overview = useOverview();
   return (
     <>
       <h1 className="page-title" id="page-title" tabIndex={-1}>

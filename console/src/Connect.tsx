@@ -1,7 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 import { CONNECT_STEPS, REQUIRED_AZURE_ROLES } from "./connect-data";
 import { useSource } from "./data/context";
-import { ROLE_WRITE, failureMessage, toDataError } from "./data/error";
+import { failureMessage, toDataError } from "./data/error";
 
 export function Connect() {
   const source = useSource();
@@ -20,12 +20,14 @@ export function Connect() {
     setFailure("");
     try {
       const result = await source.connect({ tenantId, subscriptionId });
-      const outcome = result.scanStarted
-        ? "First scan started."
-        : (result.attention ?? "No scan was started.");
-      setStatus(`Connected tenant ${tenantId} and subscription ${subscriptionId}. ${outcome}`);
+      const connected = `Connected tenant ${tenantId} and subscription ${subscriptionId}.`;
+      setStatus(
+        result.scanStarted
+          ? `${connected} First scan started.`
+          : (result.attention ?? `${connected} No scan was started.`),
+      );
     } catch (error) {
-      setFailure(failureMessage(toDataError(error), "connect this subscription", ROLE_WRITE));
+      setFailure(failureMessage(toDataError(error), "connect this subscription"));
     } finally {
       setConnecting(false);
     }
