@@ -2,7 +2,13 @@ import { afterAll, describe, expect, it } from "vitest";
 import type { Inventory } from "@farside/scan-contracts";
 import { buildApp } from "./app.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
-import { ScanFailedError, ScanRunner, fixtureHarvester, type HarvestResult } from "./scans.js";
+import {
+  ScanFailedError,
+  ScanRunner,
+  fixtureHarvester,
+  type HarvestResult,
+  type ScanView,
+} from "./scans.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
 import { readFileSync } from "node:fs";
@@ -120,3 +126,127 @@ describe("scan on connect", () => {
     expect(estate.json().resourceTotal).toBe(inventory.resources.length);
   });
 });
+
+describe("scan history API", () => {
+  it("returns coverage, per-check outcomes and marks only the latest complete success current", async () => {
+    const store = new MemoryStore();
+    const app = buildApp(store, { harvester: fixtureHarvester(inventory) });
+    const first = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/scans",
+      headers: ORG,
+      payload: { subscriptionId: "main" },
+    });
+    expect(first.statusCode).toBe(202);
+    expect(first.json().scan.current).toBe(false);
+    const succeeded = await waitForScan(app, "scan-1", "succeeded");
+    expect(succeeded.current).toBe(true);
+    expect(succeeded.durationMs).toBe(1);
+    expect(succeeded.coverageSummary.assessed).toBeGreaterThan(0);
+    expect(succeeded.checks.some((check) => check.state === "assessed")).toBe(true);
+    expect(
+      succeeded.checks.some(
+        (check) => check.state === "unassessed" && typeof check.reason === "string",
+      ),
+    ).toBe(true);
+    const detail = await app.inject({
+      method: "GET",
+      url: "/v1/orgs/org-a/scans/scan-1",
+      headers: ORG,
+    });
+    expect(detail.json().current).toBe(true);
+    expect(detail.json().checks.length).toBe(succeeded.checks.length);
+    await app.close();
+  });
+
+  it("keeps a failed scan off current and shows the failure reason", async () => {
+    const store = new MemoryStore();
+    const app = buildApp(store, {
+      harvester: {
+        async harvest() {
+          throw new ScanFailedError("Resource Graph call failed", [
+            "main:azure-inventory-all-resources",
+          ]);
+        },
+      },
+    });
+    const started = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/scans",
+      headers: ORG,
+      payload: { subscriptionId: "main" },
+    });
+    expect(started.statusCode).toBe(202);
+    const failed = await waitForScan(app, "scan-1", "failed");
+    expect(failed.current).toBe(false);
+    expect(failed.complete).toBe(false);
+    expect(failed.error).toBe("Resource Graph call failed");
+    expect(failed.checks.find((check) => check.checkId === "azure-inventory-all-resources")?.state).toBe(
+      "assessed",
+    );
+    expect(
+      failed.checks.find((check) => check.checkId === "azure-waste-unattached-disks"),
+    ).toMatchObject({
+      state: "unassessed",
+      reason: "Scan failed before this check ran.",
+    });
+    await app.close();
+  });
+
+  it("updates a running scan without treating it as current", async () => {
+    const store = new MemoryStore();
+    let release!: (result: HarvestResult) => void;
+    const gate = new Promise<HarvestResult>((resolve) => {
+      release = resolve;
+    });
+    const app = buildApp(store, { harvester: { harvest: () => gate } });
+    const started = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/scans",
+      headers: ORG,
+      payload: { subscriptionId: "main" },
+    });
+    expect(["queued", "running"]).toContain(started.json().scan.status);
+    expect(started.json().scan.current).toBe(false);
+    const during = await app.inject({
+      method: "GET",
+      url: "/v1/orgs/org-a/scans/scan-1",
+      headers: ORG,
+    });
+    expect(["queued", "running"]).toContain(during.json().status);
+    expect(during.json().current).toBe(false);
+    expect(during.json().durationMs).toBeNull();
+    release({
+      inventory,
+      coverage: [],
+      coveredScopes: ["main:azure-inventory-all-resources"],
+      facts: [],
+    });
+    const finished = await waitForScan(app, "scan-1", "succeeded");
+    expect(finished.current).toBe(true);
+    expect(finished.status).toBe("succeeded");
+    await app.close();
+  });
+});
+
+async function waitForScan(
+  app: ReturnType<typeof buildApp>,
+  scanId: string,
+  status: string,
+): Promise<ScanView> {
+  let scan: ScanView | undefined;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const listed = await app.inject({
+      method: "GET",
+      url: "/v1/orgs/org-a/scans",
+      headers: ORG,
+    });
+    const scans = listed.json().scans as ScanView[];
+    scan = scans.find((item) => item.id === scanId);
+    if (scan?.status === status) {
+      return scan;
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error(`scan ${scanId} did not reach ${status}`);
+}

@@ -28,8 +28,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 11. **E3-S3** — merged (#237).
 12. **E3-S4** — merged (#238).
 13. **E3-S5** — merged (#239).
-14. **E3-S6** — this change: issue store, close-only-if-covered, Issues queue, health score.
-15. **E3+ remaining** — Scans screens against fixtures.
+14. **E3-S6** — merged (#240).
+15. **E3-S7** — this change: scan history API, Scans list/detail, live progress on a fake slow scan.
+16. **E3+ remaining** — live Azure accuracy (#121–#125).
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -176,10 +177,10 @@ Phase 2 findings must be proven live. Engine and UI can be built against fixture
 | `E3-S6-T3` | #114 | Build the Issues screen | (a) this change | Issues screen. |
 | `E3-S6-T4` | #115 | Replay scans to test the lifecycle | (a) this change | Replay scans through the store. |
 | `E3-S6-T5` | #116 | Add the health score to the Estate overview | (a) this change | Health score on the overview via the shared helper. |
-| `E3-S7` | #117 | Scans screen with history and per-check results | (a) doable in code now | Scans API and screens over stored jobs. |
-| `E3-S7-T1` | #118 | Expose scan history and per-check results in the API | (a) doable in code now | Scan history API. |
-| `E3-S7-T2` | #119 | Build the Scans list and detail screens | (a) doable in code now | Scans list and detail. |
-| `E3-S7-T3` | #120 | Show live scan progress | (a) doable in code now | Live progress without reload (fake slow scan). |
+| `E3-S7` | #117 | Scans screen with history and per-check results | (a) this change | Scans API and screens over stored jobs. Live scan-to-console remains #95. |
+| `E3-S7-T1` | #118 | Expose scan history and per-check results in the API | (a) this change | Scan history API. |
+| `E3-S7-T2` | #119 | Build the Scans list and detail screens | (a) this change | Scans list and detail. |
+| `E3-S7-T3` | #120 | Show live scan progress | (a) this change | Live progress without reload (fake slow scan). |
 | `E3-S8` | #121 | Every Azure check run live and accuracy measured | (c) live Azure / GCP / test tenant | Every non-cost check live vs the manifest. D3 (#3). |
 | `E3-S8-T1` | #122 | Run all non-cost checks live and record results | (c) live Azure / GCP / test tenant | Run each non-cost check on the test subscription. |
 | `E3-S8-T2` | #123 | Diff findings against the manifest | (c) live Azure / GCP / test tenant | Diff findings against the manifest. |

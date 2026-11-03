@@ -18,7 +18,7 @@ import type { CoverageCauseId } from "./causes.js";
 import { estateOverview } from "./estate.js";
 import { applyOwnerTag, filterInventory, groupInventory, noOwnerTotal } from "./inventory.js";
 import { SecretLeakError, assertNoSecrets } from "./secrets.js";
-import { defaultHarvester, ScanRunner, type Harvester } from "./scans.js";
+import { defaultHarvester, ScanRunner, toScanView, toScanViews, type Harvester } from "./scans.js";
 import { parseSettings } from "./settings.js";
 import { assertOrgAccess, sessionFromHeaders, type Session } from "./session.js";
 import { MemoryStore } from "./store.js";
@@ -237,7 +237,7 @@ export function buildApp(
     if (!requireOrg(request, reply)) {
       return reply;
     }
-    return sendClean(reply, 200, { scans: store.snapshot(request.params.orgId).scans });
+    return sendClean(reply, 200, { scans: toScanViews(store.snapshot(request.params.orgId).scans) });
   });
 
   app.get<{ Params: { orgId: string; scanId: string } }>(
@@ -246,11 +246,13 @@ export function buildApp(
       if (!requireOrg(request, reply)) {
         return reply;
       }
-      const job = store.getJob(request.params.orgId, request.params.scanId);
-      if (!job) {
+      const view = toScanViews(store.snapshot(request.params.orgId).scans).find(
+        (scan) => scan.id === request.params.scanId,
+      );
+      if (!view) {
         return problem(reply, 404, "Not found");
       }
-      return sendClean(reply, 200, job);
+      return sendClean(reply, 200, view);
     },
   );
 
@@ -267,7 +269,10 @@ export function buildApp(
       });
     }
     const scan = runner.start({ orgId: request.params.orgId, subscriptionId, actor });
-    return sendClean(reply, scan.started ? 202 : 200, { scan: scan.job, scanStarted: scan.started });
+    return sendClean(reply, scan.started ? 202 : 200, {
+      scan: toScanView(scan.job, false),
+      scanStarted: scan.started,
+    });
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/findings", async (request, reply) => {
