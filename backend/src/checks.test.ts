@@ -44,7 +44,7 @@ import {
   checkUnattachedDisks,
   runChecks,
 } from "./checks.js";
-import { AZURE_LAUNCH_CHECK_IDS, blindSpots, toContractCoverage } from "./coverage.js";
+import { blindSpots, toContractCoverage } from "./coverage.js";
 import { factsFromManifest } from "./facts.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
 import {
@@ -56,6 +56,7 @@ import {
   SNAPSHOT_SAVINGS_BASIS,
   STOPPED_VM_SAVINGS_BASIS,
 } from "./savings.js";
+import { AZURE_LAUNCH_CHECK_IDS } from "./providers/launch-ids.js";
 import { defaultHarvester } from "./scans.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
