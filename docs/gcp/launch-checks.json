@@ -163,7 +163,7 @@
       "group": "cost",
       "title": "Committed-use discount use",
       "role": "BigQuery access to the billing export",
-      "dataSource": "BigQuery billing export credits / CUD rows. Not a live purchase API.",
+      "dataSource": "BigQuery billing export credits / CUD rows. Fixture check implemented; live run unverified. Not a live purchase API.",
       "evidenceFields": ["billingAccountId", "commitmentName", "utilizationPercent", "currency"],
       "savingsBasis": "Unused committed-use spend as a min/max range once utilization exists",
       "billingExportRequired": true,
