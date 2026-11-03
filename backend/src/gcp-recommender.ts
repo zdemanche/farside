@@ -1,8 +1,12 @@
-import { assertValid, validateFinding, type Finding } from "@farside/scan-contracts";
+import { assertValid, validateFinding, type Finding, type Inventory } from "@farside/scan-contracts";
+import { checkDefinition, indexFacts, nonEmptyStr, num, str } from "./checks/define.js";
 import { recordCoverageScope, type CoverageEntry } from "./coverage.js";
+import type { ResourceFacts } from "./facts.js";
+import { projectOf } from "./providers/gcp-scope.js";
 import { PointSavingsError, savingsRange } from "./savings.js";
 
 export const GCP_IDLE_RECS = "gcp-waste-idle-vm-and-disk-recommendations";
+export const REC_TYPE = "recommender.googleapis.com/Recommendation";
 
 export const RECOMMENDER_SAVINGS_BASIS =
   "Recommender savings range when present; otherwise undetermined, not a point value";
@@ -158,3 +162,46 @@ export function checkGcpIdleRecommendations(
     ],
   };
 }
+
+function harvestRecommendations(
+  inventory: Inventory,
+  facts: ResourceFacts[],
+): Map<string, GcpRecommendation[]> {
+  const rows = indexFacts(facts);
+  const byProject = new Map<string, GcpRecommendation[]>();
+  for (const resource of inventory.resources) {
+    const project = projectOf(resource.resourceUri);
+    if (!byProject.has(project)) {
+      byProject.set(project, []);
+    }
+    if (resource.resourceType !== REC_TYPE) {
+      continue;
+    }
+    const fields = rows.get(resource.resourceUri)?.fields;
+    const projectId = nonEmptyStr(fields, "projectId") ?? project;
+    const list = byProject.get(projectId) ?? [];
+    const savingsMin = num(fields, "savingsMin");
+    const savingsMax = num(fields, "savingsMax");
+    const currency = str(fields, "currency");
+    list.push({
+      recommendationId: nonEmptyStr(fields, "recommendationId") ?? resource.displayName,
+      recommenderId: nonEmptyStr(fields, "recommenderId") ?? "",
+      resourceName: nonEmptyStr(fields, "resourceName") ?? resource.resourceUri,
+      subtype: nonEmptyStr(fields, "subtype") ?? "",
+      projectId,
+      ...(savingsMin === null ? {} : { savingsMin }),
+      ...(savingsMax === null ? {} : { savingsMax }),
+      ...(currency ? { currency } : {}),
+    });
+    byProject.set(projectId, list);
+  }
+  return byProject;
+}
+
+export const checkGcpIdleRecs = checkDefinition({ checkId: GCP_IDLE_RECS, cloud: "gcp" }, (inventory, facts) => {
+  const findings: Finding[] = [];
+  for (const [projectId, recommendations] of harvestRecommendations(inventory, facts)) {
+    findings.push(...checkGcpIdleRecommendations(projectId, { ok: true, recommendations }).findings);
+  }
+  return findings;
+});

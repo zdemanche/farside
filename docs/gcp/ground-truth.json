@@ -165,6 +165,38 @@
       "region": "global",
       "properties": { "expireTime": "2027-10-15T00:00:00Z", "daysRemaining": 365 },
       "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "rec-vm-parked",
+      "project": "farside-test",
+      "type": "recommender.googleapis.com/Recommendation",
+      "title": "Idle VM recommendation",
+      "region": "us-central1-a",
+      "properties": {
+        "recommenderId": "google.compute.instance.IdleResourceRecommender",
+        "resourceName": "//compute.googleapis.com/projects/farside-test/zones/us-central1-a/instances/vm-parked",
+        "subtype": "IDLE_VM",
+        "savingsMin": 20,
+        "savingsMax": 32,
+        "currency": "USD"
+      },
+      "labels": { "owner": "farside-test" }
+    },
+    {
+      "id": "rec-disk-idle",
+      "project": "farside-test",
+      "type": "recommender.googleapis.com/Recommendation",
+      "title": "Idle disk recommendation",
+      "region": "us-central1-a",
+      "properties": {
+        "recommenderId": "google.compute.disk.IdleResourceRecommender",
+        "resourceName": "//compute.googleapis.com/projects/farside-test/zones/us-central1-a/disks/disk-parked",
+        "subtype": "IDLE_DISK",
+        "savingsMin": 8,
+        "savingsMax": 12,
+        "currency": "USD"
+      },
+      "labels": { "owner": "farside-test" }
     }
   ]
 }

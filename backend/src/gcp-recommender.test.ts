@@ -1,6 +1,11 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { RAW_PROVIDER_KEYS, validateFinding } from "@farside/scan-contracts";
+import { factsFromGcpManifest, inventoryFromGcpManifest, type GcpGroundTruthManifest } from "./gcp-inventory.js";
 import {
+  checkGcpIdleRecs,
   checkGcpIdleRecommendations,
   EMPTY_RECOMMENDER_WORDING,
   GCP_IDLE_RECS,
@@ -8,6 +13,10 @@ import {
   RECOMMENDER_ROLE_CLOSER,
   RECOMMENDER_SAVINGS_BASIS,
 } from "./gcp-recommender.js";
+
+const MANIFEST = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/gcp/ground-truth.json"), "utf8"),
+) as GcpGroundTruthManifest;
 
 const IDLE_VM: Parameters<typeof checkGcpIdleRecommendations>[1] = {
   ok: true,
@@ -107,5 +116,22 @@ describe("gcp idle recommendations", () => {
     expect(point.findings[0]?.result).toBe("undetermined");
     expect(point.findings[0]?.closer).toBe(RECOMMENDER_RANGE_CLOSER);
     expect(point.findings[0]?.savings).toBeUndefined();
+  });
+
+  it("fails fixture idle VM and disk recommendations from the ground-truth harvest", () => {
+    const findings = checkGcpIdleRecs(inventoryFromGcpManifest(MANIFEST), factsFromGcpManifest(MANIFEST));
+    const fails = findings.filter((finding) => finding.result === "fail");
+    expect(fails.map((finding) => finding.evidence.fields.recommendationId).sort()).toEqual([
+      "rec-disk-idle",
+      "rec-vm-parked",
+    ]);
+    expect(fails.find((finding) => finding.evidence.fields.subtype === "IDLE_VM")?.savings).toEqual({
+      min: "20.00",
+      max: "32.00",
+      currency: "USD",
+    });
+    expect(fails[0]?.checkId).toBe(GCP_IDLE_RECS);
+    expect(validateFinding(fails[0]!)).toEqual([]);
+    expect(JSON.stringify(findings)).not.toMatch(/confirmed idle|estate is clean/i);
   });
 });
