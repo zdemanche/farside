@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Chip, coverageTone, type Tone } from "./Chip";
-import { useSource } from "./data/context";
+import { useScans, useSource } from "./data/context";
 import type { ScanCoverageSummary, ScanRow, ScanStatus } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { Time } from "./format";
@@ -15,6 +15,8 @@ const STATUS_TONE: Record<ScanStatus, Tone> = {
   succeeded: "good",
   failed: "crit",
 };
+
+type Tracked = { rows: ScanRow[] | undefined; inFlight: ScanRow[] };
 
 const MAX_POLLS = 100;
 const MAX_DELAY_MS = 60_000;
@@ -159,25 +161,35 @@ export function Scans({
   hash?: string;
   pollMs?: number;
 }) {
-  const source = useSource();
-  const scans = useResource((signal) => source.scans(signal), [source]);
+  const scans = useScans();
   const { refresh } = scans;
   const rows = scans.status === "ready" ? scans.data : undefined;
   const inFlight = rows?.find(isInFlight);
   const detailId = selectedId(hash);
 
   const polls = useRef(0);
-  const watched = useRef<ScanRow | undefined>(undefined);
+  const openedWith = useRef(scans.status);
+  const [tracked, setTracked] = useState<Tracked>({ rows: undefined, inFlight: [] });
   const [finished, setFinished] = useState("");
 
-  useEffect(() => {
-    const before = watched.current;
-    const after = before && rows?.find((scan) => scan.id === before.id);
-    if (after && !isInFlight(after)) {
-      setFinished(outcomeText(after));
+  if (rows && rows !== tracked.rows) {
+    const outcomes = tracked.inFlight.flatMap((before) => {
+      const after = rows.find((scan) => scan.id === before.id);
+      return after && !isInFlight(after) ? [outcomeText(after)] : [];
+    });
+    setTracked({ rows, inFlight: rows.filter(isInFlight) });
+    if (outcomes.length > 0) {
+      setFinished(outcomes.join("; "));
     }
-    watched.current = inFlight;
-  }, [rows, inFlight]);
+  }
+  const announced = rows ?? tracked.rows;
+  const announcedInFlight = announced?.find(isInFlight);
+
+  useEffect(() => {
+    if (openedWith.current === "ready") {
+      refresh();
+    }
+  }, [refresh]);
 
   useEffect(() => {
     if (!inFlight) {
@@ -207,6 +219,24 @@ export function Scans({
         Each scan, when it ran, and which scopes were assessed. A failed scan is
         never the current one.
       </p>
+      <p
+        className="page-meta"
+        role="status"
+        aria-live="polite"
+        data-busy={inFlight ? "true" : undefined}
+      >
+        {announced && announced.length > 0 ? (
+          <>
+            <span>{finished || (announcedInFlight ? "" : plural(announced.length, "scan"))}</span>
+            {announcedInFlight ? (
+              <span>
+                {finished ? "; " : ""}
+                {outcomeText(announcedInFlight)}
+              </span>
+            ) : null}
+          </>
+        ) : null}
+      </p>
       <ScreenState
         label="scan history"
         resource={scans}
@@ -218,16 +248,6 @@ export function Scans({
       >
         {(data) => (
           <>
-            <p
-              className="page-meta"
-              role="status"
-              aria-live="polite"
-              data-busy={inFlight ? "true" : undefined}
-            >
-              {inFlight
-                ? outcomeText(inFlight)
-                : finished || plural(data.length, "scan")}
-            </p>
             <div
               className="table-wrap"
               role="region"

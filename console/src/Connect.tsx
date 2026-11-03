@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 import { CONNECT_STEPS, REQUIRED_AZURE_ROLES } from "./connect-data";
-import { useSource } from "./data/context";
+import { useScans, useSource } from "./data/context";
 import { failureMessage, toDataError } from "./data/error";
 import { FieldError, fieldProps } from "./form";
 
@@ -12,6 +12,7 @@ type Errors = { tenantId?: string; subscriptionId?: string };
 
 export function Connect() {
   const source = useSource();
+  const { refresh: refreshScans } = useScans();
   const tenantFieldId = useId();
   const subscriptionFieldId = useId();
   const [tenantId, setTenantId] = useState("");
@@ -51,6 +52,7 @@ export function Connect() {
           : (result.attention ?? `${summary} No scan was started.`),
       );
       setConnected(true);
+      refreshScans();
     } catch (error) {
       setFailure(
         failureMessage(toDataError(error), "connect this subscription"),

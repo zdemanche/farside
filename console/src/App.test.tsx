@@ -5,10 +5,11 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { demoSource } from "./data/demo";
 import { expectAxeClean } from "./test-utils";
-import { NOT_CONNECTED_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
+import { DEMO_LABEL, NOT_CONNECTED_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
 
 describe("console shell", () => {
   afterEach(() => {
@@ -28,6 +29,44 @@ describe("console shell", () => {
     expect(screen.getByRole("alert").textContent).toBe(NOT_CONNECTED_STATE);
     expect(screen.queryByText("Demo")).toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it.each(["#estate", "#inventory", "#issues", "#recovery", "#lifecycle", "#scans", "#blind-spots"])(
+    "labels a real organisation's data without the Demo label on %s",
+    async (hash) => {
+      window.location.hash = hash;
+      render(<App source={{ ...demoSource(), mode: "api" }} />);
+      expect(await screen.findByRole("heading", { level: 1 })).toBeTruthy();
+      expect(screen.queryByText(DEMO_LABEL)).toBeNull();
+    },
+  );
+
+  it("shows the Demo label only for a demo source", async () => {
+    render(<App source={demoSource()} />);
+    expect(await screen.findByText(DEMO_LABEL)).toBeTruthy();
+  });
+
+  it("requests the scan history once while visiting every screen that shows the last scan", async () => {
+    const scans = vi.fn(demoSource().scans);
+    window.location.hash = "#estate";
+    render(<App source={{ ...demoSource(), scans }} />);
+    for (const hash of ["#estate", "#inventory", "#issues", "#recovery", "#lifecycle", "#blind-spots"]) {
+      window.location.hash = hash;
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+      expect(await screen.findByText(/Last scan started/)).toBeTruthy();
+    }
+    expect(scans).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes the scan history when Scans is opened after other screens", async () => {
+    const scans = vi.fn(demoSource().scans);
+    window.location.hash = "#estate";
+    render(<App source={{ ...demoSource(), scans }} />);
+    await screen.findByText(/Last scan started/);
+    window.location.hash = "#scans";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await screen.findByRole("row", { name: /scan-1/ });
+    await waitFor(() => expect(scans).toHaveBeenCalledTimes(2));
   });
 
   it("lists every planned destination", () => {

@@ -19,6 +19,27 @@ const RUNNING: ScanRow = {
   checks: [],
 };
 
+const FINISHED: ScanRow = { ...RUNNING, status: "succeeded", complete: true, current: true };
+const QUEUED: ScanRow = { ...RUNNING, id: "scan-4", status: "queued", startedAt: null };
+
+function recordAnnouncements(region: HTMLElement): string[] {
+  const texts: string[] = [region.textContent ?? ""];
+  new MutationObserver(() => {
+    const text = region.textContent ?? "";
+    if (text !== texts[texts.length - 1]) {
+      texts.push(text);
+    }
+  }).observe(region, { childList: true, characterData: true, subtree: true });
+  return texts;
+}
+
+const liveRegion = (container: HTMLElement) =>
+  container.querySelector<HTMLElement>(".page-meta[role='status']")!;
+
+const timesAnnounced = (texts: string[], outcome: string) =>
+  texts.filter((text, index) => text.includes(outcome) && !texts[index - 1]?.includes(outcome))
+    .length;
+
 describe("Scans screen", () => {
   beforeEach(() => {
     document.documentElement.lang = "en";
@@ -127,6 +148,59 @@ describe("Scans screen", () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(scans).toHaveBeenCalledTimes(2);
+  });
+
+  it("announces a finished scan without first showing the scan count", async () => {
+    const scans = vi
+      .fn<() => Promise<ScanRow[]>>()
+      .mockResolvedValueOnce([RUNNING])
+      .mockResolvedValue([FINISHED]);
+    const { container } = renderScreen(<Scans hash="scans" pollMs={20} />, sourceWith({ scans }));
+    const region = liveRegion(container);
+    const texts = recordAnnouncements(region);
+    await waitFor(() => expect(region.textContent).toBe("scan-3 succeeded"));
+    expect(texts).not.toContain("1 scan");
+    expect(timesAnnounced(texts, "scan-3 succeeded")).toBe(1);
+  });
+
+  it("announces the first scan's outcome while a second scan is queued", async () => {
+    const scans = vi
+      .fn<() => Promise<ScanRow[]>>()
+      .mockResolvedValueOnce([RUNNING])
+      .mockResolvedValueOnce([FINISHED, QUEUED])
+      .mockResolvedValue([FINISHED, { ...QUEUED, status: "succeeded", complete: true }]);
+    const { container } = renderScreen(<Scans hash="scans" pollMs={20} />, sourceWith({ scans }));
+    const region = liveRegion(container);
+    const texts = recordAnnouncements(region);
+    await waitFor(() => expect(region.textContent).toBe("scan-4 succeeded"));
+    expect(texts).toContain("scan-3 succeeded; scan-4 queued");
+    expect(timesAnnounced(texts, "scan-3 succeeded")).toBe(1);
+    expect(timesAnnounced(texts, "scan-4 succeeded")).toBe(1);
+  });
+
+  it("announces a scan that finishes after a poll error and Retry", async () => {
+    const scans = vi
+      .fn<() => Promise<ScanRow[]>>()
+      .mockResolvedValueOnce([RUNNING])
+      .mockRejectedValueOnce(new DataError("failed", 503, "503 Service Unavailable"))
+      .mockResolvedValue([FINISHED]);
+    const { container } = renderScreen(<Scans hash="scans" pollMs={20} />, sourceWith({ scans }));
+    const region = liveRegion(container);
+    const texts = recordAnnouncements(region);
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(region.textContent).toBe("scan-3 succeeded"));
+    expect(timesAnnounced(texts, "scan-3 succeeded")).toBe(1);
+  });
+
+  it("keeps one live region mounted through a poll error", async () => {
+    const scans = vi
+      .fn<() => Promise<ScanRow[]>>()
+      .mockResolvedValueOnce([RUNNING])
+      .mockRejectedValue(new DataError("failed", 503, "503 Service Unavailable"));
+    const { container } = renderScreen(<Scans hash="scans" pollMs={20} />, sourceWith({ scans }));
+    const region = liveRegion(container);
+    await screen.findByRole("alert");
+    expect(liveRegion(container)).toBe(region);
   });
 
   it("names the scan and the plain-language reason when a polled scan fails", async () => {

@@ -115,7 +115,7 @@ describe("console audit behaviours", () => {
   ])("shows a Last scan time with a timezone on %s", async (_name, ui) => {
     renderScreen(ui);
     const line = await screen.findByText(/^Last scan/);
-    expect(line.textContent).toBe("Last scan 14 Oct 2026, 12:00 UTC");
+    expect(line.textContent).toBe("Last scan started 14 Oct 2026, 12:00 UTC");
     expect(line.querySelector("time")?.getAttribute("datetime")).toBe(
       "2026-10-14T12:00:00.000Z",
     );
