@@ -30,6 +30,8 @@ const ROUTES = [
   { method: "GET" as const, url: "/v1/orgs/org-a/contract" },
   { method: "PUT" as const, url: "/v1/orgs/org-a/contract" },
   { method: "POST" as const, url: "/v1/orgs/org-a/contract/advance" },
+  { method: "POST" as const, url: "/v1/orgs/org-a/offboard" },
+  { method: "GET" as const, url: "/v1/orgs/org-a/deletion" },
   { method: "GET" as const, url: "/v1/orgs/org-a/inventory/browse" },
   { method: "GET" as const, url: "/v1/orgs/org-a/scans" },
   { method: "POST" as const, url: "/v1/orgs/org-a/scans" },

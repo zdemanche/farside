@@ -9,6 +9,7 @@ import type { Contract } from "./billing.js";
 import type { BudgetSnapshot } from "./budgets.js";
 import type { CommitmentSnapshot } from "./commitments.js";
 import type { CostSnapshot } from "./cost.js";
+import { DeletedOrgError, type DeletionRecord } from "./offboard.js";
 import type { ScanJob } from "./scans.js";
 import { emptySchedule, type ScheduleState } from "./scheduler.js";
 import { assertNoSecrets } from "./secrets.js";
@@ -61,8 +62,12 @@ function emptyOrg(): OrgState {
 
 export class MemoryStore {
   #orgs = new Map<string, OrgState>();
+  #deletions = new Map<string, DeletionRecord>();
 
   org(orgId: string): OrgState {
+    if (this.#deletions.has(orgId)) {
+      throw new DeletedOrgError(orgId);
+    }
     const existing = this.#orgs.get(orgId);
     if (existing) {
       return existing;
@@ -70,6 +75,59 @@ export class MemoryStore {
     const created = emptyOrg();
     this.#orgs.set(orgId, created);
     return created;
+  }
+
+  hasOrg(orgId: string): boolean {
+    return this.#orgs.has(orgId);
+  }
+
+  deletion(orgId: string): DeletionRecord | null {
+    return this.#deletions.get(orgId) ?? null;
+  }
+
+  orgRows(orgId: string): number {
+    const org = this.#orgs.get(orgId);
+    if (!org) {
+      return 0;
+    }
+    return (
+      org.connections.length +
+      (org.inventory ? 1 : 0) +
+      org.coverage.length +
+      org.findings.length +
+      org.scans.length +
+      org.facts.length +
+      org.issues.length +
+      (org.cost ? 1 : 0) +
+      (org.commitments ? 1 : 0) +
+      (org.budgets ? 1 : 0) +
+      (org.alerts ? 1 : 0) +
+      (org.contract ? 1 : 0)
+    );
+  }
+
+  offboard(orgId: string, now: string): DeletionRecord {
+    const existing = this.#deletions.get(orgId);
+    if (existing) {
+      return existing;
+    }
+    const org = this.#orgs.get(orgId);
+    const connectionsRemoved = org?.connections.length ?? 0;
+    const schedulePending = Boolean(
+      org && org.settings.scanScheduleEnabled && org.schedule.nextRunAt,
+    );
+    const record: DeletionRecord = {
+      orgId,
+      deletedAt: now,
+      connectionsRemoved,
+      scansStopped: true,
+      scheduleCancelled: schedulePending || Boolean(org?.settings.scanScheduleEnabled),
+      accountClosureAt: null,
+    };
+    assertNoSecrets(record);
+    this.#orgs.delete(orgId);
+    this.#deletions.set(orgId, record);
+    return record;
   }
 
   snapshot(orgId: string): OrgState {

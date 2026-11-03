@@ -37,6 +37,7 @@ import {
   type CostQueryClient,
 } from "./cost.js";
 import { CardDataError, advanceContract, billingView, canScan, parseContract } from "./billing.js";
+import { deletionView } from "./offboard.js";
 import { demoDescriptor, isDemoOrg, seedDemoOrg } from "./demo.js";
 import { estateOverview } from "./estate.js";
 import { buildHeadline } from "./headline.js";
@@ -72,6 +73,7 @@ function requireOrg(
   request: FastifyRequest<{ Params: OrgParams }>,
   reply: FastifyReply,
   store: MemoryStore,
+  options: { allowDeleted?: boolean } = {},
 ): Session | null {
   const session = sessionFromHeaders(request);
   if (!session) {
@@ -82,7 +84,12 @@ function requireOrg(
     void problem(reply, 403, "Forbidden");
     return null;
   }
-  if (isDemoOrg(request.params.orgId)) {
+  const deletion = store.deletion(request.params.orgId);
+  if (deletion && !options.allowDeleted) {
+    void problem(reply, 410, "Gone", { deletedAt: deletion.deletedAt });
+    return null;
+  }
+  if (isDemoOrg(request.params.orgId) && !deletion) {
     seedDemoOrg(store);
   }
   return session;
@@ -738,6 +745,41 @@ export function buildApp(
     const next = advanceContract(current, event ? { now, event } : { now });
     store.putContract(request.params.orgId, next);
     return sendClean(reply, 200, billingView(next));
+  });
+
+  app.post<{ Params: OrgParams }>("/v1/orgs/:orgId/offboard", async (request, reply) => {
+    if (!requireOrg(request, reply, store, { allowDeleted: true })) {
+      return reply;
+    }
+    const existing = store.deletion(request.params.orgId);
+    if (existing) {
+      return sendClean(reply, 200, deletionView(existing));
+    }
+    const body = (request.body as Record<string, unknown> | null) ?? {};
+    if (body.confirm !== true || body.exportOffered !== true) {
+      return problem(reply, 400, "Offboard not confirmed", {
+        errors: [
+          {
+            path: "body",
+            message: "confirm and exportOffered must be true",
+          },
+        ],
+      });
+    }
+    const now = typeof body.now === "string" ? body.now : "1970-01-01T00:00:00.000Z";
+    const record = store.offboard(request.params.orgId, now);
+    return sendClean(reply, 200, deletionView(record));
+  });
+
+  app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/deletion", async (request, reply) => {
+    if (!requireOrg(request, reply, store, { allowDeleted: true })) {
+      return reply;
+    }
+    const record = store.deletion(request.params.orgId);
+    if (!record) {
+      return problem(reply, 404, "Not found");
+    }
+    return sendClean(reply, 200, deletionView(record));
   });
 
   app.get<{ Params: OrgParams }>("/v1/orgs/:orgId/inventory/browse", async (request, reply) => {
