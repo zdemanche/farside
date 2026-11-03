@@ -154,7 +154,11 @@ export function buildApp(
     budgetClient?: BudgetClient;
   } = {},
 ) {
-  const runner = new ScanRunner(store, options.harvester ?? defaultHarvester());
+  const runner = new ScanRunner(store, options.harvester ?? defaultHarvester(), {
+    costClient: options.costClient ?? defaultCostClient(),
+    commitmentClient: options.commitmentClient ?? defaultCommitmentClient(),
+    budgetClient: options.budgetClient ?? defaultBudgetClient(),
+  });
   const scheduler = new ScanScheduler(store, runner);
   const app = Fastify({ logger: false });
 

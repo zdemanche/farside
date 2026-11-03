@@ -1,6 +1,10 @@
 import { afterAll, describe, expect, it } from "vitest";
 import type { Inventory } from "@farside/scan-contracts";
 import { buildApp } from "./app.js";
+import { NO_BUDGETS } from "./budgets.js";
+import { RESERVATION_USE } from "./commitments.js";
+import { SPEND_BY_SERVICE } from "./cost.js";
+import { AZURE_LAUNCH_CHECK_IDS, recordCoverageScope } from "./coverage.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
 import {
   ScanFailedError,
@@ -39,6 +43,65 @@ describe("scan job runner", () => {
     expect(finished.complete).toBe(true);
     expect(store.snapshot("org-a").inventory?.resources.length).toBe(inventory.resources.length);
     expect(store.snapshot("org-a").coverage.length).toBeGreaterThan(0);
+  });
+
+  it("keeps harvest-driven findings and coverage when harvest clients are not wired", async () => {
+    const store = new MemoryStore();
+    store.putFindings("org-a", [
+      {
+        checkId: NO_BUDGETS,
+        result: "fail",
+        evidence: {
+          fields: {
+            subscriptionId: "empty-no-budget",
+            budgetCount: 0,
+            budgetNames: "",
+            lastConfirmed: "1970-01-01T00:00:00.000Z",
+          },
+        },
+        scope: {
+          id: "empty-no-budget:azure-cost-subscriptions-without-budgets",
+          cloud: "azure",
+          subscriptionOrProject: "empty-no-budget",
+        },
+      },
+      {
+        checkId: RESERVATION_USE,
+        result: "fail",
+        evidence: { fields: { reservationId: "res-1", utilisationPercent: 10 } },
+        scope: {
+          id: "main:azure-cost-reservation-use",
+          cloud: "azure",
+          subscriptionOrProject: "main",
+        },
+      },
+    ]);
+    store.putCoverage("org-a", [
+      recordCoverageScope({
+        subscriptionOrProject: "main",
+        checkId: SPEND_BY_SERVICE,
+        state: "assessed",
+      }),
+      recordCoverageScope({
+        subscriptionOrProject: "main",
+        checkId: RESERVATION_USE,
+        state: "assessed",
+      }),
+      recordCoverageScope({
+        subscriptionOrProject: "empty-no-budget",
+        checkId: NO_BUDGETS,
+        state: "assessed",
+      }),
+    ]);
+    const runner = new ScanRunner(store, fixtureHarvester(inventory));
+    const { done } = runner.start({ orgId: "org-a", subscriptionId: "main", actor: "system" });
+    await done;
+    const org = store.snapshot("org-a");
+    expect(org.findings.filter((finding) => finding.checkId === NO_BUDGETS)).toHaveLength(1);
+    expect(org.findings.filter((finding) => finding.checkId === RESERVATION_USE)).toHaveLength(1);
+    expect(
+      org.coverage.find((entry) => entry.id === "main:azure-cost-spend-by-service")?.state,
+    ).toBe("assessed");
   });
 
   it("stores a mid-failure without marking the scan complete", async () => {
@@ -143,12 +206,12 @@ describe("scan history API", () => {
     expect(succeeded.current).toBe(true);
     expect(succeeded.durationMs).toBe(1);
     expect(succeeded.coverageSummary.assessed).toBeGreaterThan(0);
-    expect(succeeded.checks.some((check) => check.state === "assessed")).toBe(true);
-    expect(
-      succeeded.checks.some(
-        (check) => check.state === "unassessed" && typeof check.reason === "string",
-      ),
-    ).toBe(true);
+    expect(succeeded.checks.map((check) => check.checkId).sort()).toEqual(
+      [...AZURE_LAUNCH_CHECK_IDS].sort(),
+    );
+    expect(succeeded.checks.every((check) => check.state === "assessed" || check.state === "undetermined")).toBe(
+      true,
+    );
     const detail = await app.inject({
       method: "GET",
       url: "/v1/orgs/org-a/scans/scan-1",
@@ -225,6 +288,63 @@ describe("scan history API", () => {
     const finished = await waitForScan(app, "scan-1", "succeeded");
     expect(finished.current).toBe(true);
     expect(finished.status).toBe("succeeded");
+    await app.close();
+  });
+});
+
+describe("scan merge with harvests", () => {
+  it("keeps budget and reservation findings and spend coverage after POST then scan", async () => {
+    const store = new MemoryStore();
+    const app = buildApp(store, { harvester: fixtureHarvester(inventory) });
+    const cost = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/cost",
+      headers: ORG,
+      payload: { subscriptionId: "main" },
+    });
+    expect(cost.statusCode).toBe(200);
+    const budgets = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/budgets",
+      headers: ORG,
+    });
+    expect(budgets.statusCode).toBe(200);
+    const commitments = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/commitments",
+      headers: ORG,
+      payload: { subscriptionId: "main" },
+    });
+    expect(commitments.statusCode).toBe(200);
+    const before = store.snapshot("org-a");
+    const budgetBefore = before.findings.filter((finding) => finding.checkId === NO_BUDGETS);
+    const reservationBefore = before.findings.filter((finding) => finding.checkId === RESERVATION_USE);
+    expect(budgetBefore.length).toBeGreaterThan(0);
+    expect(reservationBefore.length).toBeGreaterThan(0);
+    expect(
+      before.coverage.find((entry) => entry.id === "main:azure-cost-spend-by-service")?.state,
+    ).toBe("assessed");
+    const started = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/scans",
+      headers: ORG,
+      payload: { subscriptionId: "main" },
+    });
+    expect(started.statusCode).toBe(202);
+    const finished = await waitForScan(app, started.json().scan.id, "succeeded");
+    expect(finished.checks.map((check) => check.checkId).sort()).toEqual(
+      [...AZURE_LAUNCH_CHECK_IDS].sort(),
+    );
+    const after = store.snapshot("org-a");
+    expect(after.findings.filter((finding) => finding.checkId === NO_BUDGETS).length).toBe(
+      budgetBefore.length,
+    );
+    expect(after.findings.filter((finding) => finding.checkId === RESERVATION_USE).length).toBe(
+      reservationBefore.length,
+    );
+    expect(
+      after.coverage.find((entry) => entry.id === "main:azure-cost-spend-by-service")?.state,
+    ).toBe("assessed");
     await app.close();
   });
 });
