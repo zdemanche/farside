@@ -1,6 +1,9 @@
 import { useId, useState } from "react";
 import { Chip, coverageTone, type Tone } from "./Chip";
-import { ISSUE_ROWS, type IssueRow, type IssueStatus } from "./issues-data";
+import { useSource } from "./data/context";
+import type { IssueRow, IssueStatus } from "./data/types";
+import { useResource } from "./data/use-resource";
+import { ScreenState } from "./ScreenState";
 
 const STATUS_TONE: Record<IssueStatus, Tone> = {
   open: "warn",
@@ -8,48 +11,39 @@ const STATUS_TONE: Record<IssueStatus, Tone> = {
   not_confirmed: "neutral",
 };
 
+type Filters = { check: string; status: IssueStatus | ""; subscription: string };
+
+const DEFAULT_FILTERS: Filters = { check: "", status: "open", subscription: "" };
+const NO_FILTERS: Filters = { check: "", status: "", subscription: "" };
+
 function selectedId(hash: string): string {
   const match = hash.match(/^issues\/(.+)$/);
   return match?.[1] ?? "";
 }
 
-export function Issues({
-  issues = ISSUE_ROWS,
-  hash = typeof window === "undefined" ? "issues" : window.location.hash.replace(/^#\/?/, ""),
-}: {
-  issues?: IssueRow[];
-  hash?: string;
-}) {
+function currentHash(): string {
+  return typeof window === "undefined" ? "issues" : window.location.hash.replace(/^#\/?/, "");
+}
+
+function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
   const checkId = useId();
   const statusId = useId();
   const subscriptionId = useId();
-  const [check, setCheck] = useState("");
-  const [status, setStatus] = useState<IssueStatus | "">("open");
-  const [subscription, setSubscription] = useState("");
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const selected = issues.find((issue) => issue.id === selectedId(hash));
-  const visible = issues.filter((issue) => {
-    if (check && issue.checkId !== check) {
-      return false;
-    }
-    if (status && issue.status !== status) {
-      return false;
-    }
-    if (subscription && issue.subscription !== subscription) {
-      return false;
-    }
-    return true;
-  });
+  const passes = (issue: IssueRow, skipStatus: boolean) =>
+    (!filters.check || issue.checkId === filters.check) &&
+    (skipStatus || !filters.status || issue.status === filters.status) &&
+    (!filters.subscription || issue.subscription === filters.subscription);
+  const visible = issues.filter((issue) => passes(issue, false));
+  const hiddenByStatus = filters.status
+    ? issues.filter((issue) => passes(issue, true) && issue.status !== filters.status).length
+    : 0;
   const checks = [...new Set(issues.map((issue) => issue.checkId))];
   const subscriptions = [...new Set(issues.map((issue) => issue.subscription))];
 
   return (
     <>
-      <h1 className="page-title" id="page-title" tabIndex={-1}>
-        Issues
-      </h1>
-      <p className="page-description">
-        Stored issues with proof of coverage. An issue closes only when its scope was covered.
-      </p>
       <form className="panel filters">
         <div className="field">
           <label htmlFor={checkId}>Check</label>
@@ -57,8 +51,8 @@ export function Issues({
             className="input"
             id={checkId}
             name="check"
-            value={check}
-            onChange={(event) => setCheck(event.target.value)}
+            value={filters.check}
+            onChange={(event) => setFilters({ ...filters, check: event.target.value })}
           >
             <option value="">All checks</option>
             {checks.map((id) => (
@@ -74,8 +68,10 @@ export function Issues({
             className="input"
             id={statusId}
             name="status"
-            value={status}
-            onChange={(event) => setStatus(event.target.value as IssueStatus | "")}
+            value={filters.status}
+            onChange={(event) =>
+              setFilters({ ...filters, status: event.target.value as IssueStatus | "" })
+            }
           >
             <option value="">All statuses</option>
             <option value="open">open</option>
@@ -89,8 +85,8 @@ export function Issues({
             className="input"
             id={subscriptionId}
             name="subscription"
-            value={subscription}
-            onChange={(event) => setSubscription(event.target.value)}
+            value={filters.subscription}
+            onChange={(event) => setFilters({ ...filters, subscription: event.target.value })}
           >
             <option value="">All subscriptions</option>
             {subscriptions.map((id) => (
@@ -104,39 +100,65 @@ export function Issues({
       <p className="page-meta" role="status" aria-live="polite">
         {visible.length} issues
       </p>
-      <div className="table-wrap" role="region" aria-labelledby="issues-caption" tabIndex={0}>
-        <table>
-          <caption id="issues-caption">Issue queue</caption>
-          <thead>
-            <tr>
-              <th scope="col">Resource</th>
-              <th scope="col">Check</th>
-              <th scope="col">Status</th>
-              <th scope="col">Coverage</th>
-              <th scope="col">Savings</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((issue) => (
-              <tr key={issue.id}>
-                <th scope="row">
-                  <a href={`#issues/${issue.id}`}>{issue.resourceId}</a>
-                </th>
-                <td>{issue.checkId}</td>
-                <td>
-                  <Chip tone={STATUS_TONE[issue.status]}>
-                    {issue.status === "not_confirmed" ? "not confirmed" : issue.status}
-                  </Chip>
-                </td>
-                <td>
-                  <Chip tone={coverageTone(issue.coverage)}>{issue.coverage}</Chip>
-                </td>
-                <td>{issue.savings}</td>
+      {hiddenByStatus > 0 ? (
+        <p className="notice">
+          Showing {filters.status.replace("_", " ")} issues only. {hiddenByStatus} more{" "}
+          {hiddenByStatus === 1 ? "issue is" : "issues are"} hidden by the status filter.{" "}
+          <button
+            className="action action-secondary"
+            type="button"
+            onClick={() => setFilters({ ...filters, status: "" })}
+          >
+            Show all statuses
+          </button>
+        </p>
+      ) : null}
+      {visible.length === 0 ? (
+        <p className="screen-state">
+          No issues match these filters.{" "}
+          <button
+            className="action action-secondary"
+            type="button"
+            onClick={() => setFilters(NO_FILTERS)}
+          >
+            Clear filters
+          </button>
+        </p>
+      ) : (
+        <div className="table-wrap" role="region" aria-labelledby="issues-caption" tabIndex={0}>
+          <table>
+            <caption id="issues-caption">Issue queue</caption>
+            <thead>
+              <tr>
+                <th scope="col">Resource</th>
+                <th scope="col">Check</th>
+                <th scope="col">Status</th>
+                <th scope="col">Coverage</th>
+                <th scope="col">Savings</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {visible.map((issue) => (
+                <tr key={issue.id}>
+                  <th scope="row">
+                    <a href={`#issues/${issue.id}`}>{issue.resourceId}</a>
+                  </th>
+                  <td>{issue.checkId}</td>
+                  <td>
+                    <Chip tone={STATUS_TONE[issue.status]}>
+                      {issue.status === "not_confirmed" ? "not confirmed" : issue.status}
+                    </Chip>
+                  </td>
+                  <td>
+                    <Chip tone={coverageTone(issue.coverage)}>{issue.coverage}</Chip>
+                  </td>
+                  <td>{issue.savings}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {selected ? (
         <article className="panel detail" aria-labelledby="issue-detail-title">
           <h2 id="issue-detail-title">{selected.resourceId}</h2>
@@ -150,6 +172,33 @@ export function Issues({
           {selected.notConfirmedReason ? <p>Not confirmed {selected.notConfirmedReason}</p> : null}
         </article>
       ) : null}
+    </>
+  );
+}
+
+export function Issues({ hash = currentHash() }: { hash?: string }) {
+  const source = useSource();
+  const issues = useResource((signal) => source.issues(signal), [source]);
+  return (
+    <>
+      <h1 className="page-title" id="page-title" tabIndex={-1}>
+        Issues
+      </h1>
+      <p className="page-description">
+        Stored issues with proof of coverage. An issue closes only when its scope was covered.
+      </p>
+      <ScreenState
+        label="issues"
+        resource={issues}
+        partial
+        empty={(data) =>
+          data.length === 0
+            ? "No issues have been recorded. Issues appear after a scan finds a problem on an assessed scope."
+            : null
+        }
+      >
+        {(data) => <IssuesBody issues={data} hash={hash} />}
+      </ScreenState>
     </>
   );
 }

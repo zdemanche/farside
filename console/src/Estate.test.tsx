@@ -1,34 +1,24 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import axe from "axe-core";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { scoreHealth } from "@farside/scan-contracts";
-import { App } from "./App";
+import { DataError } from "./data/error";
 import { Estate } from "./Estate";
 import { Inventory } from "./Inventory";
 import { Settings } from "./Settings";
-import {
-  SEEDED_OVERVIEW,
-  SEEDED_RESOURCES,
-  applyOwnerTagKey,
-  noOwnerCount,
-} from "./estate-data";
+import { expectAxeClean, renderScreen, sourceWith } from "./test-utils";
 
-async function expectAxeClean(container: HTMLElement) {
-  const results = await axe.run(container, {
-    rules: { "color-contrast": { enabled: false } },
-  });
-  expect(results.violations).toEqual([]);
-}
-
-function phoneWidth() {
-  Object.defineProperty(window, "innerWidth", { configurable: true, value: 375 });
-}
+const EMPTY_OVERVIEW = {
+  empty: true,
+  resourceTotal: 0,
+  noOwnerTotal: 0,
+  coverage: { assessed: 0, unassessed: 0, undetermined: 0 },
+  healthScore: null,
+};
 
 describe("Estate, Inventory and Settings", () => {
   beforeEach(() => {
     document.documentElement.lang = "en";
     document.title = "Farside";
-    phoneWidth();
   });
 
   afterEach(() => {
@@ -37,10 +27,11 @@ describe("Estate, Inventory and Settings", () => {
   });
 
   it("points an empty overview to Connect and hides a health score", async () => {
-    window.location.hash = "#estate";
-    const { container } = render(<App />);
-    expect(screen.getByRole("heading", { name: "Estate" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Connect a cloud estate" })).toHaveProperty(
+    const { container } = renderScreen(
+      <Estate />,
+      sourceWith({ overview: async () => EMPTY_OVERVIEW }),
+    );
+    expect(await screen.findByRole("link", { name: "Connect a cloud estate" })).toHaveProperty(
       "hash",
       "#connect",
     );
@@ -49,25 +40,22 @@ describe("Estate, Inventory and Settings", () => {
   });
 
   it("shows seeded totals, coverage and a health score from assessed scopes only", async () => {
-    const { container } = render(<Estate overview={SEEDED_OVERVIEW} />);
-    expect(screen.getByText(`Resources ${SEEDED_OVERVIEW.resourceTotal}`)).toBeTruthy();
-    expect(screen.getByText(`No owner ${SEEDED_OVERVIEW.noOwnerTotal}`)).toBeTruthy();
-    expect(screen.getByText(`Assessed scopes ${SEEDED_OVERVIEW.coverage.assessed}`)).toBeTruthy();
-    expect(screen.getByText(`Unassessed scopes ${SEEDED_OVERVIEW.coverage.unassessed}`)).toBeTruthy();
-    expect(
-      screen.getByText(`Undetermined scopes ${SEEDED_OVERVIEW.coverage.undetermined}`),
-    ).toBeTruthy();
-    expect(screen.getByText(`Health score ${SEEDED_OVERVIEW.healthScore}`)).toBeTruthy();
+    const { container } = renderScreen(<Estate />);
+    expect(await screen.findByText("Resources 4")).toBeTruthy();
+    expect(screen.getByText("No owner 1")).toBeTruthy();
+    expect(screen.getByText("Assessed scopes 15")).toBeTruthy();
+    expect(screen.getByText("Unassessed scopes 4")).toBeTruthy();
+    expect(screen.getByText("Undetermined scopes 1")).toBeTruthy();
+    expect(screen.getByText("Health score 13")).toBeTruthy();
+    const failing = {
+      checkId: "check",
+      result: "fail" as const,
+      evidence: { fields: { ok: false } },
+      scope: { id: "main:check", cloud: "azure" as const, subscriptionOrProject: "main" },
+    };
     const baseline = scoreHealth(
       { scopes: [{ id: "main:check", checkId: "check", assessed: true }] },
-      [
-        {
-          checkId: "check",
-          result: "fail",
-          evidence: { fields: { ok: false } },
-          scope: { id: "main:check", cloud: "azure", subscriptionOrProject: "main" },
-        },
-      ],
+      [failing],
     );
     const withUnassessed = scoreHealth(
       {
@@ -76,63 +64,112 @@ describe("Estate, Inventory and Settings", () => {
           { id: "ghost:check", checkId: "check", assessed: false },
         ],
       },
-      [
-        {
-          checkId: "check",
-          result: "fail",
-          evidence: { fields: { ok: false } },
-          scope: { id: "main:check", cloud: "azure", subscriptionOrProject: "main" },
-        },
-      ],
+      [failing],
     );
     expect(withUnassessed.score).toBe(baseline.score);
     await expectAxeClean(container);
   });
 
-  it("filters inventory by owner, service, subscription and region", async () => {
-    const { container } = render(<Inventory resources={SEEDED_RESOURCES} />);
-    expect(screen.getByRole("status").textContent).toBe("4 resources");
+  it("filters inventory by owner, service, subscription and region and clears the filters", async () => {
+    const { container } = renderScreen(<Inventory />);
+    const count = async (text: string) =>
+      waitFor(() => expect(screen.getByText(/\d+ resources$/).textContent).toBe(text));
+    await count("4 resources");
     fireEvent.change(screen.getByLabelText("Owner"), { target: { value: "none" } });
-    expect(screen.getByRole("status").textContent).toBe("1 resources");
+    await count("1 resources");
     expect(screen.getByRole("row", { name: /Unattached managed disk/ })).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Owner"), { target: { value: "" } });
     fireEvent.change(screen.getByLabelText("Service"), {
       target: { value: "Microsoft.Compute/disks" },
     });
-    expect(screen.getByRole("status").textContent).toBe("2 resources");
+    await count("2 resources");
     fireEvent.change(screen.getByLabelText("Service"), { target: { value: "" } });
     fireEvent.change(screen.getByLabelText("Subscription"), {
       target: { value: "empty-no-budget" },
     });
-    expect(screen.getByRole("status").textContent).toBe("1 resources");
+    await count("1 resources");
     fireEvent.change(screen.getByLabelText("Subscription"), { target: { value: "" } });
     fireEvent.change(screen.getByLabelText("Region"), { target: { value: "westus" } });
-    expect(screen.getByRole("status").textContent).toBe("1 resources");
+    await count("1 resources");
     expect(screen.getByRole("row", { name: /Production VM/ })).toBeTruthy();
     await expectAxeClean(container);
+
+    fireEvent.change(screen.getByLabelText("Owner"), { target: { value: "none" } });
+    await count("0 resources");
+    expect(screen.getByText(/No resources match these filters/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    await count("4 resources");
   });
 
-  it("records settings and changes the no-owner count when the owner tag key changes", async () => {
-    const { container } = render(<Settings />);
-    fireEvent.change(screen.getByLabelText("Owner tag key"), {
+  it("says part of the inventory is unassessed when scopes were not assessed", async () => {
+    renderScreen(<Inventory />);
+    expect(await screen.findByText(/Partial: 5 scopes not assessed/)).toBeTruthy();
+  });
+
+  it("saves settings through the source and keeps the fields the form does not show", async () => {
+    const saveSettings = vi.fn(async (next) => next);
+    const { container } = renderScreen(<Settings />, sourceWith({ saveSettings }));
+    fireEvent.change(await screen.findByLabelText("Owner tag key"), {
       target: { value: "cost-center" },
     });
     fireEvent.change(screen.getByLabelText("Snapshot retention days"), {
       target: { value: "45" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
-    expect(screen.getByRole("status").textContent).toMatch(/cost-center/);
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/cost-center/));
+    expect(screen.getByRole("status").textContent).toMatch(/^Saved for this demo session only\./);
     expect(screen.getByRole("status").textContent).toMatch(/45 days/);
     expect(screen.getByRole("status").textContent).toMatch(/next scan/);
+    expect(saveSettings.mock.calls[0]?.[0]).toMatchObject({
+      ownerTagKey: "cost-center",
+      snapshotRetentionDays: 45,
+      certExpiryFlagDays: 60,
+    });
     fireEvent.change(screen.getByLabelText("Scan interval hours"), {
       target: { value: "12" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
-    expect(screen.getByRole("status").textContent).toMatch(/12-hour schedule/);
-    expect(noOwnerCount(SEEDED_RESOURCES)).toBe(1);
-    expect(noOwnerCount(applyOwnerTagKey(SEEDED_RESOURCES, "cost-center"))).toBe(
-      SEEDED_RESOURCES.length,
-    );
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/12-hour schedule/));
     await expectAxeClean(container);
+  });
+
+  it("reports a failed save instead of claiming success", async () => {
+    const saveSettings = vi.fn().mockRejectedValue(new DataError("denied", 403, "403 Forbidden"));
+    renderScreen(<Settings />, sourceWith({ saveSettings }));
+    await screen.findByLabelText("Owner tag key");
+    fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/doesn't have access/);
+    expect(screen.getByRole("status").textContent).toBe("");
+  });
+
+  it("reads the project from a GCP resource URI for the column and the filter", async () => {
+    const gcp = {
+      resourceUri: "//compute.googleapis.com/projects/proj-9/zones/us-east1-b/disks/pd-1",
+      resourceType: "compute.googleapis.com/Disk",
+      region: "us-east1",
+      displayName: "GCP disk",
+      tags: {},
+      ownerTag: null,
+    };
+    renderScreen(<Inventory />, sourceWith({ inventory: async () => [gcp] }));
+    const row = await screen.findByRole("row", { name: /GCP disk/ });
+    expect(row.textContent).toContain("proj-9");
+    fireEvent.change(screen.getByLabelText("Subscription"), { target: { value: "proj-9" } });
+    expect(screen.getByRole("row", { name: /GCP disk/ })).toBeTruthy();
+  });
+
+  it("says coverage is unknown when the overview cannot load", async () => {
+    renderScreen(
+      <Inventory />,
+      sourceWith({ overview: () => Promise.reject(new DataError("failed", 500, "500 Boom")) }),
+    );
+    expect(await screen.findByText(/Coverage unknown/)).toBeTruthy();
+  });
+
+  it("fetches the overview once for the whole provider", async () => {
+    const overview = vi.fn(async () => EMPTY_OVERVIEW);
+    renderScreen(<Inventory />, sourceWith({ overview }));
+    await screen.findByText(/\d+ resources$/);
+    expect(overview).toHaveBeenCalledTimes(1);
   });
 });

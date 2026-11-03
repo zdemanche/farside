@@ -1,16 +1,10 @@
-import { BLIND_SPOT_HEALTH, BLIND_SPOT_ROWS, HEALTH_SCORE_FORMULA, type BlindSpot } from "./blind-spots";
+import { useSource } from "./data/context";
+import { useResource } from "./data/use-resource";
+import { ScreenState } from "./ScreenState";
 
-export function BlindSpots({
-  spots = BLIND_SPOT_ROWS,
-  leftOut = BLIND_SPOT_HEALTH.unassessedScopes,
-  total = BLIND_SPOT_HEALTH.assessedScopes + BLIND_SPOT_HEALTH.unassessedScopes,
-  formula = HEALTH_SCORE_FORMULA,
-}: {
-  spots?: BlindSpot[];
-  leftOut?: number;
-  total?: number;
-  formula?: string;
-}) {
+export function BlindSpots() {
+  const source = useSource();
+  const view = useResource((signal) => source.blindSpots(signal), [source]);
   return (
     <>
       <h1 className="page-title" id="page-title" tabIndex={-1}>
@@ -19,31 +13,52 @@ export function BlindSpots({
       <p className="page-description">
         Farside does not treat silence as health. Unassessed scopes are left out of the score.
       </p>
-      <p className="page-description">{formula}</p>
-      <p className="page-meta" role="status" aria-live="polite">
-        {leftOut} of {total} scopes were left out of the score.
-      </p>
-      <div className="table-wrap" role="region" aria-labelledby="blind-spots-caption" tabIndex={0}>
-        <table>
-          <caption id="blind-spots-caption">What Farside could not check</caption>
-          <thead>
-            <tr>
-              <th scope="col">Check</th>
-              <th scope="col">Why it was not checked</th>
-              <th scope="col">What would close it</th>
-            </tr>
-          </thead>
-          <tbody>
-            {spots.map((spot) => (
-              <tr key={spot.id}>
-                <th scope="row">{spot.checkId}</th>
-                <td>{spot.reason}</td>
-                <td>{spot.closer}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ScreenState
+        label="blind spots"
+        resource={view}
+        empty={(data) =>
+          data.total === 0
+            ? "No scopes have been checked yet. Connect a cloud estate and run a scan."
+            : data.spots.length === 0
+              ? "Every scope was assessed. Nothing was left out of the score."
+              : null
+        }
+      >
+        {(data) => (
+          <>
+            <p className="page-description">{data.formula}</p>
+            <p className="page-meta" role="status" aria-live="polite">
+              {data.leftOut} of {data.total} scopes were left out of the score.
+            </p>
+            <div
+              className="table-wrap"
+              role="region"
+              aria-labelledby="blind-spots-caption"
+              tabIndex={0}
+            >
+              <table>
+                <caption id="blind-spots-caption">What Farside could not check</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Check</th>
+                    <th scope="col">Why it was not checked</th>
+                    <th scope="col">What would close it</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.spots.map((spot) => (
+                    <tr key={spot.id}>
+                      <th scope="row">{spot.checkId}</th>
+                      <td>{spot.reason}</td>
+                      <td>{spot.closer}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </ScreenState>
     </>
   );
 }
