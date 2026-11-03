@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from "react";
 import { useSource } from "./data/context";
 import { failureMessage, toDataError } from "./data/error";
 import type { OrgSettings } from "./data/types";
+import { FieldError, fieldProps } from "./form";
 import { useResource } from "./data/use-resource";
 import { ScreenState } from "./ScreenState";
 
@@ -15,7 +16,9 @@ const THEMES = [
 type Theme = (typeof THEMES)[number]["value"];
 
 function currentTheme(): Theme {
-  return document.documentElement.getAttribute("data-theme") === "daylight" ? "daylight" : "moonaan";
+  return document.documentElement.getAttribute("data-theme") === "daylight"
+    ? "daylight"
+    : "moonaan";
 }
 
 function applyTheme(theme: Theme) {
@@ -36,16 +39,27 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
   const scheduleId = useId();
   const intervalId = useId();
   const retryId = useId();
+  const fieldIds: Record<string, string> = {
+    owner: ownerId,
+    prodKey: prodKeyId,
+    prodValue: prodValueId,
+    retention: retentionId,
+    interval: intervalId,
+    retryLimit: retryId,
+  };
   const [owner, setOwner] = useState(initial.ownerTagKey);
   const [prodKey, setProdKey] = useState(initial.productionTagKey);
   const [prodValue, setProdValue] = useState(initial.productionTagValue);
-  const [retention, setRetention] = useState(String(initial.snapshotRetentionDays));
+  const [retention, setRetention] = useState(
+    String(initial.snapshotRetentionDays),
+  );
   const [scheduleOn, setScheduleOn] = useState(initial.scanScheduleEnabled);
   const [interval, setInterval] = useState(String(initial.scanIntervalHours));
   const [retryLimit, setRetryLimit] = useState(String(initial.scanRetryLimit));
   const [status, setStatus] = useState("");
   const [failure, setFailure] = useState("");
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -59,12 +73,38 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
       scanIntervalHours: Number(interval),
       scanRetryLimit: Number(retryLimit),
     };
-    setSaving(true);
-    setFailure("");
+    const found: Record<string, string> = {};
+    for (const [key, value] of [
+      ["owner", next.ownerTagKey],
+      ["prodKey", next.productionTagKey],
+      ["prodValue", next.productionTagValue],
+    ] as const) {
+      if (value.trim() === "") {
+        found[key] = "Enter a value.";
+      }
+    }
+    for (const [key, value] of [
+      ["retention", next.snapshotRetentionDays],
+      ["interval", next.scanIntervalHours],
+      ["retryLimit", next.scanRetryLimit],
+    ] as const) {
+      if (!Number.isInteger(value) || value < 1) {
+        found[key] = "Enter a whole number of at least 1.";
+      }
+    }
+    setErrors(found);
     setStatus("");
+    setFailure("");
+    const firstInvalid = Object.keys(found)[0];
+    if (firstInvalid) {
+      document.getElementById(fieldIds[firstInvalid] ?? "")?.focus();
+      return;
+    }
+    setSaving(true);
     try {
       const saved = await source.saveSettings(next);
-      const demoPrefix = source.mode === "demo" ? "Saved for this demo session only. " : "";
+      const demoPrefix =
+        source.mode === "demo" ? "Saved for this demo session only. " : "";
       setStatus(
         `${demoPrefix}Saved owner tag ${saved.ownerTagKey}, production marker ${saved.productionTagKey}=${saved.productionTagValue}, and snapshot retention ${saved.snapshotRetentionDays} days. The next scan will use these conventions. Next run follows the ${saved.scanIntervalHours}-hour schedule.`,
       );
@@ -77,7 +117,12 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
 
   return (
     <>
-      <form className="panel form" onSubmit={submit}>
+      <form
+        className="panel form"
+        onSubmit={submit}
+        noValidate
+        aria-label="Organisation settings"
+      >
         <div className="field">
           <label htmlFor={ownerId}>Owner tag key</label>
           <input
@@ -88,7 +133,9 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
             onChange={(event) => setOwner(event.target.value)}
             required
             aria-required="true"
+            {...fieldProps(ownerId, errors.owner)}
           />
+          <FieldError id={ownerId} error={errors.owner} />
         </div>
         <div className="field">
           <label htmlFor={prodKeyId}>Production tag key</label>
@@ -100,7 +147,9 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
             onChange={(event) => setProdKey(event.target.value)}
             required
             aria-required="true"
+            {...fieldProps(prodKeyId, errors.prodKey)}
           />
+          <FieldError id={prodKeyId} error={errors.prodKey} />
         </div>
         <div className="field">
           <label htmlFor={prodValueId}>Production tag value</label>
@@ -112,7 +161,9 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
             onChange={(event) => setProdValue(event.target.value)}
             required
             aria-required="true"
+            {...fieldProps(prodValueId, errors.prodValue)}
           />
+          <FieldError id={prodValueId} error={errors.prodValue} />
         </div>
         <div className="field">
           <label htmlFor={retentionId}>Snapshot retention days</label>
@@ -123,12 +174,13 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
             type="number"
             min={1}
             step={1}
-            aria-invalid={!/^[1-9]\d*$/.test(retention)}
             value={retention}
             onChange={(event) => setRetention(event.target.value)}
             required
             aria-required="true"
+            {...fieldProps(retentionId, errors.retention)}
           />
+          <FieldError id={retentionId} error={errors.retention} />
         </div>
         <div className="field field-check">
           <label htmlFor={scheduleId}>Scheduled scans</label>
@@ -150,12 +202,13 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
             type="number"
             min={1}
             step={1}
-            aria-invalid={!/^[1-9]\d*$/.test(interval)}
             value={interval}
             onChange={(event) => setInterval(event.target.value)}
             required
             aria-required="true"
+            {...fieldProps(intervalId, errors.interval)}
           />
+          <FieldError id={intervalId} error={errors.interval} />
         </div>
         <div className="field">
           <label htmlFor={retryId}>Scan retry limit</label>
@@ -166,16 +219,21 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
             type="number"
             min={1}
             step={1}
-            aria-invalid={!/^[1-9]\d*$/.test(retryLimit)}
             value={retryLimit}
             onChange={(event) => setRetryLimit(event.target.value)}
             required
             aria-required="true"
+            {...fieldProps(retryId, errors.retryLimit)}
           />
+          <FieldError id={retryId} error={errors.retryLimit} />
         </div>
         <div>
-          <button className="action action-primary" type="submit" disabled={saving}>
-            Save settings
+          <button
+            className="action action-primary"
+            type="submit"
+            disabled={saving}
+          >
+            {saving ? "Saving..." : "Save settings"}
           </button>
         </div>
       </form>

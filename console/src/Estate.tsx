@@ -1,4 +1,5 @@
 import { useOverview } from "./data/context";
+import { LastScan } from "./LastScan";
 import { ScreenState } from "./ScreenState";
 import { TERMS, sentenceCase } from "./terms";
 
@@ -9,6 +10,7 @@ export function Estate() {
       <h1 className="page-title" id="page-title" tabIndex={-1}>
         Estate
       </h1>
+      <LastScan />
       <ScreenState
         label="the estate overview"
         resource={overview}

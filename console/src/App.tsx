@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type MouseEvent,
+} from "react";
 import { apiSource } from "./data/api";
 import { DataProvider } from "./data/context";
 import type { DataSource } from "./data/types";
@@ -11,7 +17,15 @@ import { Lifecycle } from "./Lifecycle";
 import { Recovery } from "./Recovery";
 import { Scans } from "./Scans";
 import { Settings } from "./Settings";
-import { DEMO_LABEL, EMPTY_STATE, NOT_CONNECTED_STATE, PRODUCT_NAME, SHELL_NAV } from "./shell";
+import { NotFound } from "./NotFound";
+import {
+  COMING_SOON,
+  DEMO_LABEL,
+  NOT_CONNECTED_STATE,
+  PRODUCT_NAME,
+  SHELL_NAV,
+  slugOf,
+} from "./shell";
 
 function configuredSource(): DataSource | null {
   const baseUrl: string | undefined = import.meta.env.VITE_FARSIDE_API_URL;
@@ -19,7 +33,9 @@ function configuredSource(): DataSource | null {
   return baseUrl && orgId ? apiSource({ baseUrl, orgId }) : null;
 }
 
-async function resolveSource(demo: boolean | undefined): Promise<DataSource | null> {
+async function resolveSource(
+  demo: boolean | undefined,
+): Promise<DataSource | null> {
   if (demo ?? import.meta.env.VITE_FARSIDE_DEMO === "1") {
     const { demoSource } = await import("./data/demo");
     return demoSource();
@@ -31,30 +47,34 @@ function currentHash(): string {
   return window.location.hash.replace(/^#\/?/, "");
 }
 
-const PAGE_TITLES: Record<string, string> = {
-  connect: "Connect",
-  "blind-spots": "Blind spots",
-  estate: "Estate",
-  inventory: "Inventory",
-  issues: "Issues",
-  settings: "Settings",
-  recovery: "Recovery",
-  lifecycle: "Lifecycle",
-  scans: "Scans",
+const PAGES: Record<string, ComponentType> = {
+  estate: Estate,
+  connect: Connect,
+  scans: Scans,
+  settings: Settings,
+  inventory: Inventory,
+  issues: Issues,
+  lifecycle: Lifecycle,
+  recovery: Recovery,
+  "blind-spots": BlindSpots,
 };
 
-function pageTitle(page: string): string {
-  const label = PAGE_TITLES[page];
-  return label ? `${label} - ${PRODUCT_NAME}` : PRODUCT_NAME;
-}
+const DETAIL_PAGES = new Set(["issues", "scans"]);
+
+const TITLES = new Map(SHELL_NAV.map((item) => [slugOf(item), item]));
 
 function skipToMain(event: MouseEvent<HTMLAnchorElement>) {
   event.preventDefault();
   document.getElementById("main")?.focus();
 }
 
-export function App({ demo, source }: { demo?: boolean; source?: DataSource | null } = {}) {
-  const [resolved, setResolved] = useState<DataSource | null | undefined>(source);
+export function App({
+  demo,
+  source,
+}: { demo?: boolean; source?: DataSource | null } = {}) {
+  const [resolved, setResolved] = useState<DataSource | null | undefined>(
+    source,
+  );
   const [hash, setHash] = useState(currentHash);
 
   useEffect(() => {
@@ -79,42 +99,31 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  const page =
-    hash === "connect"
-      ? "connect"
-      : hash === "blind-spots"
-        ? "blind-spots"
-        : hash === "estate"
-          ? "estate"
-          : hash === "inventory"
-            ? "inventory"
-            : hash === "issues" || hash.startsWith("issues/")
-              ? "issues"
-              : hash === "settings"
-                ? "settings"
-                : hash === "recovery"
-                  ? "recovery"
-                  : hash === "lifecycle"
-                    ? "lifecycle"
-                    : hash === "scans" || hash.startsWith("scans/")
-                      ? "scans"
-                      : "empty";
+  const [path = ""] = hash.split("?");
+  const [route = "", ...detail] = path.split("/");
+  const slug = route || "estate";
+  const isDetail = detail.length > 0;
+  const Page =
+    PAGES[slug] && (!isDetail || DETAIL_PAGES.has(slug))
+      ? PAGES[slug]
+      : undefined;
+  const title = Page ? (TITLES.get(slug) ?? PRODUCT_NAME) : "Page not found";
 
   const firstHash = useRef(true);
   useEffect(() => {
-    document.title = pageTitle(page);
-  }, [page]);
+    document.title = resolved ? `${title} - ${PRODUCT_NAME}` : PRODUCT_NAME;
+  }, [title, resolved]);
 
   useEffect(() => {
     if (firstHash.current) {
       firstHash.current = false;
       return;
     }
-    if (hash.includes("/")) {
+    if (Page && isDetail) {
       return;
     }
     document.getElementById("page-title")?.focus();
-  }, [hash]);
+  }, [hash, isDetail, Page]);
 
   return (
     <div className="app">
@@ -131,12 +140,24 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
         <nav className="sidenav" aria-label="Farside">
           <ul>
             {SHELL_NAV.map((item) => {
-              const slug = item.toLowerCase().replaceAll(" ", "-");
+              const itemSlug = slugOf(item);
               return (
                 <li key={item}>
-                  <a href={`#${slug}`} aria-current={slug === hash.split("/")[0] ? "page" : undefined}>
-                    {item}
-                  </a>
+                  {COMING_SOON.includes(item) ? (
+                    <span className="nav-soon">
+                      {item}{" "}
+                      <span className="chip chip-neutral">coming soon</span>
+                    </span>
+                  ) : (
+                    <a
+                      href={`#${itemSlug}`}
+                      aria-current={
+                        Page && itemSlug === slug ? "page" : undefined
+                      }
+                    >
+                      {item}
+                    </a>
+                  )}
                 </li>
               );
             })}
@@ -161,35 +182,12 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
                 {NOT_CONNECTED_STATE}
               </p>
             </>
-          ) : (
+          ) : Page ? (
             <DataProvider source={resolved}>
-              {page === "connect" ? (
-                <Connect />
-              ) : page === "blind-spots" ? (
-                <BlindSpots />
-              ) : page === "estate" ? (
-                <Estate />
-              ) : page === "inventory" ? (
-                <Inventory />
-              ) : page === "issues" ? (
-                <Issues hash={hash} />
-              ) : page === "settings" ? (
-                <Settings />
-              ) : page === "recovery" ? (
-                <Recovery />
-              ) : page === "lifecycle" ? (
-                <Lifecycle />
-              ) : page === "scans" ? (
-                <Scans hash={hash} />
-              ) : (
-                <>
-                  <h1 className="page-title" id="page-title" tabIndex={-1}>
-                    {PRODUCT_NAME}
-                  </h1>
-                  <p className="screen-state">{EMPTY_STATE}</p>
-                </>
-              )}
+              <Page />
             </DataProvider>
+          ) : (
+            <NotFound hash={hash} />
           )}
         </main>
       </div>

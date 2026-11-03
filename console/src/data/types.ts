@@ -13,6 +13,13 @@ export type EstateOverview = {
   healthScore: number | null;
 };
 
+export type Money = {
+  min: string;
+  max: string;
+  currency: string;
+  period: "month";
+};
+
 export type IssueStatus = "open" | "closed" | "not_confirmed";
 
 export type IssueRow = {
@@ -22,7 +29,7 @@ export type IssueRow = {
   subscription: string;
   status: IssueStatus;
   evidence: string;
-  savings: string;
+  savings: Money | null;
   coverage: string;
   firstSeen: string;
   lastConfirmed: string;
@@ -55,6 +62,7 @@ export type ScanRow = {
   startedAt: string | null;
   durationMs: number | null;
   error: string | null;
+  errorId?: string;
   coverageSummary: ScanCoverageSummary;
   checks: ScanCheckRow[];
 };
@@ -91,10 +99,11 @@ export type RecoveryView = {
 
 export type LifecycleRow = {
   id: string;
+  resourceId: string;
   date: string;
   kind: string;
   title: string;
-  source: string;
+  source: { vendor: string; href?: string };
 };
 
 export type LifecycleView = {
@@ -129,6 +138,9 @@ export type DataSource = {
   recovery(signal?: AbortSignal): Promise<RecoveryView>;
   lifecycle(signal?: AbortSignal): Promise<LifecycleView>;
   settings(signal?: AbortSignal): Promise<OrgSettings>;
-  saveSettings(settings: OrgSettings, signal?: AbortSignal): Promise<OrgSettings>;
+  saveSettings(
+    settings: OrgSettings,
+    signal?: AbortSignal,
+  ): Promise<OrgSettings>;
   connect(input: ConnectInput, signal?: AbortSignal): Promise<ConnectResult>;
 };

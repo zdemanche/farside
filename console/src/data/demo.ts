@@ -5,7 +5,7 @@ import {
   type InventoryRecord,
 } from "@farside/scan-contracts";
 import { DataError } from "./error";
-import { formatEvidence, formatSavings, lifecycleFrom, recoveryFrom } from "./derive";
+import { formatEvidence, toMoney, lifecycleFrom, recoveryFrom } from "./derive";
 import type {
   BlindSpot,
   DataSource,
@@ -257,7 +257,7 @@ function issueRow(seed: IssueSeed): IssueRow {
     subscription: SUBSCRIPTION,
     status: seed.status,
     evidence: formatEvidence(seed.fields),
-    savings: formatSavings(seed.savings),
+    savings: toMoney(seed.savings),
     coverage: coverage.state,
     firstSeen: FIRST_SCAN_AT,
     lastConfirmed: FIRST_SCAN_AT,

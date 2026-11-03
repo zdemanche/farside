@@ -50,7 +50,7 @@ export function ScreenState<T>({
   label: string;
   resource: Resource<T>;
   empty?: (data: T) => ReactNode;
-  missing?: string;
+  missing?: ReactNode;
   partial?: boolean;
   children: (data: T) => ReactNode;
 }) {
@@ -64,7 +64,7 @@ export function ScreenState<T>({
   if (resource.status === "error") {
     const { error } = resource;
     if (error.kind === "not-found" && missing) {
-      return <p className="screen-state">{missing}</p>;
+      return <div className="screen-state">{missing}</div>;
     }
     return (
       <div className="screen-state screen-state-alert" role="alert">

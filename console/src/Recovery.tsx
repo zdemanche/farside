@@ -2,10 +2,16 @@ import { Chip, coverageTone } from "./Chip";
 import { useOverview, useSource } from "./data/context";
 import type { RecoveryView } from "./data/types";
 import { useResource } from "./data/use-resource";
+import { LastScan } from "./LastScan";
+import { inventoryHref } from "./links";
 import { ScreenState, gapsMessage } from "./ScreenState";
-import { TERMS, coverageStateLabel } from "./terms";
+import { TERMS, coverageStateLabel, shortName } from "./terms";
 
-function backupSummary({ unprotected, checked, undetermined }: RecoveryView): string {
+function backupSummary({
+  unprotected,
+  checked,
+  undetermined,
+}: RecoveryView): string {
   if (undetermined === 0) {
     return `${unprotected} of ${checked} production systems lack backup`;
   }
@@ -27,6 +33,7 @@ export function Recovery() {
       <p className="page-description">
         Backup and redundancy gaps by system, with evidence and coverage.
       </p>
+      <LastScan />
       <ScreenState
         label="recovery gaps"
         resource={view}
@@ -64,11 +71,17 @@ export function Recovery() {
                 <tbody>
                   {data.rows.map((row) => (
                     <tr key={row.id}>
-                      <th scope="row">{row.system}</th>
+                      <th scope="row">
+                        <a href={inventoryHref(row.system)} title={row.system}>
+                          {shortName(row.system)}
+                        </a>
+                      </th>
                       <td>{row.checkId}</td>
                       <td>{row.evidence}</td>
                       <td>
-                        <Chip tone={coverageTone(row.coverage)}>{coverageStateLabel(row.coverage)}</Chip>
+                        <Chip tone={coverageTone(row.coverage)}>
+                          {coverageStateLabel(row.coverage)}
+                        </Chip>
                       </td>
                     </tr>
                   ))}

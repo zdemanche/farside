@@ -1,5 +1,8 @@
 import { useOverview, useSource } from "./data/context";
 import { useResource } from "./data/use-resource";
+import { Time } from "./format";
+import { LastScan } from "./LastScan";
+import { inventoryHref } from "./links";
 import { ScreenState, gapsMessage } from "./ScreenState";
 import { plural } from "./plural";
 import { TERMS } from "./terms";
@@ -13,7 +16,10 @@ export function Lifecycle() {
       <h1 className="page-title" id="page-title" tabIndex={-1}>
         Lifecycle
       </h1>
-      <p className="page-description">Items losing support or expiring, listed by date.</p>
+      <p className="page-description">
+        Items losing support or expiring, listed by date.
+      </p>
+      <LastScan />
       <ScreenState
         label="lifecycle items"
         resource={view}
@@ -39,7 +45,9 @@ export function Lifecycle() {
               tabIndex={0}
             >
               <table>
-                <caption id="lifecycle-caption">Lifecycle items by date</caption>
+                <caption id="lifecycle-caption">
+                  Lifecycle items by date
+                </caption>
                 <thead>
                   <tr>
                     <th scope="col">Date</th>
@@ -51,10 +59,20 @@ export function Lifecycle() {
                 <tbody>
                   {data.rows.map((row) => (
                     <tr key={row.id}>
-                      <td>{row.date}</td>
-                      <th scope="row">{row.title}</th>
+                      <td>
+                        <Time value={row.date} dateOnly />
+                      </td>
+                      <th scope="row">
+                        <a href={inventoryHref(row.resourceId)}>{row.title}</a>
+                      </th>
                       <td>{row.kind}</td>
-                      <td>{row.source}</td>
+                      <td>
+                        {row.source.href ? (
+                          <a href={row.source.href}>{row.source.vendor}</a>
+                        ) : (
+                          row.source.vendor
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

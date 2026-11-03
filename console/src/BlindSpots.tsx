@@ -1,7 +1,15 @@
 import { useSource } from "./data/context";
 import { useResource } from "./data/use-resource";
+import { LastScan } from "./LastScan";
 import { ScreenState } from "./ScreenState";
 import { TERMS, coverageStateLabel } from "./terms";
+
+function closerLink(closer: string) {
+  if (/\b(grant|role|permission)/i.test(closer)) {
+    return <a href="#connect">Open Connect</a>;
+  }
+  return /\bscan\b/i.test(closer) ? <a href="#scans">Open Scans</a> : null;
+}
 
 export function BlindSpots() {
   const source = useSource();
@@ -15,6 +23,7 @@ export function BlindSpots() {
         Farside does not treat silence as health. Scopes that were {TERMS.notAssessed} are left out
         of the score.
       </p>
+      <LastScan />
       <ScreenState
         label="blind spots"
         resource={view}
@@ -54,7 +63,10 @@ export function BlindSpots() {
                       <th scope="row">{spot.checkId}</th>
                       <td>{coverageStateLabel(spot.state)}</td>
                       <td>{spot.reason}</td>
-                      <td>{spot.closer}</td>
+                      <td>
+                        {spot.closer}{" "}
+                        {closerLink(spot.closer)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -18,12 +18,14 @@ describe("Lifecycle screen", () => {
     expect(screen.getByRole("heading", { name: "Lifecycle" })).toBeTruthy();
     const table = await screen.findByRole("table", { name: "Lifecycle items by date" });
     expect(screen.getByRole("status").textContent).toBe("3 things losing support in 90 days");
-    const dates = screen.getAllByRole("row").slice(1).map((row) => row.textContent?.slice(0, 10));
+    const dates = [...table.querySelectorAll("time")].map((time) => time.getAttribute("datetime"));
     expect(dates).toEqual([...dates].sort());
-    expect(table.textContent).toContain("2026-11-22");
+    expect(table.textContent).toContain("22 Nov 2026");
     expect(table.textContent).toContain("cert-app-expiring");
     expect(table.textContent).toContain("Standard_B1ls");
-    expect(table.textContent).toContain("docs/azure/retiring-skus.json");
+    expect(table.textContent).toContain("Microsoft Azure");
+    expect(table.textContent).not.toContain("docs/azure");
+    expect(table.querySelector("time")?.getAttribute("datetime")).toBe("2026-11-22");
     await expectAxeClean(container);
   });
 

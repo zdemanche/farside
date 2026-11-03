@@ -1,6 +1,6 @@
 import type { Finding } from "@farside/scan-contracts";
 import { DataError, errorFromStatus, toDataError } from "./error";
-import { formatEvidence, formatSavings, lifecycleFrom, recoveryFrom } from "./derive";
+import { formatEvidence, toMoney, lifecycleFrom, recoveryFrom } from "./derive";
 import type {
   BlindSpot,
   ConnectInput,
@@ -45,7 +45,7 @@ function issueRow(issue: StoredIssue): IssueRow {
     subscription: issue.subscriptionOrProject,
     status: issue.status,
     evidence: formatEvidence(issue.evidence),
-    savings: formatSavings(issue.savings),
+    savings: toMoney(issue.savings),
     coverage: issue.coverage,
     firstSeen: issue.firstSeen,
     lastConfirmed: issue.lastConfirmed,

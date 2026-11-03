@@ -3,14 +3,43 @@ import { useSource } from "./data/context";
 import type { InventoryRow } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { plural } from "./plural";
+import { LastScan } from "./LastScan";
 import { ScreenState } from "./ScreenState";
+import { shortName } from "./terms";
 
-type Filters = { owner: string; service: string; subscription: string; region: string };
+type Filters = {
+  owner: string;
+  service: string;
+  subscription: string;
+  region: string;
+  resource: string;
+};
 
-const NO_FILTERS: Filters = { owner: "", service: "", subscription: "", region: "" };
+const NO_FILTERS: Filters = {
+  owner: "",
+  service: "",
+  subscription: "",
+  region: "",
+  resource: "",
+};
+
+function resourceParam(hash: string): string {
+  return new URLSearchParams(hash.split("?")[1] ?? "").get("resource") ?? "";
+}
+
+const isResource = (record: InventoryRow, resource: string) => {
+  const wanted = resource.toLowerCase();
+  const uri = record.resourceUri.toLowerCase();
+  return resource.includes("/")
+    ? uri === wanted
+    : uri.endsWith(`/${wanted}`) || record.displayName.toLowerCase() === wanted;
+};
 
 function matches(resource: InventoryRow, filters: Filters): boolean {
-  const { owner, service, subscription, region } = filters;
+  const { owner, service, subscription, region, resource: wanted } = filters;
+  if (wanted && !isResource(resource, wanted)) {
+    return false;
+  }
   if (owner === "none" && resource.ownerTag) {
     return false;
   }
@@ -30,11 +59,26 @@ function matches(resource: InventoryRow, filters: Filters): boolean {
 }
 
 const distinct = (values: (string | null | undefined)[]) =>
-  [...new Set(values.filter((value): value is string => Boolean(value)))].sort();
+  [
+    ...new Set(values.filter((value): value is string => Boolean(value))),
+  ].sort();
 
-function InventoryBody({ orgId, resources }: { orgId: string; resources: InventoryRow[] }) {
-  const ids = { owner: useId(), service: useId(), subscription: useId(), region: useId() };
-  const [filters, setFilters] = useState(NO_FILTERS);
+function InventoryBody({
+  orgId,
+  resources,
+  resource,
+}: {
+  orgId: string;
+  resources: InventoryRow[];
+  resource: string;
+}) {
+  const ids = {
+    owner: useId(),
+    service: useId(),
+    subscription: useId(),
+    region: useId(),
+  };
+  const [filters, setFilters] = useState({ ...NO_FILTERS, resource });
   const filtered = useMemo(
     () => resources.filter((resource) => matches(resource, filters)),
     [resources, filters],
@@ -43,7 +87,9 @@ function InventoryBody({ orgId, resources }: { orgId: string; resources: Invento
     () => ({
       owner: distinct(resources.map((resource) => resource.ownerTag)),
       service: distinct(resources.map((resource) => resource.resourceType)),
-      subscription: distinct(resources.map((resource) => resource.subscriptionOrProject)),
+      subscription: distinct(
+        resources.map((resource) => resource.subscriptionOrProject),
+      ),
       region: distinct(resources.map((resource) => resource.region)),
     }),
     [resources],
@@ -53,10 +99,14 @@ function InventoryBody({ orgId, resources }: { orgId: string; resources: Invento
   for (const resource of filtered) {
     const key = resource.ownerTag ?? "none";
     byOwner.set(key, (byOwner.get(key) ?? 0) + 1);
-    byService.set(resource.resourceType, (byService.get(resource.resourceType) ?? 0) + 1);
+    byService.set(
+      resource.resourceType,
+      (byService.get(resource.resourceType) ?? 0) + 1,
+    );
   }
-  const change = (key: keyof Filters) => (event: { target: { value: string } }) =>
-    setFilters((current) => ({ ...current, [key]: event.target.value }));
+  const change =
+    (key: keyof Filters) => (event: { target: { value: string } }) =>
+      setFilters((current) => ({ ...current, [key]: event.target.value }));
 
   const scopes = options.subscription;
   return (
@@ -70,10 +120,36 @@ function InventoryBody({ orgId, resources }: { orgId: string; resources: Invento
       <p className="page-meta" role="status" aria-live="polite">
         {plural(filtered.length, "resource")}
       </p>
-      <form className="panel filters" role="search" aria-label="Filter inventory">
+      {filters.resource ? (
+        <p className="notice">
+          Showing resource{" "}
+          <span title={filters.resource}>{shortName(filters.resource)}</span>{" "}
+          only.{" "}
+          <button
+            className="action action-secondary"
+            type="button"
+            onClick={() => {
+              window.history.replaceState(null, "", "#inventory");
+              setFilters((current) => ({ ...current, resource: "" }));
+            }}
+          >
+            Show all resources
+          </button>
+        </p>
+      ) : null}
+      <form
+        className="panel filters"
+        role="search"
+        aria-label="Filter inventory"
+      >
         <div className="field">
           <label htmlFor={ids.owner}>Owner</label>
-          <select className="input" id={ids.owner} value={filters.owner} onChange={change("owner")}>
+          <select
+            className="input"
+            id={ids.owner}
+            value={filters.owner}
+            onChange={change("owner")}
+          >
             <option value="">Any owner</option>
             <option value="none">No owner</option>
             {options.owner.map((value) => (
@@ -197,7 +273,13 @@ function InventoryBody({ orgId, resources }: { orgId: string; resources: Invento
   );
 }
 
-export function Inventory() {
+export function Inventory({
+  hash = typeof window === "undefined"
+    ? "inventory"
+    : window.location.hash.replace(/^#\/?/, ""),
+}: {
+  hash?: string;
+}) {
   const source = useSource();
   const resources = useResource((signal) => source.inventory(signal), [source]);
   return (
@@ -205,6 +287,7 @@ export function Inventory() {
       <h1 className="page-title" id="page-title" tabIndex={-1}>
         Inventory
       </h1>
+      <LastScan />
       <ScreenState
         label="the inventory"
         resource={resources}
@@ -215,7 +298,14 @@ export function Inventory() {
             : null
         }
       >
-        {(data) => <InventoryBody orgId={source.orgId} resources={data} />}
+        {(data) => (
+          <InventoryBody
+            key={resourceParam(hash)}
+            orgId={source.orgId}
+            resources={data}
+            resource={resourceParam(hash)}
+          />
+        )}
       </ScreenState>
     </>
   );
