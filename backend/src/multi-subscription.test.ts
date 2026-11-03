@@ -1,13 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Finding, Inventory } from "@farside/scan-contracts";
 import { MIXED_CURRENCY_CLOSER } from "./cost-total.js";
-import { MONTH_ON_MONTH, SPEND_BY_SERVICE, TWO_MONTHS_CLOSER, type CostSnapshot } from "./cost.js";
+import { harvestCost, MONTH_ON_MONTH, SPEND_BY_SERVICE, TWO_MONTHS_CLOSER, type CostSnapshot } from "./cost.js";
 import { recordCoverageScope } from "./coverage.js";
 import { applyScanToIssues } from "./issues.js";
 import { ScanRunner, type Harvester } from "./scans.js";
-import { addHours, ScanScheduler } from "./scheduler.js";
+import { addHours, RETRY_DELAY_HOURS, ScanScheduler } from "./scheduler.js";
 import { MemoryStore } from "./store.js";
 import { fixedClock, FIXED_NOW } from "./test-clock.js";
+import type { Clock } from "./clock.js";
+import { silentLog, type LogSink } from "./observability.js";
+
+const LONG_TIMEOUT_MS = 2_000_000_000;
+const NEVER = new Promise<void>(() => undefined);
 
 const ORG = "org-a";
 const DISK_TYPE = "Microsoft.Compute/disks";
@@ -100,16 +105,28 @@ function costSnapshot(
     months?: MonthSpec[];
     services?: Record<string, MonthSpec>;
     changes?: { service: string; current: string; previous: string; currentMonth: string; previousMonth: string }[];
+    serviceMonths?: Record<string, MonthSpec[]>;
   } = {},
 ): CostSnapshot {
   const months = (input.months ?? [{ month: "2026-10", amount: "10.00" }]).map((spec) =>
     figure(subscriptionId, currency, "all", spec),
+  );
+  const latest = Object.entries(input.services ?? { Storage: { month: "2026-10", amount: "10.00" } }).map(
+    ([name, spec]) => figure(subscriptionId, currency, name, spec),
+  );
+  const fromChanges = (input.changes ?? []).flatMap((change) => [
+    figure(subscriptionId, currency, change.service, { month: change.currentMonth, amount: change.current }),
+    figure(subscriptionId, currency, change.service, { month: change.previousMonth, amount: change.previous }),
+  ]);
+  const explicit = Object.entries(input.serviceMonths ?? {}).flatMap(([name, specs]) =>
+    specs.map((spec) => figure(subscriptionId, currency, name, spec)),
   );
   return {
     subscriptionId,
     billingScope: `/subscriptions/${subscriptionId}`,
     currency,
     agreementType: "payg",
+    serviceMonths: input.serviceMonths ? explicit : [...fromChanges, ...latest.filter((row) => !fromChanges.some((change) => change.serviceName === row.serviceName && change.periodStart === row.periodStart))],
     periodStart: months[0]?.periodStart ?? "",
     periodEnd: months.at(-1)?.periodEnd ?? "",
     asOf: FIXED_NOW,
@@ -334,18 +351,18 @@ describe("concurrent scans in one org", () => {
   });
 });
 
-describe("scheduler with several connections", () => {
-  function scheduled(harvester: Harvester) {
-    const store = new MemoryStore(fixedClock);
-    const runner = new ScanRunner(store, harvester, {}, fixedClock);
-    const scheduler = new ScanScheduler(store, runner, fixedClock);
-    store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
-    store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-b" });
-    store.org(ORG).settings.scanScheduleEnabled = true;
-    scheduler.applySettings(ORG, FIXED_NOW);
-    return { store, runner, scheduler };
-  }
+function scheduled(harvester: Harvester, clock: Clock = fixedClock, log: LogSink = silentLog) {
+  const store = new MemoryStore(clock);
+  const runner = new ScanRunner(store, harvester, {}, clock, log, LONG_TIMEOUT_MS);
+  const scheduler = new ScanScheduler(store, runner, clock, log);
+  store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
+  store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-b" });
+  store.org(ORG).settings.scanScheduleEnabled = true;
+  scheduler.applySettings(ORG, clock());
+  return { store, runner, scheduler };
+}
 
+describe("scheduler with several connections", () => {
   it("starts one scan per healthy connection and skips the unhealthy one", async () => {
     const { store, scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS));
     const broken = store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-c" });
@@ -446,6 +463,20 @@ describe("full-URI issue identity", () => {
     expect(third[0]?.firstSeen).toBe(FIXED_NOW);
   });
 
+  it("re-keys a closed legacy issue and reopens it when the finding returns", () => {
+    const closed = apply(apply([], [legacyFinding], FIXED_NOW), [], addHours(FIXED_NOW, 24));
+    expect(closed[0]).toMatchObject({ status: "closed", closingScanId: "scan" });
+    const reopened = apply(closed, [fail(diskUri("main", "rg-a", "web"))], addHours(FIXED_NOW, 48));
+    expect(reopened).toHaveLength(1);
+    expect(reopened[0]).toMatchObject({
+      id: `${DISK_CHECK}:${diskUri("main", "rg-a", "web")}:main:${DISK_CHECK}`,
+      status: "open",
+      firstSeen: FIXED_NOW,
+      lastConfirmed: addHours(FIXED_NOW, 48),
+    });
+    expect(reopened[0]).not.toHaveProperty("closingScanId");
+  });
+
   it("keeps the already re-keyed issue when a legacy twin also exists", () => {
     const finding = fail(diskUri("main", "rg-a", "web"));
     const rekeyed = apply(apply([], [legacyFinding], FIXED_NOW), [finding], FIXED_NOW);
@@ -460,5 +491,231 @@ describe("full-URI issue identity", () => {
     const legacy = apply([], [legacyFinding], FIXED_NOW);
     const next = apply(legacy, [fail(diskUri("main", "rg-a", "web"))], FIXED_NOW, ["azure-cost-subscriptions-without-budgets"]);
     expect(next).toEqual(legacy);
+  });
+});
+
+describe("scheduler hardening", () => {
+  it("fails a hung harvest with harvest_timeout and lets the org queue move on", async () => {
+    const store = new MemoryStore(fixedClock);
+    const runner = new ScanRunner(store, harvesterFor(TWO_SUBSCRIPTIONS, { gates: { "sub-a": NEVER } }), {}, fixedClock, silentLog, 20);
+    const first = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "system" });
+    const second = runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "system" });
+    expect(await first.done).toMatchObject({ status: "failed", error: "harvest_timeout" });
+    expect((await second.done).status).toBe("succeeded");
+  });
+
+  it("treats a running job older than the timeout as failed so it cannot block a new scan", () => {
+    let now = Date.parse("2026-10-01T00:00:00.000Z");
+    const clock: Clock = () => new Date(now).toISOString();
+    const store = new MemoryStore(clock);
+    const runner = new ScanRunner(store, harvesterFor(TWO_SUBSCRIPTIONS, { gates: { "sub-a": NEVER } }), {}, clock, silentLog, 60_000);
+    const stuck = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    expect(runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" }).started).toBe(false);
+    now += 61_000;
+    const next = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    expect(next.started).toBe(true);
+    expect(next.job.id).not.toBe(stuck.job.id);
+    expect(store.getJob(ORG, stuck.job.id)).toMatchObject({ status: "failed", error: "harvest_timeout" });
+  });
+
+  it("retries a failed scan one retry delay later, only for the failed subscription", async () => {
+    let now = FIXED_NOW;
+    const { store, scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS, { failFor: "sub-a" }), () => now);
+    now = addHours(FIXED_NOW, 24);
+    expect(scheduler.tick(ORG, now).action).toBe("started");
+    await settled(store);
+    expect(store.snapshot(ORG).schedule.nextRunAt).toBe(addHours(now, RETRY_DELAY_HOURS));
+    expect(scheduler.tick(ORG, addHours(now, RETRY_DELAY_HOURS / 2)).action).toBe("idle");
+    now = addHours(now, RETRY_DELAY_HOURS);
+    const retry = scheduler.tick(ORG, now);
+    expect(retry.action).toBe("retried");
+    expect(retry.scans.map((item) => item.scan.subscriptionId)).toEqual(["sub-a"]);
+    await settled(store);
+  });
+
+  it("raises attention after three consecutive overlap skips", () => {
+    const { store, runner, scheduler } = scheduled(
+      harvesterFor(TWO_SUBSCRIPTIONS, { gates: { "sub-a": NEVER, "sub-b": NEVER } }),
+    );
+    runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "user" });
+    const attentions = [24, 48, 72].map((hours) => scheduler.tick(ORG, addHours(FIXED_NOW, hours)));
+    expect(attentions.map((tick) => tick.action)).toEqual(["skipped_overlap", "skipped_overlap", "skipped_overlap"]);
+    expect(attentions.map((tick) => tick.attention)).toEqual([
+      null,
+      null,
+      "scans are overlapping; the previous scan has run for 4320 minutes",
+    ]);
+    expect(store.snapshot(ORG).schedule.overlapStreak).toBe(3);
+  });
+
+  describe("decision metrics", () => {
+    function capture() {
+      const lines: Record<string, unknown>[] = [];
+      const log: LogSink = { info: (line: unknown) => void lines.push(line as Record<string, unknown>), error: () => undefined };
+      return { lines, log };
+    }
+
+    it("logs one decision line without subscription ids", async () => {
+      const { lines, log } = capture();
+      const { store, scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS), fixedClock, log);
+      expect(scheduler.tick(ORG, FIXED_NOW).action).toBe("idle");
+      const started = scheduler.tick(ORG, addHours(FIXED_NOW, 24));
+      await settled(store);
+      const decisions = lines.filter((line) => line.event === "scheduler.decision");
+      expect(decisions).toEqual([
+        { event: "scheduler.decision", decision: "idle", orgId: ORG },
+        { event: "scheduler.decision", decision: "started", orgId: ORG, scanId: started.scan?.id },
+      ]);
+      expect(JSON.stringify(decisions)).not.toContain("sub-");
+    });
+
+    it("adds EMF fields only when FARSIDE_EMIT_EMF=1", () => {
+      const { lines, log } = capture();
+      const { scheduler } = scheduled(harvesterFor(TWO_SUBSCRIPTIONS), fixedClock, log);
+      vi.stubEnv("FARSIDE_EMIT_EMF", "1");
+      try {
+        scheduler.tick(ORG, FIXED_NOW);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+      scheduler.tick(ORG, FIXED_NOW);
+      const [emf, plain] = lines.filter((line) => line.event === "scheduler.decision");
+      expect(emf).toMatchObject({
+        Decision: "idle",
+        Decisions: 1,
+        _aws: {
+          CloudWatchMetrics: [
+            {
+              Namespace: "Farside/Scheduler",
+              Dimensions: [["Decision"]],
+              Metrics: [{ Name: "Decisions", Unit: "Count" }],
+            },
+          ],
+        },
+      });
+      expect(plain).not.toHaveProperty("_aws");
+    });
+  });
+});
+
+describe("combined month-on-month with a service that stops", () => {
+  it("keeps the previous month of a service one subscription stopped using", () => {
+    const store = new MemoryStore(fixedClock);
+    store.putCost(
+      ORG,
+      costSnapshot("sub-a", "USD", {
+        months: [
+          { month: "2026-09", amount: "10.00" },
+          { month: "2026-10", amount: "10.00" },
+        ],
+        serviceMonths: {
+          Storage: [
+            { month: "2026-09", amount: "10.00" },
+            { month: "2026-10", amount: "10.00" },
+          ],
+        },
+      }),
+    );
+    store.putCost(
+      ORG,
+      costSnapshot("sub-b", "USD", {
+        months: [{ month: "2026-09", amount: "5.00" }],
+        services: {},
+        serviceMonths: { Storage: [{ month: "2026-09", amount: "5.00" }] },
+      }),
+    );
+    expect(store.snapshot(ORG).cost?.monthOnMonth).toEqual([
+      expect.objectContaining({
+        serviceName: "Storage",
+        previousMonthCost: "15.00",
+        currentMonthCost: "10.00",
+        deltaPercent: "-33.33",
+      }),
+    ]);
+  });
+
+  it("stores a service's earlier month on the harvested snapshot even when it has no current-month spend", async () => {
+    const row = (date: string, serviceName: string, costAmount: string) => ({ date, serviceName, costAmount, currency: "USD" });
+    const result = await harvestCost({
+      client: {
+        query: async () => ({
+          rows: [
+            row("2026-09-01", "Storage", "10.00"),
+            row("2026-09-01", "Compute", "4.00"),
+            row("2026-10-01", "Storage", "10.00"),
+            row("2026-11-01", "Storage", "1.00"),
+          ],
+        }),
+      },
+      subscriptionId: "sub-a",
+      billingScope: "/subscriptions/sub-a",
+      agreementType: "payg",
+    });
+    expect(result.ok && result.snapshot.serviceMonths.map((item) => `${item.serviceName}:${item.periodStart.slice(0, 7)}`).sort()).toEqual([
+      "Compute:2026-09",
+      "Storage:2026-09",
+      "Storage:2026-10",
+    ]);
+  });
+});
+
+describe("disconnect during a scan", () => {
+  it("writes nothing for a subscription disconnected mid-scan and cancels the queued one before harvesting", async () => {
+    const store = new MemoryStore(fixedClock);
+    const connectionA = store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
+    const connectionB = store.putConnection(ORG, { tenantId: "t", subscriptionId: "SUB-B" });
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    const harvester = harvesterFor(TWO_SUBSCRIPTIONS, { gates: { "sub-a": gate } });
+    const harvest = vi.spyOn(harvester, "harvest");
+    const runner = new ScanRunner(store, harvester, {}, fixedClock);
+    const first = runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });
+    const second = runner.start({ orgId: ORG, subscriptionId: "sub-b", actor: "user" });
+    await new Promise((resolve) => setImmediate(resolve));
+    store.deleteConnection(ORG, connectionA.id);
+    store.deleteConnection(ORG, connectionB.id);
+    open();
+    expect((await first.done).status).toBe("cancelled");
+    expect((await second.done).status).toBe("cancelled");
+    expect(harvest).toHaveBeenCalledTimes(1);
+    const org = store.snapshot(ORG);
+    expect(org.inventories.azure).toBeUndefined();
+    expect(org.facts).toEqual([]);
+    expect(org.findings).toEqual([]);
+    expect(org.issues).toEqual([]);
+    expect(org.scans.map((job) => job.status)).toEqual(["cancelled", "cancelled"]);
+    expect(store.runningScan(ORG, "sub-a")).toBeUndefined();
+  });
+
+  it("removes its abort listener once the harvest settles", async () => {
+    const store = new MemoryStore(fixedClock);
+    const track = store.trackScan.bind(store);
+    let removed: ReturnType<typeof vi.spyOn> | undefined;
+    vi.spyOn(store, "trackScan").mockImplementation((orgId) => {
+      const tracked = track(orgId);
+      removed = vi.spyOn(tracked.signal, "removeEventListener");
+      return tracked;
+    });
+    await scan(new ScanRunner(store, harvesterFor(TWO_SUBSCRIPTIONS), {}, fixedClock), "sub-a");
+    expect(removed).toHaveBeenCalledWith("abort", expect.any(Function));
+  });
+
+  it("lists each billing scope once when combining commitments", () => {
+    const store = new MemoryStore(fixedClock);
+    const snapshot = (subscriptionId: string) => ({
+      subscriptionId,
+      billingScope: "/providers/Microsoft.Billing/billingAccounts/shared",
+      periodStart: "2026-10-01",
+      periodEnd: "2026-10-31",
+      reservations: [],
+      savingsPlans: [],
+      noneFound: { reservations: true, savingsPlans: true },
+    });
+    store.putCommitments(ORG, snapshot("sub-a"));
+    store.putCommitments(ORG, snapshot("sub-b"));
+    expect(store.snapshot(ORG).commitments?.billingScope).toBe("/providers/Microsoft.Billing/billingAccounts/shared");
   });
 });

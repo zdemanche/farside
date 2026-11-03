@@ -222,6 +222,7 @@ export function buildApp(
     trustClientClock?: boolean;
     operatorToken?: string | undefined;
     logger?: LoggerOptions;
+    scanTimeoutMs?: number;
   } = {},
 ) {
   const clock = options.clock ?? store.clock;
@@ -243,8 +244,9 @@ export function buildApp(
     },
     clock,
     app.log,
+    options.scanTimeoutMs,
   );
-  const scheduler = new ScanScheduler(store, runner, clock);
+  const scheduler = new ScanScheduler(store, runner, clock, app.log);
 
   const operatorOnly = { config: { operator: true } };
   const operatorGuard = async (request: FastifyRequest<{ Params: OrgParams }>, reply: FastifyReply) => {

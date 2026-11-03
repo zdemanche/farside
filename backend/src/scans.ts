@@ -29,10 +29,11 @@ import { applyScanToIssues } from "./issues.js";
 import { PROVIDER_NOT_CONFIGURED, ProviderNotConfiguredError, rejectUnconfigured } from "./providers.js";
 import type { OrgSettings } from "./settings.js";
 import { silentLog, type LogSink } from "./observability.js";
+import { addHours, DEFAULT_SCAN_TIMEOUT_MS, RETRY_DELAY_HOURS } from "./scheduler.js";
 import type { MemoryStore } from "./store.js";
 import docAzureGroundTruth from "../../docs/azure/ground-truth.json" with { type: "json" };
 
-// "cancelled" is internal-only: never stored or returned by the API
+// "cancelled" is stored so a cancelled job frees its subscription, but the API never returns it
 export type ScanStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export type ScanCheckOutcome = {
@@ -140,7 +141,7 @@ export function toScanViews(jobs: readonly ScanJob[]): ScanView[] {
       break;
     }
   }
-  return jobs.map((job) => toScanView(job, job.id === currentId));
+  return jobs.filter((job) => job.status !== "cancelled").map((job) => toScanView(job, job.id === currentId));
 }
 
 export type HarvestResult = {
@@ -301,14 +302,29 @@ export function unconfiguredHarvester(): Harvester {
   };
 }
 
-function abortable<T>(signal: AbortSignal, work: Promise<T>): Promise<T> {
+const MAX_TIMER_MS = 2 ** 31 - 1;
+
+function abortable<T>(signal: AbortSignal, work: Promise<T>, timeoutMs: number): Promise<T> {
   if (signal.aborted) {
     return Promise.reject(new Error("scan aborted"));
   }
   return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(new Error("scan aborted"));
+    const onAbort = () => settle(() => reject(new Error("scan aborted")));
+    const timer = setTimeout(() => {
+      const error = new Error(`harvest exceeded ${timeoutMs}ms`);
+      error.name = "TimeoutError";
+      settle(() => reject(error));
+    }, Math.min(timeoutMs, MAX_TIMER_MS));
+    const settle = (finish: () => void) => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      finish();
+    };
     signal.addEventListener("abort", onAbort, { once: true });
-    work.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+    work.then(
+      (value) => settle(() => resolve(value)),
+      (error: unknown) => settle(() => reject(error)),
+    );
   });
 }
 
@@ -327,6 +343,7 @@ export class ScanRunner {
     private readonly harvestClients: ScanHarvestClients = {},
     private readonly clock: Clock = systemClock,
     private readonly log: LogSink = silentLog,
+    readonly scanTimeoutMs: number = DEFAULT_SCAN_TIMEOUT_MS,
   ) {}
 
   start(input: { orgId: string; subscriptionId: string; actor: "user" | "system" }): {
@@ -334,7 +351,7 @@ export class ScanRunner {
     started: boolean;
     done: Promise<ScanJob>;
   } {
-    const existing = this.store.runningScan(input.orgId, input.subscriptionId);
+    const existing = this.store.runningScan(input.orgId, input.subscriptionId, this.scanTimeoutMs);
     if (existing) {
       return { job: existing, started: false, done: Promise.resolve(existing) };
     }
@@ -354,15 +371,18 @@ export class ScanRunner {
       coverageSummary: EMPTY_COVERAGE_SUMMARY,
       checks: [],
     });
+    const connected = this.store.isConnected(input.orgId, input.subscriptionId);
     const tail = this.#queues.get(input.orgId);
     if (tail) {
       this.log.info({ event: "scan.queued", orgId: input.orgId, scanId: job.id }, "scan.queued");
     }
     const done = tail
       ? tail.then((): Promise<ScanJob> | ScanJob =>
-          this.store.deletion(input.orgId) ? this.cancelQueued(input.orgId, job) : this.execute(input.orgId, job.id),
+          this.store.deletion(input.orgId) || (connected && !this.store.isConnected(input.orgId, input.subscriptionId))
+            ? this.cancel(input.orgId, job)
+            : this.execute(input.orgId, job.id, connected),
         )
-      : this.execute(input.orgId, job.id);
+      : this.execute(input.orgId, job.id, connected);
     const settled = done.catch(() => undefined);
     this.#queues.set(input.orgId, settled);
     void settled.then(() => {
@@ -379,12 +399,26 @@ export class ScanRunner {
     return { job, started: true, done };
   }
 
-  private cancelQueued(orgId: string, job: ScanJob): ScanJob {
+  private cancel(orgId: string, job: ScanJob, patch: Partial<ScanJob> = {}): ScanJob {
     this.log.info({ event: "scan.cancelled", orgId, scanId: job.id }, "scan.cancelled");
-    return { ...job, status: "cancelled" };
+    if (!this.store.hasOrg(orgId) || this.store.deletion(orgId)) {
+      return { ...job, ...patch, status: "cancelled" };
+    }
+    return this.store.patchJob(orgId, job.id, { ...patch, status: "cancelled" });
   }
 
-  private async execute(orgId: string, jobId: string): Promise<ScanJob> {
+  private scheduleRetry(orgId: string, subscriptionId: string, finishedAt: string): void {
+    const { settings, schedule } = this.store.org(orgId);
+    if (!settings.scanScheduleEnabled || (schedule.retryCounts[subscriptionId] ?? 0) >= settings.scanRetryLimit) {
+      return;
+    }
+    const retryAt = addHours(finishedAt, RETRY_DELAY_HOURS);
+    if (!schedule.nextRunAt || Date.parse(retryAt) < Date.parse(schedule.nextRunAt)) {
+      schedule.nextRunAt = retryAt;
+    }
+  }
+
+  private async execute(orgId: string, jobId: string, connectedAtStart: boolean): Promise<ScanJob> {
     const current = this.store.getJob(orgId, jobId);
     if (!current) {
       throw new Error(`scan ${jobId} missing`);
@@ -394,10 +428,7 @@ export class ScanRunner {
     const { signal, release } = this.store.trackScan(orgId);
     const scanFields = { orgId, scanId: jobId };
     this.log.info({ event: "scan.start", ...scanFields }, "scan.start");
-    const cancelled = (): ScanJob => {
-      this.log.info({ event: "scan.cancelled", ...scanFields }, "scan.cancelled");
-      return { ...current, status: "cancelled", startedAt };
-    };
+    const cancelled = (): ScanJob => this.cancel(orgId, current, { startedAt });
     let harvesting = true;
     try {
       const settings = this.store.snapshot(orgId).settings;
@@ -408,6 +439,7 @@ export class ScanRunner {
           subscriptionId: current.subscriptionId,
           settings,
         }),
+        this.scanTimeoutMs,
       );
       harvesting = false;
       if (signal.aborted) {
@@ -426,7 +458,14 @@ export class ScanRunner {
         result.inventory.cloud === "azure"
           ? await this.collectAzureHarvests(current.subscriptionId, signal)
           : {};
-      if (!collected) {
+      if (!collected || signal.aborted) {
+        return cancelled();
+      }
+      const live = this.store.getJob(orgId, jobId);
+      if (live?.status !== "running") {
+        return live ?? cancelled();
+      }
+      if (connectedAtStart && !this.store.isConnected(orgId, current.subscriptionId)) {
         return cancelled();
       }
       const fresh = this.store.snapshot(orgId);
@@ -502,6 +541,9 @@ export class ScanRunner {
         coverageSummary: coverageSummaryFrom(checks),
         checks,
       });
+      if (current.actor === "system") {
+        this.scheduleRetry(orgId, current.subscriptionId, finishedAt);
+      }
       this.log.error(
         {
           event: "scan.failed",
@@ -534,6 +576,7 @@ export class ScanRunner {
         agreementType: "payg",
         asOf: this.clock(),
         }),
+        this.scanTimeoutMs,
       );
       if (signal.aborted) {
         return null;
@@ -547,6 +590,7 @@ export class ScanRunner {
         subscriptionId,
         billingScope,
         }),
+        this.scanTimeoutMs,
       );
       if (signal.aborted) {
         return null;
@@ -559,6 +603,7 @@ export class ScanRunner {
         client: this.harvestClients.budgetClient,
         lastConfirmed: this.clock(),
         }),
+        this.scanTimeoutMs,
       );
       if (signal.aborted) {
         return null;

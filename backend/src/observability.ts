@@ -60,3 +60,34 @@ export function auditRetention(
     });
   }
 }
+
+export type SchedulerDecision = "started" | "skipped_overlap" | "missed" | "retried" | "idle" | "blocked";
+
+export function emitDecision(
+  log: LogSink,
+  input: { decision: SchedulerDecision; orgId: string; at: string; scanId?: string },
+): void {
+  const emf =
+    process.env.FARSIDE_EMIT_EMF === "1"
+      ? {
+          _aws: {
+            Timestamp: Date.parse(input.at),
+            CloudWatchMetrics: [
+              {
+                Namespace: "Farside/Scheduler",
+                Dimensions: [["Decision"]],
+                Metrics: [{ Name: "Decisions", Unit: "Count" }],
+              },
+            ],
+          },
+          Decision: input.decision,
+          Decisions: 1,
+        }
+      : {};
+  audit(log, "scheduler.decision", {
+    decision: input.decision,
+    orgId: input.orgId,
+    ...(input.scanId ? { scanId: input.scanId } : {}),
+    ...emf,
+  });
+}
