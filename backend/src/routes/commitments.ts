@@ -59,7 +59,10 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
       }
       const harvested = await withProvider(reply, () =>
         harvestCommitments({
-          client: guardProviderClient(orgId, ctx.clients.commitment ?? unconfiguredCommitmentClient()),
+          client: guardProviderClient(
+            orgId,
+            ctx.clients.commitment ?? unconfiguredCommitmentClient(),
+          ),
           subscriptionId: connected,
           billingScope: `/subscriptions/${connected}`,
         }),
@@ -124,7 +127,10 @@ export const commitmentRoutes: RoutePlugin = (ctx) => async (app) => {
       config: {
         demo: (store, orgId) => {
           const org = store.snapshot(orgId);
-          return { status: 200, body: { harvested: true, budgets: org.budgets, findings: org.findings } };
+          return {
+            status: 200,
+            body: { harvested: true, budgets: org.budgets, findings: org.findings },
+          };
         },
       },
     },

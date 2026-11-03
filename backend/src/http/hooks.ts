@@ -23,6 +23,7 @@ const DEMO_CANNED_POSTS = new Set([
   "POST /budgets",
   "POST /alerts",
 ]);
+const FORMAT_KEYWORDS = new Set(["pattern", "format"]);
 const READ_ONLY_EXEMPT = new Set(["POST /offboard", "POST /schedule/tick"]);
 
 function orgIdOf(request: FastifyRequest): string | undefined {
@@ -52,7 +53,12 @@ export function operatorGuard(ctx: AppContext): preValidationAsyncHookHandler {
   };
 }
 
-function rejectLocked(ctx: AppContext, request: FastifyRequest, reply: FastifyReply, orgId: string): boolean {
+function rejectLocked(
+  ctx: AppContext,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  orgId: string,
+): boolean {
   if (ctx.store.deletion(orgId) || NON_MUTATING_METHODS.has(request.method)) {
     return false;
   }
@@ -151,13 +157,22 @@ export function registerHttp(app: FastifyInstance, ctx: AppContext): void {
 
   app.setErrorHandler(async (error: FastifyError, request, reply) => {
     if (error.validation) {
+      const context = error.validationContext ?? "body";
       const errors = error.validation.map((issue) => ({
-        path: validationPath(issue) || (error.validationContext ?? "body"),
-        message: issue.message ?? "invalid",
+        path: validationPath(issue) || context,
+        message: FORMAT_KEYWORDS.has(issue.keyword)
+          ? "invalid format"
+          : (issue.message ?? "invalid"),
       }));
-      return problem(reply, 400, request.routeOptions.config.invalidTitle ?? "Invalid request", {
-        errors,
-      });
+      const cloudRejected =
+        context === "querystring" && errors.some((issue) => issue.path === "cloud");
+      const title =
+        context === "body"
+          ? (request.routeOptions.config.invalidTitle ?? "Invalid request")
+          : cloudRejected
+            ? "Invalid cloud"
+            : "Invalid request";
+      return problem(reply, 400, title, { errors });
     }
     if (typeof error.statusCode === "number" && error.statusCode < 500) {
       return reply.send(error);
@@ -173,7 +188,10 @@ export function registerHttp(app: FastifyInstance, ctx: AppContext): void {
   });
 
   app.addHook("preValidation", async (request) => {
-    if (request.body === undefined && request.routeOptions.schema?.body) {
+    if (
+      (request.body === undefined || request.body === null) &&
+      request.routeOptions.schema?.body
+    ) {
       request.body = {};
     }
   });

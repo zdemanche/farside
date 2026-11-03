@@ -22,47 +22,21 @@ export const DEFAULT_SETTINGS: OrgSettings = {
   updatedAt: "1970-01-01T00:00:00.000Z",
 };
 
-export function parseSettings(body: unknown): Omit<OrgSettings, "updatedAt"> | null {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return null;
-  }
-  const record = body as Record<string, unknown>;
-  if (typeof record.ownerTagKey !== "string" || record.ownerTagKey.length === 0) {
-    return null;
-  }
-  if (typeof record.productionTagKey !== "string" || record.productionTagKey.length === 0) {
-    return null;
-  }
-  if (typeof record.productionTagValue !== "string" || record.productionTagValue.length === 0) {
-    return null;
-  }
-  const snapshotRetentionDays =
-    typeof record.snapshotRetentionDays === "number" && record.snapshotRetentionDays > 0
-      ? record.snapshotRetentionDays
-      : DEFAULT_SETTINGS.snapshotRetentionDays;
-  const certExpiryFlagDays =
-    typeof record.certExpiryFlagDays === "number" && record.certExpiryFlagDays > 0
-      ? record.certExpiryFlagDays
-      : DEFAULT_SETTINGS.certExpiryFlagDays;
-  const scanIntervalHours =
-    typeof record.scanIntervalHours === "number" && record.scanIntervalHours > 0
-      ? record.scanIntervalHours
-      : DEFAULT_SETTINGS.scanIntervalHours;
-  const scanRetryLimit =
-    typeof record.scanRetryLimit === "number" && record.scanRetryLimit > 0
-      ? record.scanRetryLimit
-      : DEFAULT_SETTINGS.scanRetryLimit;
+export type SettingsInput = Pick<
+  OrgSettings,
+  "ownerTagKey" | "productionTagKey" | "productionTagValue"
+> &
+  Partial<Omit<OrgSettings, "updatedAt">>;
+
+export function settingsFromInput(input: SettingsInput): Omit<OrgSettings, "updatedAt"> {
   return {
-    ownerTagKey: record.ownerTagKey,
-    productionTagKey: record.productionTagKey,
-    productionTagValue: record.productionTagValue,
-    snapshotRetentionDays,
-    certExpiryFlagDays,
-    scanScheduleEnabled:
-      typeof record.scanScheduleEnabled === "boolean"
-        ? record.scanScheduleEnabled
-        : DEFAULT_SETTINGS.scanScheduleEnabled,
-    scanIntervalHours,
-    scanRetryLimit,
+    ownerTagKey: input.ownerTagKey,
+    productionTagKey: input.productionTagKey,
+    productionTagValue: input.productionTagValue,
+    snapshotRetentionDays: input.snapshotRetentionDays ?? DEFAULT_SETTINGS.snapshotRetentionDays,
+    certExpiryFlagDays: input.certExpiryFlagDays ?? DEFAULT_SETTINGS.certExpiryFlagDays,
+    scanScheduleEnabled: input.scanScheduleEnabled ?? DEFAULT_SETTINGS.scanScheduleEnabled,
+    scanIntervalHours: input.scanIntervalHours ?? DEFAULT_SETTINGS.scanIntervalHours,
+    scanRetryLimit: input.scanRetryLimit ?? DEFAULT_SETTINGS.scanRetryLimit,
   };
 }

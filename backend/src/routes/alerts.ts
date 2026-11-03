@@ -20,7 +20,7 @@ export const alertRoutes: RoutePlugin = (ctx) => async (app) => {
     },
   );
 
-  app.post<{ Params: OrgParams; Body: AlertsBody | undefined }>(
+  app.post<{ Params: OrgParams; Body: AlertsBody }>(
     "/v1/orgs/:orgId/alerts",
     {
       schema: { params: orgParams, body: alertsBody },
@@ -31,12 +31,14 @@ export const alertRoutes: RoutePlugin = (ctx) => async (app) => {
       },
     },
     async (request, reply) => {
-      const body = request.body ?? {};
+      const body = request.body;
       if (!body.rows) {
         return problem(reply, 409, "No cost series");
       }
       const asOf =
-        ctx.trustClientClock && typeof body.asOf === "string" ? body.asOf : ctx.clock().slice(0, 10);
+        ctx.trustClientClock && typeof body.asOf === "string"
+          ? body.asOf
+          : ctx.clock().slice(0, 10);
       const analysis = analyzeAlerts({
         rows: body.rows,
         asOf,

@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { matchesCloud, parseCloudQuery, type Cloud } from "../cloud.js";
+import { matchesCloud, type Cloud } from "../cloud.js";
 import { audit } from "../observability.js";
 import { ProviderNotConfiguredError } from "../providers/unconfigured.js";
 import { SecretLeakError, assertNoSecrets } from "../secrets.js";
@@ -17,12 +17,15 @@ export function problem(
   if (AUDITED_STATUSES.has(status)) {
     audit(reply.request.log, `http.${status}`, { title });
   }
-  return reply.code(status).type("application/problem+json").send({
-    type: "about:blank",
-    title,
-    status,
-    ...extra,
-  });
+  return reply
+    .code(status)
+    .type("application/problem+json")
+    .send({
+      type: "about:blank",
+      title,
+      status,
+      ...extra,
+    });
 }
 
 export function sendClean(reply: FastifyReply, status: number, body: unknown) {
@@ -45,21 +48,15 @@ export function rejectSecrets(body: unknown, reply: FastifyReply): boolean {
   }
 }
 
-export function readCloud(
-  query: unknown,
-  reply: FastifyReply,
-): { ok: true; cloud?: Cloud } | { ok: false } {
-  const parsed = parseCloudQuery((query ?? {}) as Record<string, unknown>);
-  if (parsed.error) {
-    void problem(reply, 400, "Invalid cloud", {
-      errors: [{ path: "cloud", message: parsed.error }],
-    });
-    return { ok: false };
-  }
-  return parsed.cloud ? { ok: true, cloud: parsed.cloud } : { ok: true };
+export function cloudOf(query: unknown): Cloud | undefined {
+  return (query as { cloud?: Cloud | "" }).cloud || undefined;
 }
 
-export function cloudFilter<T>(rows: T[], cloud: Cloud | undefined, cloudOf: (row: T) => Cloud): T[] {
+export function cloudFilter<T>(
+  rows: T[],
+  cloud: Cloud | undefined,
+  cloudOf: (row: T) => Cloud,
+): T[] {
   return rows.filter((row) => matchesCloud(cloudOf(row), cloud));
 }
 

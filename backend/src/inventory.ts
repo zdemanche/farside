@@ -33,10 +33,7 @@ export function stripProviderPayload(item: Record<string, unknown>): Record<stri
   return out;
 }
 
-export function toInventoryRecord(
-  item: GroundTruthItem,
-  ownerTagKey: string,
-): InventoryRecord {
+export function toInventoryRecord(item: GroundTruthItem, ownerTagKey: string): InventoryRecord {
   const owner = item.tags[ownerTagKey];
   return {
     resourceUri: `/subscriptions/${item.subscription}/resourceGroups/farside-seed/providers/${item.type}/${item.id}`,
@@ -92,7 +89,6 @@ function projectRecord(record: InventoryRecord): InventoryRecord {
     region: record.region,
     displayName: record.displayName,
     tags,
-    ownerTag: typeof record.ownerTag === "string" ? record.ownerTag : null,
   };
 }
 
@@ -147,7 +143,10 @@ export function filterInventory(
     if (filters.service && resource.resourceType !== filters.service) {
       return [];
     }
-    if (filters.subscription && scopeOf(inventory.cloud, resource.resourceUri) !== filters.subscription) {
+    if (
+      filters.subscription &&
+      scopeOf(inventory.cloud, resource.resourceUri) !== filters.subscription
+    ) {
       return [];
     }
     if (filters.region && resource.region !== filters.region) {

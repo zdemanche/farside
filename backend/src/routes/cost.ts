@@ -5,7 +5,7 @@ import type { OrgParams, RoutePlugin } from "../http/context.js";
 import {
   cloudFilter,
   problem,
-  readCloud,
+  cloudOf,
   requireConnected,
   sendClean,
   withProvider,
@@ -18,10 +18,7 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/cost-waste",
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
-      const cloud = readCloud(request.query, reply);
-      if (!cloud.ok) {
-        return reply;
-      }
+      const cloud = cloudOf(request.query);
       const org = ctx.store.snapshot(request.params.orgId);
       return sendClean(
         reply,
@@ -30,8 +27,8 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
           cost: org.cost,
           alerts: org.alerts,
           commitments: org.commitments,
-          findings: cloudFilter(org.findings, cloud.cloud, (finding) => finding.scope.cloud),
-          coverage: cloudFilter(org.coverage, cloud.cloud, (entry) => entry.cloud),
+          findings: cloudFilter(org.findings, cloud, (finding) => finding.scope.cloud),
+          coverage: cloudFilter(org.coverage, cloud, (entry) => entry.cloud),
         }),
       );
     },
@@ -41,10 +38,7 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/headline",
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
-      const cloud = readCloud(request.query, reply);
-      if (!cloud.ok) {
-        return reply;
-      }
+      const cloud = cloudOf(request.query);
       const org = ctx.store.snapshot(request.params.orgId);
       return sendClean(
         reply,
@@ -54,7 +48,7 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
           findings: org.findings,
           coverage: org.coverage,
           now: ctx.clock(),
-          ...(cloud.cloud ? { cloud: cloud.cloud } : {}),
+          ...(cloud ? { cloud: cloud } : {}),
         }),
       );
     },

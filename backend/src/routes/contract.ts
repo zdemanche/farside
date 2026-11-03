@@ -1,8 +1,8 @@
 import { CardDataError, advanceContract, billingView, parseContract } from "../billing.js";
 import type { OrgParams, RoutePlugin } from "../http/context.js";
 import { operatorGuard } from "../http/hooks.js";
-import { problem, rejectSecrets, sendClean } from "../http/responses.js";
-import { advanceBody, orgParams } from "../http/schemas.js";
+import { problem, sendClean } from "../http/responses.js";
+import { advanceBody, contractBody, orgParams } from "../http/schemas.js";
 import { audit } from "../observability.js";
 
 type ContractEvent = "failed_payment" | "paid" | "ended";
@@ -16,17 +16,20 @@ export const contractRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams } },
     async (request, reply) => {
       const contract = ctx.store.snapshot(request.params.orgId).contract;
-      return contract ? sendClean(reply, 200, billingView(contract, ctx.clock())) : problem(reply, 404, "Not found");
+      return contract
+        ? sendClean(reply, 200, billingView(contract, ctx.clock()))
+        : problem(reply, 404, "Not found");
     },
   );
 
   app.put<{ Params: OrgParams }>(
     "/v1/orgs/:orgId/contract",
-    { schema: { params: orgParams }, config: operatorOnly, preValidation },
+    {
+      schema: { params: orgParams, body: contractBody },
+      config: { ...operatorOnly, rejectSecrets: true, invalidTitle: "Invalid contract" },
+      preValidation,
+    },
     async (request, reply) => {
-      if (rejectSecrets(request.body, reply)) {
-        return reply;
-      }
       const now = ctx.clock();
       try {
         const parsed = parseContract(request.body, now);
@@ -47,7 +50,7 @@ export const contractRoutes: RoutePlugin = (ctx) => async (app) => {
     },
   );
 
-  app.post<{ Params: OrgParams; Body: { event?: ContractEvent } | undefined }>(
+  app.post<{ Params: OrgParams; Body: { event?: ContractEvent } }>(
     "/v1/orgs/:orgId/contract/advance",
     {
       schema: { params: orgParams, body: advanceBody },
@@ -61,7 +64,7 @@ export const contractRoutes: RoutePlugin = (ctx) => async (app) => {
         return problem(reply, 404, "Not found");
       }
       const now = ctx.clock();
-      const event = request.body?.event;
+      const event = request.body.event;
       const next = advanceContract(current, event ? { now, event } : { now });
       ctx.store.putContract(orgId, next);
       audit(request.log, "contract.change", { via: "advance" });

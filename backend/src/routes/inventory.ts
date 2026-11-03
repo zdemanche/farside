@@ -2,7 +2,7 @@ import { validateInventory, type Inventory } from "@farside/scan-contracts";
 import { coverageFromHarvest } from "../coverage.js";
 import { inventoriesFor } from "../estate.js";
 import type { OrgParams, RoutePlugin } from "../http/context.js";
-import { problem, readCloud, sendClean } from "../http/responses.js";
+import { problem, cloudOf, sendClean } from "../http/responses.js";
 import { browseQuery, cloudQuery, inventoryBody, orgParams } from "../http/schemas.js";
 import {
   applyOwnerTag,
@@ -14,20 +14,18 @@ import {
 } from "../inventory.js";
 import { providerFor } from "../providers/index.js";
 import { scopeOf } from "../scope.js";
+import type { Cloud } from "../cloud.js";
 
-const FILTER_KEYS = ["owner", "service", "subscription", "region"] as const;
+type BrowseQuery = Omit<InventoryFilters, "cloud"> & { cloud?: Cloud | "" };
 
 export const inventoryRoutes: RoutePlugin = (ctx) => async (app) => {
   app.get<{ Params: OrgParams }>(
     "/v1/orgs/:orgId/inventory",
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
-      const cloud = readCloud(request.query, reply);
-      if (!cloud.ok) {
-        return reply;
-      }
+      const cloud = cloudOf(request.query);
       const org = ctx.store.snapshot(request.params.orgId);
-      const inventory = cloud.cloud ? inventoriesFor(org, cloud.cloud)[0] : org.inventory;
+      const inventory = cloud ? inventoriesFor(org, cloud)[0] : org.inventory;
       return inventory ? sendClean(reply, 200, inventory) : problem(reply, 404, "Not found");
     },
   );
@@ -36,18 +34,18 @@ export const inventoryRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/inventory/no-owner",
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
-      const cloud = readCloud(request.query, reply);
-      if (!cloud.ok) {
-        return reply;
-      }
-      const inventories = inventoriesFor(ctx.store.snapshot(request.params.orgId), cloud.cloud);
+      const cloud = cloudOf(request.query);
+      const inventories = inventoriesFor(ctx.store.snapshot(request.params.orgId), cloud);
       if (inventories.length === 0) {
         return problem(reply, 404, "Not found");
       }
       const totals = inventories.reduce(
         (sum, inventory) => {
           const next = noOwnerTotal(inventory);
-          return { total: sum.total + next.total, resourceUris: [...sum.resourceUris, ...next.resourceUris] };
+          return {
+            total: sum.total + next.total,
+            resourceUris: [...sum.resourceUris, ...next.resourceUris],
+          };
         },
         { total: 0, resourceUris: [] as string[] },
       );
@@ -55,29 +53,23 @@ export const inventoryRoutes: RoutePlugin = (ctx) => async (app) => {
     },
   );
 
-  app.get<{ Params: OrgParams }>(
+  app.get<{ Params: OrgParams; Querystring: BrowseQuery }>(
     "/v1/orgs/:orgId/inventory/browse",
     { schema: { params: orgParams, querystring: browseQuery } },
     async (request, reply) => {
-      const cloud = readCloud(request.query, reply);
-      if (!cloud.ok) {
-        return reply;
-      }
-      const inventories = inventoriesFor(ctx.store.snapshot(request.params.orgId), cloud.cloud);
+      const cloud = cloudOf(request.query);
+      const inventories = inventoriesFor(ctx.store.snapshot(request.params.orgId), cloud);
       if (inventories.length === 0) {
         return problem(reply, 404, "Not found");
       }
-      const query = request.query as Record<string, unknown>;
-      const filters: InventoryFilters = {};
-      for (const key of FILTER_KEYS) {
-        const value = query[key];
-        if (typeof value === "string") {
-          filters[key] = value;
-        }
-      }
-      if (cloud.cloud) {
-        filters.cloud = cloud.cloud;
-      }
+      const { owner, service, subscription, region } = request.query;
+      const filters: InventoryFilters = {
+        ...(owner === undefined ? {} : { owner }),
+        ...(service === undefined ? {} : { service }),
+        ...(subscription === undefined ? {} : { subscription }),
+        ...(region === undefined ? {} : { region }),
+        ...(cloud ? { cloud } : {}),
+      };
       const resources = browseInventories(inventories, filters);
       return sendClean(reply, 200, {
         resources,

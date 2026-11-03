@@ -1,3 +1,4 @@
+import { CLOUDS } from "@farside/scan-contracts";
 import { allProviders } from "../providers/index.js";
 
 export const ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$";
@@ -21,10 +22,11 @@ export const scanParams = object(
   ["orgId", "scanId"],
 );
 
-export const cloudQuery = object({ cloud: { type: "string" } });
-export const exportQuery = object({ cloud: { type: "string" }, asOf: instant });
+const cloudParam = { enum: [...CLOUDS, ""] } as const;
+export const cloudQuery = object({ cloud: cloudParam });
+export const exportQuery = object({ cloud: cloudParam, asOf: instant });
 export const browseQuery = object({
-  cloud: { type: "string" },
+  cloud: cloudParam,
   owner: { type: "string" },
   service: { type: "string" },
   subscription: { type: "string" },
@@ -122,6 +124,18 @@ export const settingsBody = object(
     asOf: instant,
   },
   ["ownerTagKey", "productionTagKey", "productionTagValue"],
+);
+
+export const contractBody = object(
+  {
+    plan: string(),
+    startDate: instant,
+    endDate: { anyOf: [instant, { type: "null" }] },
+    unpaidAt: { anyOf: [instant, { type: "null" }] },
+    amountDue: { type: "string" },
+    currency: { type: "string" },
+  },
+  ["plan", "startDate"],
 );
 
 export const tickBody = object({ now: instant });

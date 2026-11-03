@@ -1,8 +1,14 @@
 import type { FastifyReply } from "fastify";
 import { inventoriesFor } from "../estate.js";
-import { exportCost, exportFilename, exportInventory, exportIssues, type ExportKind } from "../export.js";
+import {
+  exportCost,
+  exportFilename,
+  exportInventory,
+  exportIssues,
+  type ExportKind,
+} from "../export.js";
 import type { OrgParams, RoutePlugin } from "../http/context.js";
-import { cloudFilter, readCloud, sendClean } from "../http/responses.js";
+import { cloudFilter, cloudOf, sendClean } from "../http/responses.js";
 import { exportQuery, orgParams } from "../http/schemas.js";
 
 type ExportRequestQuery = { asOf?: string };
@@ -18,13 +24,10 @@ export const exportRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/export/issues",
     { schema },
     async (request, reply) => {
-      const cloud = readCloud(request.query, reply);
-      if (!cloud.ok) {
-        return reply;
-      }
+      const cloud = cloudOf(request.query);
       const issues = cloudFilter(
         ctx.store.snapshot(request.params.orgId).issues,
-        cloud.cloud,
+        cloud,
         (issue) => issue.cloud,
       );
       attachment(reply, "issues");
@@ -40,17 +43,18 @@ export const exportRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/export/inventory",
     { schema },
     async (request, reply) => {
-      const cloud = readCloud(request.query, reply);
-      if (!cloud.ok) {
-        return reply;
-      }
+      const cloud = cloudOf(request.query);
       const org = ctx.store.snapshot(request.params.orgId);
-      const inventory = cloud.cloud ? (inventoriesFor(org, cloud.cloud)[0] ?? null) : org.inventory;
+      const inventory = cloud ? (inventoriesFor(org, cloud)[0] ?? null) : org.inventory;
       attachment(reply, "inventory");
       return sendClean(
         reply,
         200,
-        exportInventory(request.params.orgId, inventory ?? null, ctx.clientTime(request.query.asOf)),
+        exportInventory(
+          request.params.orgId,
+          inventory ?? null,
+          ctx.clientTime(request.query.asOf),
+        ),
       );
     },
   );

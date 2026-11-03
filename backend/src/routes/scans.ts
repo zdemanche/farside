@@ -1,6 +1,6 @@
 import { canScan } from "../billing.js";
 import type { OrgParams, RoutePlugin } from "../http/context.js";
-import { problem, readCloud, requireConnected, sendClean } from "../http/responses.js";
+import { problem, cloudOf, requireConnected, sendClean } from "../http/responses.js";
 import { cloudQuery, orgParams, scanBody, scanParams, tickBody } from "../http/schemas.js";
 import { emitDecision } from "../observability.js";
 import { toScanView, toScanViews } from "../scans.js";
@@ -10,12 +10,9 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/scans",
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
-      const cloud = readCloud(request.query, reply);
-      if (!cloud.ok) {
-        return reply;
-      }
+      const cloud = cloudOf(request.query);
       const scans = toScanViews(ctx.store.snapshot(request.params.orgId).scans).filter(
-        (scan) => cloud.cloud == null || scan.cloud === cloud.cloud,
+        (scan) => cloud == null || scan.cloud === cloud,
       );
       return sendClean(reply, 200, { scans });
     },
@@ -40,7 +37,9 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
         invalidTitle: "Invalid scan",
         demo: (store, orgId) => {
           const job = store.snapshot(orgId).scans[0];
-          return job ? { status: 200, body: { scan: toScanView(job, true), scanStarted: false } } : null;
+          return job
+            ? { status: 200, body: { scan: toScanView(job, true), scanStarted: false } }
+            : null;
         },
       },
     },
@@ -49,7 +48,13 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
       if (!canScan(ctx.store.snapshot(orgId).contract, ctx.clock())) {
         return problem(reply, 409, "Scans paused", { attention: "scans paused" });
       }
-      const connected = requireConnected(ctx, request, reply, request.body.subscriptionId, "Invalid scan");
+      const connected = requireConnected(
+        ctx,
+        request,
+        reply,
+        request.body.subscriptionId,
+        "Invalid scan",
+      );
       if (!connected) {
         return reply;
       }
@@ -80,12 +85,12 @@ export const scanRoutes: RoutePlugin = (ctx) => async (app) => {
     },
   );
 
-  app.post<{ Params: OrgParams; Body: { now?: string } | undefined }>(
+  app.post<{ Params: OrgParams; Body: { now?: string } }>(
     "/v1/orgs/:orgId/schedule/tick",
     { schema: { params: orgParams, body: tickBody }, config: { invalidTitle: "Invalid tick" } },
     async (request, reply) => {
       const { orgId } = request.params;
-      const now = ctx.clientTime(request.body?.now);
+      const now = ctx.clientTime(request.body.now);
       if (!canScan(ctx.store.snapshot(orgId).contract, ctx.clock())) {
         emitDecision(ctx.log, { decision: "blocked", orgId, at: now });
         return sendClean(reply, 200, {

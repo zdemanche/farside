@@ -8,7 +8,7 @@ import {
   type CoverageState,
 } from "../coverage.js";
 import type { OrgParams, RoutePlugin } from "../http/context.js";
-import { cloudFilter, readCloud, sendClean } from "../http/responses.js";
+import { cloudFilter, cloudOf, sendClean } from "../http/responses.js";
 import { cloudQuery, coverageBody, orgParams } from "../http/schemas.js";
 
 type CoverageBody = {
@@ -24,13 +24,10 @@ export const coverageRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/coverage",
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
-      const cloud = readCloud(request.query, reply);
-      if (!cloud.ok) {
-        return reply;
-      }
+      const cloud = cloudOf(request.query);
       const org = ctx.store.snapshot(request.params.orgId);
-      const coverage = cloudFilter(org.coverage, cloud.cloud, (entry) => entry.cloud);
-      const findings = cloudFilter(org.findings, cloud.cloud, (finding) => finding.scope.cloud);
+      const coverage = cloudFilter(org.coverage, cloud, (entry) => entry.cloud);
+      const findings = cloudFilter(org.findings, cloud, (finding) => finding.scope.cloud);
       return sendClean(reply, 200, {
         coverage: toContractCoverage(coverage),
         entries: coverage,
@@ -65,13 +62,10 @@ export const coverageRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/findings",
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
-      const cloud = readCloud(request.query, reply);
-      if (!cloud.ok) {
-        return reply;
-      }
+      const cloud = cloudOf(request.query);
       const findings = cloudFilter(
         ctx.store.snapshot(request.params.orgId).findings,
-        cloud.cloud,
+        cloud,
         (finding) => finding.scope.cloud,
       );
       return sendClean(reply, 200, { findings });
@@ -82,13 +76,10 @@ export const coverageRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/issues",
     { schema: { params: orgParams, querystring: cloudQuery } },
     async (request, reply) => {
-      const cloud = readCloud(request.query, reply);
-      if (!cloud.ok) {
-        return reply;
-      }
+      const cloud = cloudOf(request.query);
       const issues = cloudFilter(
         ctx.store.snapshot(request.params.orgId).issues,
-        cloud.cloud,
+        cloud,
         (issue) => issue.cloud,
       );
       return sendClean(reply, 200, { issues });

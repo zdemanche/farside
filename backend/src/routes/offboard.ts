@@ -8,7 +8,7 @@ import { sessionFromHeaders } from "../session.js";
 type OffboardBody = { confirm?: boolean; exportOffered?: boolean; now?: string };
 
 export const offboardRoutes: RoutePlugin = (ctx) => async (app) => {
-  app.post<{ Params: OrgParams; Body: OffboardBody | undefined }>(
+  app.post<{ Params: OrgParams; Body: OffboardBody }>(
     "/v1/orgs/:orgId/offboard",
     {
       schema: { params: orgParams, body: offboardBody },
@@ -20,7 +20,7 @@ export const offboardRoutes: RoutePlugin = (ctx) => async (app) => {
       if (existing) {
         return sendClean(reply, 200, deletionView(existing));
       }
-      const body = request.body ?? {};
+      const body = request.body;
       if (body.confirm !== true || body.exportOffered !== true) {
         return problem(reply, 400, "Offboard not confirmed", {
           errors: [{ path: "body", message: "confirm and exportOffered must be true" }],
@@ -38,7 +38,9 @@ export const offboardRoutes: RoutePlugin = (ctx) => async (app) => {
     { schema: { params: orgParams }, config: { allowDeleted: true } },
     async (request, reply) => {
       const record = ctx.store.deletion(request.params.orgId);
-      return record ? sendClean(reply, 200, deletionView(record)) : problem(reply, 404, "Not found");
+      return record
+        ? sendClean(reply, 200, deletionView(record))
+        : problem(reply, 404, "Not found");
     },
   );
 };
