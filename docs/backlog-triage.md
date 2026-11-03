@@ -47,8 +47,9 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 30. **E6-S3-T1** — merged (#257). GCP unattached disks and unused IPs against fixtures.
 31. **E6-S3-T2** — merged (#258). GCP old snapshots and images against fixtures.
 32. **E6-S3-T4** — merged (#296). Savings ranges and honest empty Recommender wording. Live harvest is #202.
-33. **E6-S4-T2** — this change: SQL/GKE support catalogue and check against fixtures.
-34. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+33. **E6-S4-T2** — merged (#297). SQL/GKE support catalogue and check against fixtures.
+34. **E6-S5-T3** — this change: history-day gating of alerts. Empty-first-day UI is #210 / #243.
+35. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
@@ -310,7 +311,7 @@ Entire GCP epic needs D7 (#7) and a live project. Collectors also (d) AIF.
 | `E6-S5` | #208 | GCP billing export onboarding with an empty first day | (c) live Azure / GCP / test tenant | Billing export onboarding needs the live dataset from E6-S1-T6. |
 | `E6-S5-T1` | #209 | Detect export state and show onboarding steps | (c) live Azure / GCP / test tenant | Detect export dataset state. |
 | `E6-S5-T2` | #210 | Build the empty first-day cost state | (a) doable in code now | Empty first-day cost UI. |
-| `E6-S5-T3` | #211 | Show days of history and gate alerts on it | (a) doable in code now | History-day gating of alerts. |
+| `E6-S5-T3` | #211 | Show days of history and gate alerts on it | (a) this change | `historyDays` + undetermined closer. Empty-first-day UI is #210 / #243. |
 | `E6-S6` | #212 | GCP spend and committed-use discount use | (c) live Azure / GCP / test tenant | BigQuery spend vs the GCP console. Floor/burst reuse is (a). |
 | `E6-S6-T1` | #213 | Harvest spend from BigQuery by service and project | (c) live Azure / GCP / test tenant | Harvest spend from BigQuery and compare to the console. |
 | `E6-S6-T2` | #214 | Implement committed-use discount check | (c) live Azure / GCP / test tenant | Committed-use discount check live, or mark unverified. |

@@ -5,6 +5,7 @@ import {
   backtest,
   evaluateAlerts,
   floorBurst,
+  historyDays,
   replayFixture,
 } from "./alerts.js";
 import { buildApp } from "./app.js";
@@ -40,9 +41,39 @@ describe("relative alert rules", () => {
 
   it("is undetermined until 14 prior days exist", () => {
     const short = FIXTURE.rows.filter((row) => row.date <= "2026-10-10");
-    const { alerts, undetermined } = evaluateAlerts(short, "2026-10-10");
+    const { alerts, undetermined, historyDays: available } = evaluateAlerts(short, "2026-10-10");
     expect(alerts).toEqual([]);
-    expect(undetermined?.daysNeeded).toBe(WINDOW_DAYS - 9);
+    expect(available).toBe(9);
+    expect(undetermined).toEqual({
+      historyDays: 9,
+      daysNeeded: WINDOW_DAYS - 9,
+      closer: "5 more completed export days",
+    });
+  });
+
+  it("counts GCP export days and stays undetermined on an empty first day", () => {
+    const gcpSeries = [
+      {
+        date: "2026-11-03",
+        subscriptionId: "farside-test",
+        serviceName: "Compute Engine",
+        costAmount: "1.00",
+        currency: "USD",
+      },
+    ];
+    expect(historyDays(gcpSeries, "2026-11-03")).toBe(0);
+    const emptyFirst = evaluateAlerts([], "2026-11-03");
+    expect(emptyFirst.alerts).toEqual([]);
+    expect(emptyFirst.historyDays).toBe(0);
+    expect(emptyFirst.undetermined).toEqual({
+      historyDays: 0,
+      daysNeeded: WINDOW_DAYS,
+      closer: "14 more completed export days",
+    });
+    const firstDay = evaluateAlerts(gcpSeries, "2026-11-04");
+    expect(firstDay.historyDays).toBe(1);
+    expect(firstDay.undetermined?.daysNeeded).toBe(13);
+    expect(firstDay.undetermined?.closer).toBe("13 more completed export days");
   });
 
   it("does not treat the same alert on the next day as new", () => {
