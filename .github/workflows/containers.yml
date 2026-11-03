@@ -1,0 +1,91 @@
+# Build API and console images. PRs build only. A published v* release
+# (or workflow_call from Release) pushes to GHCR with semver + sha tags.
+name: Containers
+
+on:
+  pull_request:
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: Semver without a leading v (from release-please)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: zdemanche
+
+jobs:
+  validate:
+    name: build ${{ matrix.image }}
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, console]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.${{ matrix.image }}
+          push: false
+          tags: ${{ env.REGISTRY }}/${{ env.OWNER }}/farside-${{ matrix.image }}:ci
+          cache-from: type=gha,scope=farside-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=farside-${{ matrix.image }}
+          provenance: false
+          sbom: false
+
+  publish:
+    name: publish ${{ matrix.image }}
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, console]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/farside-${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
+            type=sha,prefix=sha-
+            type=raw,value=latest
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.${{ matrix.image }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=farside-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=farside-${{ matrix.image }}
+          provenance: mode=max
+          sbom: true
