@@ -42,7 +42,7 @@ export type PostHarvestContext = {
 
 export type ScanOutputs = { findings: Finding[]; coverage: CoverageEntry[] };
 
-export type PostHarvest = { apply: (outputs: ScanOutputs) => Promise<ScanOutputs> };
+export type PostHarvest = { persist: () => Promise<void>; apply: (outputs: ScanOutputs) => ScanOutputs };
 
 export type CloudProvider = {
   cloud: Cloud;

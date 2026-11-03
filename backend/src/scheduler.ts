@@ -195,7 +195,7 @@ export class ScanScheduler {
     const attention =
       expired.length > 0 ? "scan stuck: a scan ran past the timeout and was marked failed" : decision.attention;
     if (decision.action === "idle") {
-      const committed = await this.commit(orgId, schedule);
+      const committed = await this.commit(orgId, schedule, now, false);
       emitDecision(this.log, { decision: "idle", orgId, at: now });
       return {
         action: "idle",
@@ -228,7 +228,7 @@ export class ScanScheduler {
       schedule.retryAt = null;
       schedule.nextRunAt = schedule.regularRunAt;
     }
-    await this.commit(orgId, schedule);
+    await this.commit(orgId, schedule, now, action !== "retried");
     const scans: ScheduleTick["scans"] = [];
     if (runs) {
       for (const item of targets) {
@@ -273,10 +273,24 @@ export class ScanScheduler {
     };
   }
 
-  private commit(orgId: string, schedule: ScheduleState): Promise<ScheduleState> {
+  private async commit(
+    orgId: string,
+    schedule: ScheduleState,
+    now: string,
+    rescheduled: boolean,
+  ): Promise<ScheduleState> {
+    const { settings } = await this.store.read(orgId, "settings");
     const fields = scheduleFields(schedule);
     return this.store.updateSchedule(orgId, (live) => {
       Object.assign(live, fields);
+      if (!settings.scanScheduleEnabled) {
+        live.nextRunAt = null;
+        live.regularRunAt = null;
+        live.retryAt = null;
+      } else if (rescheduled && fields.nextRunAt === fields.regularRunAt) {
+        live.regularRunAt = addHours(now, settings.scanIntervalHours);
+        live.nextRunAt = live.regularRunAt;
+      }
     });
   }
 }

@@ -36,6 +36,7 @@ const fakeCheck = defineCheck({
 
 let postHarvestCalls = 0;
 const postHarvest: PostHarvest = {
+  persist: async () => undefined,
   apply: (outputs) => {
     postHarvestCalls += 1;
     return outputs;

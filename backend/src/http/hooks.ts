@@ -7,7 +7,9 @@ import type {
   preHandlerAsyncHookHandler,
   preValidationAsyncHookHandler,
 } from "fastify";
-import { isReadOnly } from "../billing.js";
+import { isReadOnly, retentionElapsed, type Contract } from "../billing.js";
+import type { DeletionRecord } from "../offboard.js";
+import { asMutable } from "../readonly.js";
 import { isDemoOrg, seedDemoOrg } from "../demo.js";
 import { auditRetention } from "../observability.js";
 import { assertOrgAccess, isOperator, sessionFromHeaders } from "../session.js";
@@ -53,13 +55,15 @@ export function operatorGuard(ctx: AppContext): preValidationAsyncHookHandler {
   };
 }
 
-async function rejectLocked(
+function rejectLocked(
   ctx: AppContext,
   request: FastifyRequest,
   reply: FastifyReply,
   orgId: string,
-): Promise<boolean> {
-  if ((await ctx.store.deletion(orgId)) || NON_MUTATING_METHODS.has(request.method)) {
+  deletion: DeletionRecord | null,
+  contract: Contract | null,
+): boolean {
+  if (deletion || NON_MUTATING_METHODS.has(request.method)) {
     return false;
   }
   const route = `${request.method} ${request.routeOptions.url?.replace(ORG_ROUTE_PREFIX, "") ?? ""}`;
@@ -70,11 +74,7 @@ async function rejectLocked(
     void problem(reply, 403, "Demo is read-only");
     return true;
   }
-  if (READ_ONLY_EXEMPT.has(route)) {
-    return false;
-  }
-  const { contract } = await ctx.store.read(orgId, "contract");
-  if (!isReadOnly(contract, ctx.clock())) {
+  if (READ_ONLY_EXEMPT.has(route) || !isReadOnly(contract, ctx.clock())) {
     return false;
   }
   void problem(reply, 409, "Console read-only", {
@@ -101,26 +101,31 @@ function orgGate(ctx: AppContext): preValidationAsyncHookHandler {
       return undefined;
     }
     const session = sessionFromHeaders(request);
-    if (session && assertOrgAccess(session, orgId) === "ok" && !(await ctx.store.deletion(orgId))) {
-      auditRetention(
-        request.server.log.child({ reqId: request.id }),
-        await ctx.store.sweepRetention(ctx.clock(), orgId),
-      );
-    }
     if (!session) {
       return problem(reply, 401, "Unauthorized");
     }
     if (assertOrgAccess(session, orgId) !== "ok") {
       return problem(reply, 403, "Forbidden");
     }
-    const deletion = await ctx.store.deletion(orgId);
+    let deletion = await ctx.store.deletion(orgId);
+    let contract: Contract | null = null;
+    if (!deletion && !isDemoOrg(orgId) && (await ctx.store.hasOrg(orgId))) {
+      contract = asMutable<Contract | null>((await ctx.store.read(orgId, "contract")).contract);
+      if (contract && retentionElapsed(contract, ctx.clock())) {
+        auditRetention(request.server.log.child({ reqId: request.id }), [
+          await ctx.store.offboard(orgId, ctx.clock(), "retention"),
+        ]);
+        deletion = await ctx.store.deletion(orgId);
+        contract = null;
+      }
+    }
     if (deletion && !config.allowDeleted) {
       return problem(reply, 410, "Gone", { deletedAt: deletion.deletedAt });
     }
     if (isDemoOrg(orgId) && !deletion) {
       await seedDemoOrg(ctx.store);
     }
-    if (await rejectLocked(ctx, request, reply, orgId)) {
+    if (rejectLocked(ctx, request, reply, orgId, deletion, contract)) {
       return reply;
     }
     return secretsRejected(request, reply);

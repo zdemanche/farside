@@ -12,7 +12,7 @@ import {
 import { DEMO_ORG_ID } from "./demo.js";
 import { retentionElapsed, type Contract } from "./billing.js";
 import { applyOwnerTag } from "./inventory.js";
-import type { DeletionRecord, RowsPurged } from "./offboard.js";
+import { DeletedOrgError, type DeletionRecord, type RowsPurged } from "./offboard.js";
 import { asMutable } from "./readonly.js";
 import {
   MAX_SCANS_PER_ORG,
@@ -287,16 +287,18 @@ export async function sweepRetention(
       : (await repository.hasOrg(onlyOrgId))
         ? [onlyOrgId]
         : [];
-  const due: string[] = [];
-  for (const orgId of candidates.filter((id) => id !== DEMO_ORG_ID)) {
-    const { contract } = await repository.read(orgId, "contract");
-    if (contract !== null && retentionElapsed(asMutable<Contract>(contract), now)) {
-      due.push(orgId);
-    }
-  }
   const records: DeletionRecord[] = [];
-  for (const orgId of due) {
-    records.push(await repository.offboard(orgId, now, "retention"));
+  for (const orgId of candidates.filter((id) => id !== DEMO_ORG_ID)) {
+    try {
+      const { contract } = await repository.read(orgId, "contract");
+      if (contract !== null && retentionElapsed(asMutable<Contract>(contract), now)) {
+        records.push(await repository.offboard(orgId, now, "retention"));
+      }
+    } catch (error) {
+      if (!(error instanceof DeletedOrgError)) {
+        throw error;
+      }
+    }
   }
   return records;
 }

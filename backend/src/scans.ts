@@ -12,6 +12,7 @@ import { fixtureHarvester } from "./providers/fixture-harvester.js";
 import { PROVIDER_NOT_CONFIGURED, ProviderNotConfiguredError, rejectUnconfigured } from "./providers/unconfigured.js";
 import { scopeOf } from "./scope.js";
 import { silentLog, type LogSink } from "./observability.js";
+import { refreshCost } from "./org-ops.js";
 import { addHours, DEFAULT_SCAN_TIMEOUT_MS, RETRY_DELAY_HOURS } from "./scheduler.js";
 import type { OrgRepository } from "./repository.js";
 import { asMutable, type DeepReadonly } from "./readonly.js";
@@ -252,7 +253,7 @@ export function unconfiguredHarvester(): Harvester {
   };
 }
 
-const NO_POST_HARVEST: PostHarvest = { apply: async (outputs) => outputs };
+const NO_POST_HARVEST: PostHarvest = { persist: async () => undefined, apply: (outputs) => outputs };
 
 type StartInput = { orgId: string; subscriptionId: string; actor: "user" | "system" };
 
@@ -496,34 +497,31 @@ export class ScanRunner {
       ) {
         return await cancelled();
       }
-      const fresh = await this.store.read(orgId, "inventories", "facts", "findings", "coverage");
-      await this.store.putInventory(
-        orgId,
-        mergeScanInventory(asMutable<Inventory | undefined>(fresh.inventories[result.inventory.cloud]), result.inventory, current.subscriptionId),
-      );
-      await this.store.putFacts(
-        orgId,
-        mergeScanFacts(fresh.facts, result.facts, result.inventory, current.subscriptionId),
-      );
-      const merged = await postHarvest.apply({
-        findings: mergeScanFindings(fresh.findings, checked.findings, replaceIds, current.subscriptionId),
-        coverage: mergeScanCoverage(fresh.coverage, checked.coverage, replaceIds, current.subscriptionId),
-      });
-      const findings = merged.findings;
-      await this.store.putFindings(orgId, findings);
-      await this.store.putCoverage(orgId, merged.coverage);
-      const written = await this.store.read(orgId, "coverage", "issues");
-      const coverage = written.coverage;
-      await this.store.putIssues(
-        orgId,
-        applyScanToIssues({
-          issues: written.issues,
-          findings,
-          coverage,
+      await postHarvest.persist();
+      const { cloud } = result.inventory;
+      await this.store.mergeScan(orgId, cloud, (draft) => {
+        draft.inventories[cloud] = mergeScanInventory(
+          asMutable<Inventory | undefined>(draft.inventories[cloud]),
+          result.inventory,
+          current.subscriptionId,
+        );
+        draft.facts = mergeScanFacts(draft.facts, result.facts, result.inventory, current.subscriptionId);
+        const merged = postHarvest.apply({
+          findings: mergeScanFindings(draft.findings, checked.findings, replaceIds, current.subscriptionId),
+          coverage: mergeScanCoverage(draft.coverage, checked.coverage, replaceIds, current.subscriptionId),
+        });
+        draft.findings = merged.findings;
+        draft.coverage = merged.coverage;
+        refreshCost(draft);
+        draft.issues = applyScanToIssues({
+          issues: draft.issues,
+          findings: merged.findings,
+          coverage: draft.coverage,
           scanId: jobId,
           observedAt: result.inventory.observedAt,
-        }),
-      );
+        });
+      });
+      const { coverage } = await this.store.read(orgId, "coverage");
       if (connectedAtStart && !(await this.store.isConnected(orgId, current.subscriptionId))) {
         await this.store.purgeSubscription(orgId, current.subscriptionId);
         return await cancelled();

@@ -1,4 +1,4 @@
-import type { Finding, Inventory } from "@farside/scan-contracts";
+import type { Cloud, Finding, Inventory } from "@farside/scan-contracts";
 import type { AlertAnalysis } from "./alerts.js";
 import type { Contract } from "./billing.js";
 import type { BudgetSnapshot } from "./budgets.js";
@@ -32,7 +32,7 @@ import {
   type OrgRepository,
   type OrgState,
   type OrgView,
-  type ScanPage,
+  type ScanMergeDraft,
   type Sequence,
 } from "./repository.js";
 import type { ScanJob } from "./scans.js";
@@ -47,6 +47,7 @@ export class MemoryStore implements OrgRepository {
   #orgs = new Map<string, OrgState>();
   #deletions = new Map<string, DeletionRecord>();
   #running = new RunningScans();
+  #seeded = new Set<string>();
 
   constructor(readonly clock: Clock = systemClock) {}
 
@@ -147,11 +148,15 @@ export class MemoryStore implements OrgRepository {
     return inventory;
   }
 
-  async putConnection(orgId: string, input: ConnectionInput): Promise<Connection> {
+  async putConnection(orgId: string, input: ConnectionInput, fixedId?: string): Promise<Connection> {
     assertNoSecrets(input);
+    const existing = fixedId === undefined ? undefined : this.org(orgId).connections.find((item) => item.id === fixedId);
+    if (existing) {
+      return existing;
+    }
     const cloud = input.cloud ?? DEFAULT_CLOUD;
     const connection: Connection = {
-      id: `conn-${await this.nextSequence(orgId, "connection")}`,
+      id: fixedId ?? `conn-${await this.nextSequence(orgId, "connection")}`,
       cloud,
       tenantId: input.tenantId,
       subscriptionId: input.subscriptionId,
@@ -253,9 +258,13 @@ export class MemoryStore implements OrgRepository {
     return schedule;
   }
 
-  async putJob(input: Omit<ScanJob, "id">): Promise<ScanJob> {
+  async putJob(input: Omit<ScanJob, "id">, fixedId?: string): Promise<ScanJob> {
     assertNoSecrets(input);
-    const job: ScanJob = { ...input, id: `scan-${await this.nextSequence(input.orgId, "scan")}` };
+    const existing = fixedId === undefined ? undefined : this.org(input.orgId).scans.find((item) => item.id === fixedId);
+    if (existing) {
+      return existing;
+    }
+    const job: ScanJob = { ...input, id: fixedId ?? `scan-${await this.nextSequence(input.orgId, "scan")}` };
     const org = this.org(input.orgId);
     markVerified(job);
     org.scans.push(job);
@@ -290,13 +299,41 @@ export class MemoryStore implements OrgRepository {
     );
   }
 
-  async listScans(orgId: string, page: { limit?: number; after?: string } = {}): Promise<ScanPage> {
-    const { scans } = this.org(orgId);
-    const start = page.after === undefined ? 0 : scans.findIndex((job) => job.id === page.after) + 1;
-    const limit = page.limit ?? MAX_SCANS_PER_ORG;
-    const slice = scans.slice(start, start + limit);
-    const last = slice.at(-1);
-    return last && start + limit < scans.length ? { scans: slice, next: last.id } : { scans: slice };
+  async mergeScan(orgId: string, cloud: Cloud, merge: (draft: ScanMergeDraft) => void): Promise<void> {
+    const org = this.org(orgId);
+    const draft: ScanMergeDraft = {
+      inventories: { ...org.inventories },
+      facts: org.facts,
+      findings: org.findings,
+      coverage: org.coverage,
+      issues: org.issues,
+      cost: org.cost,
+      costs: org.costs,
+    };
+    merge(draft);
+    const inventory = draft.inventories[cloud];
+    assertNoSecrets({ inventory, facts: draft.facts, findings: draft.findings, coverage: draft.coverage, issues: draft.issues });
+    if (inventory) {
+      markVerified(inventory);
+      org.inventory = inventory;
+    }
+    markVerifiedAll(draft.findings);
+    markVerifiedAll(draft.issues);
+    org.inventories = draft.inventories;
+    org.facts = draft.facts;
+    org.findings = draft.findings;
+    org.coverage = draft.coverage;
+    org.issues = draft.issues;
+    org.cost = draft.cost;
+  }
+
+  async seeded(orgId: string): Promise<boolean> {
+    return this.#seeded.has(orgId);
+  }
+
+  async markSeeded(orgId: string): Promise<void> {
+    this.org(orgId);
+    this.#seeded.add(orgId);
   }
 
   async isConnected(orgId: string, subscriptionId: string): Promise<boolean> {

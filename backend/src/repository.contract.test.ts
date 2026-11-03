@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { CreateTableCommand, DynamoDBClient, waitUntilTableExists } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { MemoryBlobStore } from "./blob-store.js";
+import { seedDemoOrg } from "./demo.js";
 import type { Finding, Inventory } from "@farside/scan-contracts";
 import dynalite from "dynalite";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Contract } from "./billing.js";
 import type { CommitmentSnapshot } from "./commitments.js";
 import type { CostSnapshot } from "./cost.js";
@@ -13,26 +15,33 @@ import { DynamoStore, documentClient, INLINE_BYTES, ORG_INDEX } from "./dynamo-s
 import type { ResourceFacts } from "./facts.js";
 import type { StoredIssue } from "./issues.js";
 import { DeletedOrgError } from "./offboard.js";
-import { MAX_SCANS_PER_ORG, type AggregateName, type OrgRepository } from "./repository.js";
+import { MAX_SCANS_PER_ORG, type AggregateName, type OrgRepository, type ScanMergeDraft } from "./repository.js";
 import type { ScanJob } from "./scans.js";
 import { SecretLeakError } from "./secrets.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
 import { MemoryStore } from "./store.js";
 import { fixedClock } from "./test-clock.js";
 
-const TABLE = "farside-contract-test";
+let TABLE = "farside-contract-test";
+const blobs = new MemoryBlobStore();
 const NOW = "2026-11-03T00:00:00.000Z";
 
-let server: ReturnType<typeof dynalite>;
+let server: ReturnType<typeof dynalite> | undefined;
 let rawClient: DynamoDBClient;
 let docClient: DynamoDBDocumentClient;
 
 beforeAll(async () => {
-  server = dynalite({ createTableMs: 0 });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as { port: number };
+  let endpoint = process.env.DYNAMO_ENDPOINT;
+  if (endpoint) {
+    TABLE = `farside-contract-${randomUUID().slice(0, 8)}`;
+  } else {
+    server = dynalite({ createTableMs: 0 });
+    const listening = server;
+    await new Promise<void>((resolve) => listening.listen(0, "127.0.0.1", resolve));
+    endpoint = `http://127.0.0.1:${(listening.address() as { port: number }).port}`;
+  }
   rawClient = new DynamoDBClient({
-    endpoint: `http://127.0.0.1:${port}`,
+    endpoint,
     region: "us-east-1",
     credentials: { accessKeyId: "local", secretAccessKey: "local" },
   });
@@ -68,10 +77,13 @@ beforeAll(async () => {
 
 afterAll(async () => {
   rawClient.destroy();
-  await new Promise<void>((resolve) => server.close(() => resolve()));
+  const closing = server;
+  if (closing) {
+    await new Promise<void>((resolve) => closing.close(() => resolve()));
+  }
 });
 
-const newDynamo = () => new DynamoStore(docClient, TABLE, fixedClock);
+const newDynamo = () => new DynamoStore(docClient, TABLE, blobs, fixedClock);
 
 const orgName = () => `org-${randomUUID().slice(0, 8)}`;
 
@@ -184,6 +196,21 @@ const job = (orgId: string, overrides: Partial<Omit<ScanJob, "id">> = {}): Omit<
   checks: [],
   ...overrides,
 });
+
+function scanMerge(subscription: string) {
+  return (draft: ScanMergeDraft) => {
+    const inventory = inventoryOf("azure", 1, subscription);
+    draft.inventories.azure = {
+      ...inventory,
+      resources: [
+        ...(draft.inventories.azure?.resources ?? []).filter((row) => !row.resourceUri.includes(`/${subscription}/`)),
+        ...inventory.resources,
+      ],
+    };
+    draft.findings = [...draft.findings.filter((row) => row.scope.subscriptionOrProject !== subscription), finding(subscription)];
+    draft.issues = [...draft.issues.filter((row) => row.subscriptionOrProject !== subscription), issue(subscription)];
+  };
+}
 
 const EVERY_AGGREGATE: AggregateName[] = [
   "connections",
@@ -374,6 +401,19 @@ describe.each(implementations)("OrgRepository contract: $name", ({ create }) => 
     expect(Object.keys((await store.read(org, "costs")).costs).sort()).toEqual(subscriptions);
   });
 
+  it("accumulates scan merges for different subscriptions", async () => {
+    const store = create();
+    const org = orgName();
+    await store.mergeScan(org, "azure", scanMerge("sub-a"));
+    await store.mergeScan(org, "azure", scanMerge("sub-b"));
+    await store.mergeScan(org, "azure", scanMerge("sub-a"));
+    const read = await store.read(org, "findings", "issues", "inventory", "inventories");
+    expect(read.findings.map((row) => row.scope.subscriptionOrProject).sort()).toEqual(["sub-a", "sub-b"]);
+    expect(read.issues).toHaveLength(2);
+    expect(read.inventory?.resources).toHaveLength(2);
+    expect(read.inventories.azure?.resources).toHaveLength(2);
+  });
+
   it("hands out unique, monotonic sequence numbers under concurrent increments", async () => {
     const store = create();
     const org = orgName();
@@ -403,7 +443,7 @@ describe.each(implementations)("OrgRepository contract: $name", ({ create }) => 
     expect((await store.read(org, "schedule")).schedule.nextRunAt).toBe(NOW);
   });
 
-  it("creates, patches, finds and pages scans", async () => {
+  it("creates, patches and finds scans", async () => {
     const store = create();
     const org = orgName();
     const created = await Promise.all([1, 2, 3, 4, 5].map((index) => store.putJob(job(org, { subscriptionId: `sub-${index}` }))));
@@ -420,16 +460,6 @@ describe.each(implementations)("OrgRepository contract: $name", ({ create }) => 
     await store.patchJob(org, first, { status: "succeeded", complete: true });
     expect(await store.runningScan(org, (await store.getJob(org, first))?.subscriptionId as string)).toBeUndefined();
 
-    const seen: string[] = [];
-    let page = await store.listScans(org, { limit: 2 });
-    seen.push(...page.scans.map((scan) => scan.id));
-    expect(page.scans).toHaveLength(2);
-    expect(page.next).toBeDefined();
-    while (page.next) {
-      page = await store.listScans(org, { limit: 2, after: page.next });
-      seen.push(...page.scans.map((scan) => scan.id));
-    }
-    expect(seen).toEqual(ordered);
   });
 
   it("prunes the oldest settled scans past the cap but keeps in-flight and current ones", async () => {
@@ -585,6 +615,7 @@ describe("DynamoStore persistence", () => {
     await store.offboard(org, NOW);
     const items = await rawItems(org);
     expect(items.map((item) => item.sk)).toEqual(["DELETION"]);
+    expect(blobs.keys(`ORG#${org}/`)).toEqual([]);
   });
 
   it("rejects a write that lands after the deletion marker and leaves no item behind", async () => {
@@ -603,6 +634,7 @@ describe("DynamoStore persistence", () => {
         }
       }),
       TABLE,
+      blobs,
       fixedClock,
     );
     await expect(racing.putFindings(org, [finding("main")])).rejects.toBeInstanceOf(DeletedOrgError);
@@ -628,6 +660,7 @@ describe("DynamoStore persistence", () => {
         }
       }),
       TABLE,
+      blobs,
       fixedClock,
     );
     await store.putSettings(org, { ...DEFAULT_SETTINGS, ownerTagKey: "mine", updatedAt: NOW });
@@ -635,19 +668,106 @@ describe("DynamoStore persistence", () => {
     expect((await other.read(org, "settings")).settings.ownerTagKey).toBe("mine");
   });
 
-  it("removes superseded chunks when a document is rewritten", async () => {
+  it("keeps big documents in the blob store, replaces them on rewrite and removes them when they shrink", async () => {
     const store = newDynamo();
     const org = orgName();
     await store.putInventory(org, inventoryOf("azure", 6_000));
-    const chunks = async () => (await rawItems(org)).filter((item) => item.sk.startsWith("CHUNK#")).length;
-    const declared = async () => (await rawItems(org)).find((item) => item.sk === "INV#azure")?.parts;
-    expect(await chunks()).toBeGreaterThan(1);
-    expect(await chunks()).toBe(await declared());
+    const stored = () => blobs.keys(`ORG#${org}/`);
+    expect(stored()).toHaveLength(1);
+    const header = (await rawItems(org)).find((item) => item.sk === "INV#azure");
+    expect(header).toMatchObject({ entityType: "INV", blobKey: stored()[0] });
+    expect(header?.body).toBeUndefined();
     await store.putInventory(org, inventoryOf("azure", 6_000, "other-subscription"));
-    expect(await chunks()).toBe(await declared());
+    expect(stored()).toHaveLength(1);
     await store.putInventory(org, inventoryOf("azure", 1));
-    expect(await chunks()).toBe(0);
-    expect(await declared()).toBeUndefined();
+    expect(stored()).toHaveLength(0);
+    expect((await rawItems(org)).find((item) => item.sk === "INV#azure")?.blobKey).toBeUndefined();
+  });
+
+  it("re-reads the header once when the blob it pointed at was replaced", async () => {
+    const org = orgName();
+    const writer = newDynamo();
+    await writer.putInventory(org, inventoryOf("azure", 6_000));
+    const first = blobs.keys(`ORG#${org}/`)[0] as string;
+    let replaced = false;
+    const reader = new DynamoStore(
+      interceptingClient(async () => {
+        if (!replaced) {
+          replaced = true;
+          await writer.putInventory(org, inventoryOf("azure", 6_000, "other-subscription"));
+        }
+      }),
+      TABLE,
+      blobs,
+      fixedClock,
+    );
+    const read = await reader.read(org, "inventories");
+    expect(blobs.keys(`ORG#${org}/`)).not.toContain(first);
+    expect(read.inventories.azure?.resources).toHaveLength(6_000);
+  });
+
+  it("merges interleaved scans of different subscriptions from fresh state", async () => {
+    const org = orgName();
+    const other = newDynamo();
+    let attempts = 0;
+    let fired = false;
+    const racing = new DynamoStore(
+      interceptingClient(async (command) => {
+        if (!fired && command instanceof UpdateCommand && command.input.Key?.sk === "FINDINGS") {
+          fired = true;
+          await other.mergeScan(org, "azure", scanMerge("sub-b"));
+        }
+      }),
+      TABLE,
+      blobs,
+      fixedClock,
+    );
+    await racing.mergeScan(org, "azure", (draft) => {
+      attempts += 1;
+      scanMerge("sub-a")(draft);
+    });
+    expect(attempts).toBe(2);
+    const read = await racing.read(org, "findings", "issues", "inventory");
+    expect(read.findings.map((row) => row.scope.subscriptionOrProject).sort()).toEqual(["sub-a", "sub-b"]);
+    expect(read.issues.map((row) => row.subscriptionOrProject).sort()).toEqual(["sub-a", "sub-b"]);
+    expect(read.inventory?.resources).toHaveLength(2);
+  });
+
+  it("keeps sweeping when the org index still lists an org that was deleted", async () => {
+    const store = newDynamo();
+    const due = orgName();
+    const gone = orgName();
+    await store.putContract(due, contractEndedLongAgo);
+    await store.putConnection(gone, { tenantId: "t", subscriptionId: "main" });
+    await store.offboard(gone, NOW);
+    await docClient.send(
+      new PutCommand({ TableName: TABLE, Item: { pk: `ORG#${gone}`, sk: "META", gsi1pk: "ORGS", gsi1sk: `ORG#${gone}` } }),
+    );
+    expect(await store.orgIds()).toContain(gone);
+    const records = await store.sweepRetention(NOW);
+    expect(records.map((record) => record.orgId)).toContain(due);
+    expect(records.map((record) => record.orgId)).not.toContain(gone);
+  });
+
+  it("seeds the demo org once even when two containers seed at the same time, and resumes a half seed", async () => {
+    const [first, second] = [newDynamo(), newDynamo()];
+    await Promise.all([seedDemoOrg(first), seedDemoOrg(second)]);
+    const seeded = await first.read("demo", "connections", "scans");
+    expect(seeded.connections.map((item) => item.id)).toEqual(["conn-1"]);
+    expect(seeded.scans.map((item) => item.id)).toEqual(["scan-1"]);
+    expect(await first.seeded("demo")).toBe(true);
+    await first.offboard("demo", NOW);
+
+    const memory = new MemoryStore(fixedClock);
+    const failing = vi.spyOn(memory, "putAlerts").mockImplementationOnce(async () => {
+      throw new Error("died mid-seed");
+    });
+    await expect(seedDemoOrg(memory)).rejects.toThrow("died mid-seed");
+    expect(await memory.seeded("demo")).toBe(false);
+    failing.mockRestore();
+    await seedDemoOrg(memory);
+    expect(await memory.seeded("demo")).toBe(true);
+    expect((await memory.read("demo", "connections", "scans")).connections).toHaveLength(1);
   });
 
   it("behaves like MemoryStore for the same sequence of writes", async () => {

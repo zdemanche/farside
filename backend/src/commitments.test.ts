@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
 import {
   RESERVATIONS_ROLE_CLOSER,
@@ -142,10 +142,13 @@ describe("commitment harvest", () => {
   });
 });
 
-describe("commitment routes", async () => {
+describe("commitment routes", () => {
   const store = new MemoryStore(fixedClock);
-  await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
   const app = buildApp(store, { ...TEST_APP_OPTIONS, commitmentClient: fixtureCommitmentClient() });
+
+  beforeAll(async () => {
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+  });
 
   afterAll(async () => {
     await app.close();

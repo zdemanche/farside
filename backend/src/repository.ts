@@ -55,7 +55,10 @@ export const MAX_SCANS_PER_ORG = 200;
 
 export const SUBSCRIPTION_DISCONNECTED = "subscription disconnected";
 
-export type ScanPage = { scans: ScanJob[]; next?: string };
+export type ScanMergeDraft = Pick<
+  OrgState,
+  "inventories" | "facts" | "findings" | "coverage" | "issues" | "cost" | "costs"
+>;
 
 export type ConnectionInput = { tenantId: string; subscriptionId: string; cloud?: Cloud };
 
@@ -78,7 +81,7 @@ export interface OrgRepository {
 
   nextSequence(orgId: string, kind: Sequence): Promise<number>;
 
-  putConnection(orgId: string, input: ConnectionInput): Promise<Connection>;
+  putConnection(orgId: string, input: ConnectionInput, fixedId?: string): Promise<Connection>;
   patchConnection(orgId: string, connectionId: string, patch: { healthy: boolean }): Promise<Connection | null>;
   deleteConnection(orgId: string, connectionId: string): Promise<boolean>;
   isConnected(orgId: string, subscriptionId: string): Promise<boolean>;
@@ -101,9 +104,11 @@ export interface OrgRepository {
   putContract(orgId: string, contract: Contract | null): Promise<Contract | null>;
   updateSchedule(orgId: string, mutate: (schedule: ScheduleState) => void): Promise<ScheduleState>;
 
-  putJob(input: Omit<ScanJob, "id">): Promise<ScanJob>;
+  putJob(input: Omit<ScanJob, "id">, fixedId?: string): Promise<ScanJob>;
+  mergeScan(orgId: string, cloud: Cloud, merge: (draft: ScanMergeDraft) => void): Promise<void>;
+  seeded(orgId: string): Promise<boolean>;
+  markSeeded(orgId: string): Promise<void>;
   getJob(orgId: string, jobId: string): Promise<ScanJob | undefined>;
   patchJob(orgId: string, jobId: string, patch: Partial<ScanJob>): Promise<ScanJob>;
   runningScan(orgId: string, subscriptionId: string): Promise<ScanJob | undefined>;
-  listScans(orgId: string, page?: { limit?: number; after?: string }): Promise<ScanPage>;
 }

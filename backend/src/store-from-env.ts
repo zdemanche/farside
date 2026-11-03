@@ -17,6 +17,11 @@ export async function storeFromEnv(
   if (!table) {
     throw new Error("FARSIDE_TABLE_NAME is required when FARSIDE_STORE=dynamo");
   }
+  const bucket = env.FARSIDE_BLOB_BUCKET;
+  if (!bucket) {
+    throw new Error("FARSIDE_BLOB_BUCKET is required when FARSIDE_STORE=dynamo");
+  }
   const { DynamoStore, documentClient } = await import("./dynamo-store.js");
-  return new DynamoStore(documentClient(), table, clock);
+  const { S3BlobStore } = await import("./s3-blob-store.js");
+  return new DynamoStore(documentClient(), table, new S3BlobStore(bucket), clock);
 }

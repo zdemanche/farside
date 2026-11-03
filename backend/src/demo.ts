@@ -303,7 +303,7 @@ export function generateDemoEstate(): {
 const seeding = new WeakMap<OrgRepository, Promise<void>>();
 
 async function seed(store: OrgRepository): Promise<void> {
-  if ((await store.read(DEMO_ORG_ID, "inventory")).inventory) {
+  if (await store.seeded(DEMO_ORG_ID)) {
     return;
   }
   const estate = generateDemoEstate();
@@ -315,8 +315,13 @@ async function seed(store: OrgRepository): Promise<void> {
   await store.putCommitments(DEMO_ORG_ID, estate.commitments);
   await store.putBudgets(DEMO_ORG_ID, estate.budgets);
   await store.putAlerts(DEMO_ORG_ID, estate.alerts);
-  await store.putConnection(DEMO_ORG_ID, { tenantId: DEMO_TENANT, subscriptionId: DEMO_SUBSCRIPTION, cloud: "azure" });
-  await store.putJob(estate.scan);
+  await store.putConnection(
+    DEMO_ORG_ID,
+    { tenantId: DEMO_TENANT, subscriptionId: DEMO_SUBSCRIPTION, cloud: "azure" },
+    "conn-1",
+  );
+  await store.putJob(estate.scan, "scan-1");
+  await store.markSeeded(DEMO_ORG_ID);
 }
 
 export function seedDemoOrg(store: OrgRepository): Promise<void> {

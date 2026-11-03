@@ -803,14 +803,14 @@ describe("disconnect during a scan", () => {
     expect(await store.runningScan(ORG, "sub-a")).toBeUndefined();
   });
 
-  it("removes what a scan merged when its subscription is disconnected between the merge writes", async () => {
+  it("removes what a scan merged when its subscription is disconnected right after the merge", async () => {
     const store = new MemoryStore(fixedClock);
     const connection = await store.putConnection(ORG, { tenantId: "t", subscriptionId: "sub-a" });
-    const putFindings = store.putFindings.bind(store);
-    vi.spyOn(store, "putFindings").mockImplementationOnce(async (orgId, findings) => {
-      const stored = await putFindings(orgId, findings);
+    const mergeScan = store.mergeScan.bind(store);
+    vi.spyOn(store, "mergeScan").mockImplementationOnce(async (orgId, cloud, merge) => {
+      await mergeScan(orgId, cloud, merge);
       await store.deleteConnection(orgId, connection.id);
-      return stored;
+      await mergeScan(orgId, cloud, merge);
     });
     const runner = new ScanRunner(store, harvesterFor(TWO_SUBSCRIPTIONS), {}, fixedClock);
     const { done } = await runner.start({ orgId: ORG, subscriptionId: "sub-a", actor: "user" });

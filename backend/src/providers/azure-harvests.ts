@@ -31,28 +31,42 @@ function fillUnrunLaunchCoverage(coverage: CoverageEntry[], subscriptionId: stri
   return next;
 }
 
-async function applyAzureHarvests(
+async function persistAzureHarvests(
   { orgId, subscriptionId, store }: PostHarvestContext,
   collected: AzureHarvests,
+): Promise<void> {
+  if (collected.cost) {
+    await store.putCost(orgId, collected.cost.ok ? collected.cost.snapshot : null, subscriptionId);
+  }
+  if (collected.commitments) {
+    await store.putCommitments(
+      orgId,
+      collected.commitments.ok ? collected.commitments.snapshot : null,
+      subscriptionId,
+    );
+  }
+  if (collected.budgets) {
+    await store.putBudgets(orgId, collected.budgets.snapshot);
+  }
+}
+
+function applyAzureHarvests(
+  { subscriptionId }: PostHarvestContext,
+  collected: AzureHarvests,
   outputs: ScanOutputs,
-): Promise<ScanOutputs> {
+): ScanOutputs {
   let { findings, coverage } = outputs;
   if (collected.cost) {
     coverage = applyCostCoverage(coverage, collected.cost.coverage);
-    await store.putCost(orgId, collected.cost.ok ? collected.cost.snapshot : null, subscriptionId);
   }
   if (collected.commitments) {
     coverage = applyCommitmentCoverage(coverage, collected.commitments.coverage);
     if (collected.commitments.ok) {
-      await store.putCommitments(orgId, collected.commitments.snapshot, subscriptionId);
       findings = mergeCommitmentFindings(findings, collected.commitments.findings, subscriptionId);
-    } else {
-      await store.putCommitments(orgId, null, subscriptionId);
     }
   }
   if (collected.budgets) {
     coverage = applyBudgetCoverage(coverage, collected.budgets.coverage);
-    await store.putBudgets(orgId, collected.budgets.snapshot);
     findings = mergeBudgetFindings(findings, collected.budgets.findings);
   }
   return { findings, coverage: fillUnrunLaunchCoverage(coverage, subscriptionId) };
@@ -98,5 +112,8 @@ export async function collectAzureHarvests(context: PostHarvestContext): Promise
       return null;
     }
   }
-  return { apply: (outputs) => applyAzureHarvests(context, collected, outputs) };
+  return {
+    persist: () => persistAzureHarvests(context, collected),
+    apply: (outputs) => applyAzureHarvests(context, collected, outputs),
+  };
 }

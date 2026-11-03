@@ -52,8 +52,13 @@ async function settle(started: StartedScan[], deps: TickDeps) {
 
 export async function runScheduledTick(deps: TickDeps): Promise<TickSummary> {
   const { store, scheduler, clock, log } = deps;
-  const retired = await runRetentionSweep(store, clock);
-  auditRetention(log, retired);
+  let retired: Awaited<ReturnType<typeof runRetentionSweep>> = [];
+  try {
+    retired = await runRetentionSweep(store, clock);
+    auditRetention(log, retired);
+  } catch (error) {
+    log.error({ err: error }, "retention sweep failed");
+  }
   const summary: TickSummary = { orgs: [], retired: retired.length };
   const started: StartedScan[] = [];
   for (const orgId of (await store.orgIds()).filter((id) => !isDemoOrg(id))) {

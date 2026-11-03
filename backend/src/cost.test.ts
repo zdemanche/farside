@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
 import {
   CURRENCY_CLOSER,
@@ -196,10 +196,13 @@ describe("cost harvest", () => {
   });
 });
 
-describe("cost routes", async () => {
+describe("cost routes", () => {
   const store = new MemoryStore(fixedClock);
-  await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
   const app = buildApp(store, { ...TEST_APP_OPTIONS, costClient: fixtureCostClient() });
+
+  beforeAll(async () => {
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+  });
 
   afterAll(async () => {
     await app.close();
@@ -242,10 +245,13 @@ describe("cost routes", async () => {
   });
 });
 
-describe("missing cost role on the API", async () => {
+describe("missing cost role on the API", () => {
   const store = new MemoryStore(fixedClock);
-  await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
   const app = buildApp(store, { ...TEST_APP_OPTIONS, costClient: missingCostRoleClient() });
+
+  beforeAll(async () => {
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+  });
 
   afterAll(async () => {
     await app.close();

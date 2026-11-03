@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Finding } from "@farside/scan-contracts";
 import { replayFixture } from "./alerts.js";
 import { buildApp } from "./app.js";
@@ -106,15 +106,18 @@ describe("waste totals", () => {
   });
 });
 
-describe("cost-waste route", async () => {
+describe("cost-waste route", () => {
   const store = new MemoryStore(fixedClock);
-  await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
   const app = buildApp(store, {
     ...TEST_APP_OPTIONS,
     harvester: fixtureHarvester(inventoryFromManifest(MANIFEST), factsFromManifest(MANIFEST)),
     costClient: fixtureCostClient(),
     commitmentClient: fixtureCommitmentClient(),
     budgetClient: fixtureBudgetClient(),
+  });
+
+  beforeAll(async () => {
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
   });
 
   afterAll(async () => {

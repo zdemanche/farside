@@ -77,6 +77,22 @@ describe("scheduled tick", () => {
     expect(log.error).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-a" }), "schedule tick failed");
   });
 
+  it("still ticks every org when the retention sweep fails", async () => {
+    const store = seeded(["org-a", "org-b"], "2026-10-02T00:00:00.000Z");
+    vi.spyOn(store, "sweepRetention").mockRejectedValue(new Error("sweep down"));
+    const log = fakeLog();
+    const runner = new ScanRunner(store, defaultHarvester(clock), {}, clock, log);
+    const summary = await runScheduledTick({ store, scheduler: new ScanScheduler(store, runner, clock), clock, log });
+    expect(summary).toEqual({
+      orgs: [
+        { orgId: "org-a", action: "idle" },
+        { orgId: "org-b", action: "idle" },
+      ],
+      retired: 0,
+    });
+    expect(log.error).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), "retention sweep failed");
+  });
+
   it("skips the demo org and returns after the settle window if a scan never ends", async () => {
     const store = seeded(["demo", "org-a"], NOW);
     const log = fakeLog();

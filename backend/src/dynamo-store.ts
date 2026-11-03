@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { ConditionalCheckFailedException, DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   BatchWriteCommand,
@@ -9,7 +9,8 @@ import {
   QueryCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
-import type { Finding, Inventory } from "@farside/scan-contracts";
+import type { Cloud, Finding, Inventory } from "@farside/scan-contracts";
+import type { BlobStore } from "./blob-store.js";
 import type { AlertAnalysis } from "./alerts.js";
 import type { Contract } from "./billing.js";
 import type { BudgetSnapshot } from "./budgets.js";
@@ -44,7 +45,7 @@ import {
   type OrgRepository,
   type OrgState,
   type OrgView,
-  type ScanPage,
+  type ScanMergeDraft,
   type Sequence,
 } from "./repository.js";
 import type { ScanJob } from "./scans.js";
@@ -55,11 +56,12 @@ import { DEFAULT_SETTINGS } from "./settings.js";
 
 export const ORG_INDEX = "gsi1";
 export const INLINE_BYTES = 300_000;
-export const CHUNK_UNITS = 100_000;
 
 const ORG_PREFIX = "ORG#";
 const ORG_LISTING = "ORGS";
-const MAX_VERSION_RETRIES = 8;
+const MAX_ATTEMPTS = 12;
+const BACKOFF_BASE_MS = 20;
+const BACKOFF_CAP_MS = 1_000;
 const BATCH_SIZE = 25;
 const SK = {
   meta: "META",
@@ -74,12 +76,19 @@ const SK = {
   budgets: "BUDGETS",
   alerts: "ALERTS",
   schedule: "SCHEDULE",
+  seeded: "SEEDED",
 } as const;
 const PREFIX = { connection: "CONN#", inventory: "INV#", cost: "COST#", commitment: "COMMIT#", scan: "SCAN#" } as const;
-const CHUNK_PREFIX = "CHUNK#";
 
 type Item = Record<string, unknown>;
-type Header = { sk: string; version: number; body?: string; gen?: string; parts?: number };
+type Header = {
+  sk: string;
+  version: number;
+  body?: string;
+  blobKey?: string;
+  sha256?: string;
+  size?: number;
+};
 type Stored<T> = { value: T; version: number };
 type PutOptions = { expected?: number; extra?: Item };
 
@@ -139,23 +148,14 @@ function sequenceOf(id: string): number {
 
 const connectionSk = (id: string) => `${PREFIX.connection}${pad(sequenceOf(id))}`;
 const scanSk = (id: string) => `${PREFIX.scan}${pad(sequenceOf(id))}`;
-const chunkSk = (sk: string, gen: string, index: number) => `${CHUNK_PREFIX}${sk}#${gen}#${pad(index, 5)}`;
-const orgKey = (orgId: string) => `${ORG_PREFIX}${orgId}`;
+const entityOf = (sk: string) => sk.split("#")[0] as string;
+const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 
-function splitJson(json: string): string[] {
-  const parts: string[] = [];
-  let start = 0;
-  while (start < json.length) {
-    let end = Math.min(start + CHUNK_UNITS, json.length);
-    const last = json.charCodeAt(end - 1);
-    if (end < json.length && last >= 0xd800 && last <= 0xdbff) {
-      end -= 1;
-    }
-    parts.push(json.slice(start, end));
-    start = end;
-  }
-  return parts;
+async function backoff(attempt: number): Promise<void> {
+  const ceiling = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** attempt);
+  await new Promise((resolve) => setTimeout(resolve, Math.random() * ceiling));
 }
+const orgKey = (orgId: string) => `${ORG_PREFIX}${orgId}`;
 
 export function documentClient(client: DynamoDBClient = new DynamoDBClient({})): DynamoDBDocumentClient {
   return DynamoDBDocumentClient.from(client, { marshallOptions: { removeUndefinedValues: true } });
@@ -170,6 +170,7 @@ export class DynamoStore implements OrgRepository {
   constructor(
     private readonly client: DynamoDBDocumentClient,
     private readonly table: string,
+    private readonly blobs: BlobStore,
     readonly clock: Clock = systemClock,
   ) {
     const single = <V>(sk: string, empty: () => V): Codec => ({
@@ -273,11 +274,24 @@ export class DynamoStore implements OrgRepository {
     if (header.body !== undefined) {
       return JSON.parse(header.body) as T;
     }
-    const { items } = await this.#query(orgId, { prefix: `${CHUNK_PREFIX}${header.sk}#${header.gen}#` });
-    if (items.length !== header.parts) {
-      throw new Error(`document ${header.sk} is missing chunks`);
+    let current = header;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const text = current.blobKey ? await this.blobs.get(current.blobKey) : undefined;
+      if (text !== undefined && sha256(text) === current.sha256) {
+        return JSON.parse(text) as T;
+      }
+      const again = await this.client.send(
+        new GetCommand({ TableName: this.table, Key: { pk: orgKey(orgId), sk: header.sk }, ConsistentRead: true }),
+      );
+      if (!again.Item) {
+        break;
+      }
+      current = again.Item as Header;
+      if (current.body !== undefined) {
+        return JSON.parse(current.body) as T;
+      }
     }
-    return JSON.parse(items.map((item) => item.body as string).join("")) as T;
+    throw new Error(`document ${header.sk} of ${orgId} points at a missing or changed blob`);
   }
 
   async #getDoc<T>(orgId: string, sk: string): Promise<Stored<T> | undefined> {
@@ -301,23 +315,31 @@ export class DynamoStore implements OrgRepository {
   async #putDoc(orgId: string, sk: string, value: unknown, options: PutOptions = {}): Promise<void> {
     const pk = orgKey(orgId);
     const json = JSON.stringify(value);
-    const parts = Buffer.byteLength(json) <= INLINE_BYTES ? [] : splitJson(json);
-    const gen = parts.length > 0 ? randomUUID() : undefined;
-    if (gen) {
-      await Promise.all(
-        parts.map((body, index) =>
-          this.client.send(new PutCommand({ TableName: this.table, Item: { pk, sk: chunkSk(sk, gen, index), body } })),
-        ),
-      );
+    const big = Buffer.byteLength(json) > INLINE_BYTES;
+    const blobKey = big ? `${pk}/${sk}/${randomUUID()}.json` : undefined;
+    if (blobKey) {
+      await this.blobs.put(blobKey, json);
     }
-    const names: Record<string, string> = { "#version": "version", "#body": "body", "#gen": "gen", "#parts": "parts" };
-    const values: Record<string, unknown> = {};
-    const sets = gen ? ["#gen = :gen", "#parts = :parts"] : ["#body = :body"];
-    const removes = gen ? ["#body"] : ["#gen", "#parts"];
-    if (gen) {
-      values[":gen"] = gen;
-      values[":parts"] = parts.length;
+    const names: Record<string, string> = {
+      "#version": "version",
+      "#body": "body",
+      "#blobKey": "blobKey",
+      "#sha256": "sha256",
+      "#size": "size",
+      "#entityType": "entityType",
+    };
+    const values: Record<string, unknown> = { ":one": 1, ":entityType": entityOf(sk) };
+    const sets = ["#entityType = :entityType"];
+    const removes: string[] = [];
+    if (blobKey) {
+      sets.push("#blobKey = :blobKey", "#sha256 = :sha256", "#size = :size");
+      removes.push("#body");
+      values[":blobKey"] = blobKey;
+      values[":sha256"] = sha256(json);
+      values[":size"] = Buffer.byteLength(json);
     } else {
+      sets.push("#body = :body");
+      removes.push("#blobKey", "#sha256", "#size");
       values[":body"] = json;
     }
     Object.entries(options.extra ?? {}).forEach(([name, extra], index) => {
@@ -329,7 +351,6 @@ export class DynamoStore implements OrgRepository {
     if (expected !== undefined && expected !== 0) {
       values[":expected"] = expected;
     }
-    values[":one"] = 1;
     try {
       const result = await this.client.send(
         new UpdateCommand({
@@ -344,10 +365,13 @@ export class DynamoStore implements OrgRepository {
             : { ConditionExpression: expected === 0 ? "attribute_not_exists(pk)" : "#version = :expected" }),
         }),
       );
-      await this.#dropChunks(pk, sk, result.Attributes as Header | undefined);
+      const previous = (result.Attributes as Header | undefined)?.blobKey;
+      if (previous && previous !== blobKey) {
+        await this.blobs.delete(previous);
+      }
     } catch (error) {
-      if (gen) {
-        await this.#dropChunks(pk, sk, { sk, version: 0, gen, parts: parts.length });
+      if (blobKey) {
+        await this.blobs.delete(blobKey);
       }
       throw error;
     }
@@ -363,24 +387,14 @@ export class DynamoStore implements OrgRepository {
     }
   }
 
-  async #dropChunks(pk: string, sk: string, old: Header | undefined): Promise<void> {
-    if (!old?.gen) {
-      return;
-    }
-    const { gen } = old;
-    await Promise.all(
-      Array.from({ length: old.parts ?? 0 }, (_, index) =>
-        this.client.send(new DeleteCommand({ TableName: this.table, Key: { pk, sk: chunkSk(sk, gen, index) } })),
-      ),
-    );
-  }
-
   async #delDoc(orgId: string, sk: string): Promise<void> {
-    const pk = orgKey(orgId);
     const result = await this.client.send(
-      new DeleteCommand({ TableName: this.table, Key: { pk, sk }, ReturnValues: "ALL_OLD" }),
+      new DeleteCommand({ TableName: this.table, Key: { pk: orgKey(orgId), sk }, ReturnValues: "ALL_OLD" }),
     );
-    await this.#dropChunks(pk, sk, result.Attributes as Header | undefined);
+    const previous = (result.Attributes as Header | undefined)?.blobKey;
+    if (previous) {
+      await this.blobs.delete(previous);
+    }
   }
 
   async deletion(orgId: string): Promise<DeletionRecord | null> {
@@ -480,7 +494,8 @@ export class DynamoStore implements OrgRepository {
     const persistent = [...new Set(keys.flatMap((key) => BACKING[key] ?? [key as Persistent]))];
     const entriesOf = (draft: Draft<K>, key: Persistent) =>
       this.#codecs[key].entries((draft as unknown as Record<string, unknown>)[key] as never);
-    for (let attempt = 0; attempt < MAX_VERSION_RETRIES; attempt += 1) {
+    let written: string[] = [];
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
       const loaded = await this.#loadVersioned(orgId, keys);
       const draft = loaded.state as Draft<K>;
       const before = new Map(
@@ -491,6 +506,7 @@ export class DynamoStore implements OrgRepository {
       );
       change(draft);
       await this.#touch(orgId);
+      written = [];
       try {
         for (const key of persistent) {
           const prior = before.get(key) ?? new Map<string, string>();
@@ -498,11 +514,13 @@ export class DynamoStore implements OrgRepository {
           for (const [sk, value] of next) {
             if (prior.get(sk) !== JSON.stringify(value)) {
               await this.#putDoc(orgId, sk, value, { expected: loaded.versions.get(sk) ?? 0 });
+              written.push(sk);
             }
           }
           for (const sk of prior.keys()) {
             if (!next.has(sk)) {
               await this.#delDoc(orgId, sk);
+              written.push(`-${sk}`);
             }
           }
         }
@@ -511,9 +529,12 @@ export class DynamoStore implements OrgRepository {
         if (!(error instanceof ConditionalCheckFailedException)) {
           throw error;
         }
+        await backoff(attempt);
       }
     }
-    throw new Error(`documents for ${orgId} changed concurrently`);
+    throw new Error(
+      `documents for ${orgId} changed concurrently after ${MAX_ATTEMPTS} attempts; the last attempt had already written [${written.join(", ")}]`,
+    );
   }
 
   async hasOrg(orgId: string): Promise<boolean> {
@@ -548,11 +569,11 @@ export class DynamoStore implements OrgRepository {
     return (result.Attributes as Record<Sequence, number>)[kind];
   }
 
-  async putConnection(orgId: string, input: ConnectionInput): Promise<Connection> {
+  async putConnection(orgId: string, input: ConnectionInput, fixedId?: string): Promise<Connection> {
     assertNoSecrets(input);
     const cloud = input.cloud ?? DEFAULT_CLOUD;
     const connection: Connection = {
-      id: `conn-${await this.nextSequence(orgId, "connection")}`,
+      id: fixedId ?? `conn-${await this.nextSequence(orgId, "connection")}`,
       cloud,
       tenantId: input.tenantId,
       subscriptionId: input.subscriptionId,
@@ -561,8 +582,21 @@ export class DynamoStore implements OrgRepository {
       healthy: true,
     };
     markVerified(connection);
-    await this.#putDoc(orgId, connectionSk(connection.id), connection);
-    return connection;
+    if (fixedId === undefined) {
+      await this.#putDoc(orgId, connectionSk(connection.id), connection);
+      return connection;
+    }
+    await this.#touch(orgId);
+    try {
+      await this.#putDoc(orgId, connectionSk(fixedId), connection, { expected: 0 });
+      return connection;
+    } catch (error) {
+      const existing = await this.#getDoc<Connection>(orgId, connectionSk(fixedId));
+      if (error instanceof ConditionalCheckFailedException && existing) {
+        return existing.value;
+      }
+      throw error;
+    }
   }
 
   async patchConnection(
@@ -583,22 +617,20 @@ export class DynamoStore implements OrgRepository {
   }
 
   async deleteConnection(orgId: string, connectionId: string): Promise<boolean> {
-    const { connections } = await this.read(orgId, "connections");
-    const removed = connections.find((connection) => connection.id === connectionId);
-    if (!removed) {
-      return false;
-    }
-    const target = removed.subscriptionId.toLowerCase();
-    const shared = connections.some(
-      (connection) => connection.id !== connectionId && connection.subscriptionId.toLowerCase() === target,
-    );
-    await this.#mutate(orgId, shared ? ["connections"] : SUBSCRIPTION_KEYS, (draft) => {
+    let found = false;
+    await this.#mutate(orgId, SUBSCRIPTION_KEYS, (draft) => {
+      const removed = draft.connections.find((connection) => connection.id === connectionId);
+      found = removed !== undefined;
+      if (!removed) {
+        return;
+      }
       draft.connections = draft.connections.filter((connection) => connection.id !== connectionId);
-      if (!shared) {
+      const target = removed.subscriptionId.toLowerCase();
+      if (!draft.connections.some((connection) => connection.subscriptionId.toLowerCase() === target)) {
         dropSubscription(draft, removed.subscriptionId);
       }
     });
-    return true;
+    return found;
   }
 
   async purgeSubscription(orgId: string, subscriptionId: string): Promise<void> {
@@ -722,7 +754,7 @@ export class DynamoStore implements OrgRepository {
 
   async updateSchedule(orgId: string, mutate: (schedule: ScheduleState) => void): Promise<ScheduleState> {
     await this.#touch(orgId);
-    for (let attempt = 0; attempt < MAX_VERSION_RETRIES; attempt += 1) {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
       const current = await this.#getDoc<ScheduleState>(orgId, SK.schedule);
       const next = current?.value ?? emptySchedule();
       mutate(next);
@@ -733,17 +765,27 @@ export class DynamoStore implements OrgRepository {
         if (!(error instanceof ConditionalCheckFailedException)) {
           throw error;
         }
+        await backoff(attempt);
       }
     }
     throw new Error(`schedule for ${orgId} changed concurrently`);
   }
 
-  async putJob(input: Omit<ScanJob, "id">): Promise<ScanJob> {
+  async putJob(input: Omit<ScanJob, "id">, fixedId?: string): Promise<ScanJob> {
     assertNoSecrets(input);
-    const sequence = await this.nextSequence(input.orgId, "scan");
-    const job: ScanJob = { ...input, id: `scan-${sequence}` };
+    const sequence = fixedId === undefined ? await this.nextSequence(input.orgId, "scan") : sequenceOf(fixedId);
+    const job: ScanJob = { ...input, id: fixedId ?? `scan-${sequence}` };
     markVerified(job);
-    await this.#putDoc(input.orgId, scanSk(job.id), job, { ...scanOptions(job), expected: 0 });
+    await this.#touch(input.orgId);
+    try {
+      await this.#putDoc(input.orgId, scanSk(job.id), job, { ...scanOptions(job), expected: 0 });
+    } catch (error) {
+      const existing = fixedId === undefined ? undefined : await this.#getDoc<ScanJob>(input.orgId, scanSk(fixedId));
+      if (error instanceof ConditionalCheckFailedException && existing) {
+        return existing.value;
+      }
+      throw error;
+    }
     if (sequence > MAX_SCANS_PER_ORG) {
       await this.#pruneScans(input.orgId);
     }
@@ -774,12 +816,12 @@ export class DynamoStore implements OrgRepository {
       this.#getDoc<ScanJob>(orgId, scanSk(jobId)),
       this.#assertLive(orgId),
     ]);
-    return stored?.value ? markVerified(stored.value) : undefined;
+    return stored?.value;
   }
 
   async patchJob(orgId: string, jobId: string, patch: Partial<ScanJob>): Promise<ScanJob> {
     await this.#touch(orgId);
-    for (let attempt = 0; attempt < MAX_VERSION_RETRIES; attempt += 1) {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
       const current = await this.#getDoc<ScanJob>(orgId, scanSk(jobId));
       if (!current) {
         throw new Error(`scan ${jobId} missing`);
@@ -794,6 +836,7 @@ export class DynamoStore implements OrgRepository {
         if (!(error instanceof ConditionalCheckFailedException)) {
           throw error;
         }
+        await backoff(attempt);
       }
     }
     throw new Error(`scan ${jobId} changed concurrently`);
@@ -807,21 +850,41 @@ export class DynamoStore implements OrgRepository {
     ) as ScanJob | undefined;
   }
 
-  async listScans(orgId: string, page: { limit?: number; after?: string } = {}): Promise<ScanPage> {
-    const limit = page.limit ?? MAX_SCANS_PER_ORG;
-    const [{ items, lastKey }] = await Promise.all([
-      this.#query(orgId, {
-        prefix: PREFIX.scan,
-        limit,
-        ...(page.after === undefined ? {} : { startKey: { pk: orgKey(orgId), sk: scanSk(page.after) } }),
+  async mergeScan(orgId: string, cloud: Cloud, merge: (draft: ScanMergeDraft) => void): Promise<void> {
+    await this.#mutate(orgId, ["inventories", "facts", "findings", "coverage", "issues", "cost", "costs"], (draft) => {
+      merge(draft);
+      assertNoSecrets({
+        inventory: draft.inventories[cloud],
+        facts: draft.facts,
+        findings: draft.findings,
+        coverage: draft.coverage,
+        issues: draft.issues,
+      });
+    });
+    await this.client.send(
+      new UpdateCommand({
+        TableName: this.table,
+        Key: { pk: orgKey(orgId), sk: SK.meta },
+        UpdateExpression: "SET latestInventory = :cloud",
+        ExpressionAttributeValues: { ":cloud": cloud },
       }),
-      this.#assertLive(orgId),
-    ]);
-    const scans = await Promise.all(
-      (items as Header[]).map(async (header) => markVerified(await this.#resolve<ScanJob>(orgId, header))),
     );
-    const last = scans.at(-1);
-    return lastKey && last ? { scans, next: last.id } : { scans };
+    await this.#abortIfDeleted(orgId, SK.meta);
+  }
+
+  async seeded(orgId: string): Promise<boolean> {
+    return (await this.#getDoc(orgId, SK.seeded)) !== undefined;
+  }
+
+  async markSeeded(orgId: string): Promise<void> {
+    await this.#touch(orgId);
+    try {
+      await this.#putDoc(orgId, SK.seeded, { at: this.clock() }, { expected: 0 });
+    } catch (error) {
+      if (!(error instanceof ConditionalCheckFailedException)) {
+        throw error;
+      }
+    }
   }
 
   async offboard(
@@ -865,17 +928,21 @@ export class DynamoStore implements OrgRepository {
   }
 
   async #purge(orgId: string): Promise<void> {
+    await this.blobs.deletePrefix(`${orgKey(orgId)}/`);
     const { items } = await this.#query(orgId, { projection: "sk" });
     const keys = items.map((item) => item.sk as string).filter((sk) => sk !== SK.deletion);
     for (let start = 0; start < keys.length; start += BATCH_SIZE) {
       let pending: Record<string, unknown>[] = keys
         .slice(start, start + BATCH_SIZE)
         .map((sk) => ({ DeleteRequest: { Key: { pk: orgKey(orgId), sk } } }));
-      for (let attempt = 0; pending.length > 0 && attempt < MAX_VERSION_RETRIES; attempt += 1) {
+      for (let attempt = 0; pending.length > 0 && attempt < MAX_ATTEMPTS; attempt += 1) {
         const result = await this.client.send(
           new BatchWriteCommand({ RequestItems: { [this.table]: pending as never } }),
         );
         pending = (result.UnprocessedItems?.[this.table] ?? []) as Record<string, unknown>[];
+        if (pending.length > 0) {
+          await backoff(attempt);
+        }
       }
       if (pending.length > 0) {
         throw new Error(`could not purge all items for ${orgId}`);
