@@ -44,8 +44,7 @@ import {
   checkUnattachedDisks,
   runChecks,
 } from "./checks.js";
-import { AZURE_LAUNCH_CHECK_IDS } from "./coverage.js";
-import { toContractCoverage } from "./coverage.js";
+import { AZURE_LAUNCH_CHECK_IDS, blindSpots, toContractCoverage } from "./coverage.js";
 import { factsFromManifest } from "./facts.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
 import {
@@ -371,6 +370,20 @@ describe("missing metrics undetermined path", () => {
     expect(nat?.result).toBe("undetermined");
     expect(nat?.closer).toMatch(/Monitoring Reader/);
     expect(JSON.stringify(lb)).not.toMatch(/confirmed idle/i);
+  });
+});
+
+describe("scope coverage from determinate results", () => {
+  it("marks a scope undetermined with the closer when no finding is pass or fail", () => {
+    const blind = runChecks({ inventory, facts: [], checkIds: [UNATTACHED_DISKS] });
+    const entry = blind.coverage.find((item) => item.subscriptionOrProject === "main");
+    expect(entry).toMatchObject({ state: "undetermined", closer: expect.stringMatching(/diskState/) });
+    expect(blindSpots(blind.coverage).some((spot) => spot.id === entry?.id)).toBe(true);
+  });
+
+  it("keeps a scope assessed when at least one result is determinate", () => {
+    const sighted = runChecks({ inventory, facts, checkIds: [UNATTACHED_DISKS] });
+    expect(sighted.coverage.find((item) => item.subscriptionOrProject === "main")?.state).toBe("assessed");
   });
 });
 

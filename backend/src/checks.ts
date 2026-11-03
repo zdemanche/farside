@@ -1162,15 +1162,22 @@ export function runChecks(input: {
     if (!impl) {
       throw new UnregisteredCheckError(checkId);
     }
-    findings.push(
-      ...impl(input.inventory, input.facts, input.settings ?? DEFAULT_SETTINGS).map(acceptFinding),
+    const produced = impl(input.inventory, input.facts, input.settings ?? DEFAULT_SETTINGS).map(
+      acceptFinding,
     );
+    findings.push(...produced);
     for (const subscriptionOrProject of subscriptions) {
+      const scoped = produced.filter(
+        (finding) => finding.scope.subscriptionOrProject === subscriptionOrProject,
+      );
+      const closer = scoped.find((finding) => finding.result === "undetermined")?.closer;
+      const determinate = scoped.some((finding) => finding.result !== "undetermined");
       coverage.push(
         recordCoverageScope({
           subscriptionOrProject,
           checkId,
-          state: "assessed",
+          state: scoped.length > 0 && !determinate ? "undetermined" : "assessed",
+          ...(scoped.length > 0 && !determinate && closer ? { closer } : {}),
         }),
       );
     }
