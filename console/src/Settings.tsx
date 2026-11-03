@@ -122,6 +122,8 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
             name="snapshotRetentionDays"
             type="number"
             min={1}
+            step={1}
+            aria-invalid={!/^[1-9]\d*$/.test(retention)}
             value={retention}
             onChange={(event) => setRetention(event.target.value)}
             required
@@ -147,6 +149,8 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
             name="scanIntervalHours"
             type="number"
             min={1}
+            step={1}
+            aria-invalid={!/^[1-9]\d*$/.test(interval)}
             value={interval}
             onChange={(event) => setInterval(event.target.value)}
             required
@@ -161,6 +165,8 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
             name="scanRetryLimit"
             type="number"
             min={1}
+            step={1}
+            aria-invalid={!/^[1-9]\d*$/.test(retryLimit)}
             value={retryLimit}
             onChange={(event) => setRetryLimit(event.target.value)}
             required
@@ -173,9 +179,11 @@ function SettingsForm({ initial }: { initial: OrgSettings }) {
           </button>
         </div>
       </form>
-      <p className="notice" role="status" aria-live="polite">
-        {status}
-      </p>
+      {status ? (
+        <p className="notice" role="status" aria-live="polite">
+          {status}
+        </p>
+      ) : null}
       {failure ? (
         <p className="notice notice-alert" role="alert">
           {failure}

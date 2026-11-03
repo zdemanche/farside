@@ -53,4 +53,30 @@ describe("console shell", () => {
     render(<App demo />);
     expect(await screen.findByRole("heading", { name: "Connect Azure" })).toBeTruthy();
   });
+
+  it("changes the title, aria-current and focus when navigating hashes", async () => {
+    window.location.hash = "#issues";
+    render(<App demo />);
+    expect(await screen.findByRole("heading", { name: "Issues" })).toBeTruthy();
+    expect(document.title).toBe("Issues - Farside");
+    const nav = screen.getByRole("navigation", { name: PRODUCT_NAME });
+    expect(within(nav).getByRole("link", { name: "Issues" }).getAttribute("aria-current")).toBe(
+      "page",
+    );
+
+    window.location.hash = "#scans";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    expect(await screen.findByRole("heading", { name: "Scans" })).toBeTruthy();
+    expect(document.title).toBe("Scans - Farside");
+    expect(within(nav).getByRole("link", { name: "Scans" }).getAttribute("aria-current")).toBe(
+      "page",
+    );
+    expect(document.activeElement?.id).toBe("page-title");
+
+    window.location.hash = "#issues/disk-unattached";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    expect(await screen.findByRole("heading", { name: "disk-unattached" })).toBeTruthy();
+    expect(document.title).toBe("Issues - Farside");
+    expect(document.activeElement?.id).toBe("issue-detail-title");
+  });
 });
