@@ -3,6 +3,7 @@
   "cloud": "azure",
   "sharedContractNote": "Fields here are Farside-local. Dashmeta 0.11.0 was read in E1-S2 (`docs/scan-contracts.md`); this spec is not a dashmeta schema. Do not invent dashmeta field names.",
   "statusRule": "An entry is unverified until a dated live run exists. Unverified entries are labelled not-supported. Live verification is E1-S7.",
+  "statusAsOf": "2026-11-04",
   "rolesFromProposal": [
     "Reader",
     "Cost Management Reader",
