@@ -20,9 +20,10 @@ Demo mode serves a generated synthetic estate. Recurring scans tick from Setting
 | E5-S5-T2 | #180 | Offboard removes connections and cancels a pending schedule. Later ticks return 410 and create nothing. |
 | E5-S6-T1 | #184 | GET `/export/issues`, `/export/inventory`, and `/export/cost` return `farside-export/1` rows. |
 | E5-S6-T3 | #186 | Cross-org export is 403. Payload keys are rejected by the export schema. |
+| E5-S4-T4 | #177 | Operator runbook appendix walks an injected `clientSecret` on connect: 400, nothing stored, clean retry. Live-tenant failures stay leftover with #176. |
 
 ## Leftovers
 
 ### Live soak, iac-hub, Identity, billing
 
-Scheduled soak (#167) needs a week of unattended runs on the test subscription. Customer deploy (#175), rehearsal (#176), and account retirement (#182) need a live tenant or iac-hub. Rollback notes cover the known path; failures found only in the rehearsal stay on #177. Billing screen (#171), the offboarding screen (#181), and export buttons (#185) wait on the design-system pass (#243). Invoices are not stored — dashmeta had none to reuse. `accountClosureAt` stays null until a dedicated account is retired.
+Scheduled soak (#167) needs a week of unattended runs on the test subscription. Customer deploy (#175), rehearsal (#176), and account retirement (#182) need a live tenant or iac-hub. The known injected connect-secret failure is walked in the runbook (#177). Billing screen (#171), the offboarding screen (#181), and export buttons (#185) wait on the design-system pass (#243). Invoices are not stored — dashmeta had none to reuse. `accountClosureAt` stays null until a dedicated account is retired.

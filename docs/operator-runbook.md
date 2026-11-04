@@ -2,7 +2,7 @@
 
 Follow these steps in order for one customer. After every step, run its **Check**. If the check fails, use that step’s **Rollback** before retrying. Do not skip a leftover: stop and wait rather than inventing an iac-hub, Identity, or live-tenant action this workspace cannot perform.
 
-This is the written path (#174). Live deploy (#175), a cold rehearsal on a test tenant (#176), and failures found only in that rehearsal (#177 leftover) are not claimed here.
+This is the written path (#174). Live deploy (#175) and a cold rehearsal on a test tenant (#176) are not claimed here. Known injected failures and their recovery are in the appendix (#177).
 
 ## Prerequisites
 
@@ -258,7 +258,7 @@ x-farside-actor: {actor}
 |---|---|---|
 | iac-hub `PRODUCTS` merge and parameterised deploy | #26, #175 | Hub and dedicated account are switch-on-later. |
 | Cold rehearsal, timing, extra manual steps | #176 | Needs a live test tenant and a dedicated account. |
-| Failures found only in that rehearsal | #177 leftover | Notes above cover the known path; new failures get added after #176. |
+| Failures found only on a live tenant | #176 | Add a row to the appendix after the cold rehearsal. The known injected path is below. |
 | Identity claim | E2-S1 / Identity | Header session is the stand-in; the Lambda edge strips it (see step 7). |
 | Shared store for API and tick Lambdas | #269 | Both containers hold a private in-memory store. |
 | Org transfer | #23 | `Moonaan/moonaan-farside` is not the working clone yet. |
@@ -279,3 +279,38 @@ FARSIDE_OPERATOR_TOKEN=<token> npm run dev -w @farside/backend
 4. Optional: PUT the contract with `unpaidAt` 21 days in the past (operator token), then POST `/scans` with the org session and expect 409.
 
 Org `demo` (`VITE_FARSIDE_DEMO=1` on the console) is a synthetic estate. Do not use it as a sale rehearsal.
+
+## Appendix: injected failure walkthrough {#injected-failure}
+
+Walk this on any org. It is the #177 check: one injected failure, then rollback, then a clean retry.
+
+### Inject
+
+```http
+PUT /v1/orgs/{orgId}/connections
+x-farside-org: {orgId}
+x-farside-actor: {actor}
+```
+
+```json
+{ "tenantId": "tenant-a", "subscriptionId": "main", "clientSecret": "not-a-real-secret" }
+```
+
+### What must happen
+
+- Response is 400 `Secret rejected`.
+- GET `/v1/orgs/{orgId}/connections` is still empty (or unchanged). Nothing was stored.
+
+### Rollback
+
+Do not PATCH or DELETE. The write was refused. Retry the same PUT **without** `clientSecret` (or any token / `client_secret` key).
+
+### Clean retry
+
+```json
+{ "tenantId": "tenant-a", "subscriptionId": "main" }
+```
+
+- Response is 201. `roles` lists the required set. A scan starts unless the contract is paused.
+
+Covered in `backend/src/secrets.test.ts` (“injected connect secret is refused, then a clean retry stores the connection”). Overlap and `harvest_timeout` stay on their step Rollback sections above.

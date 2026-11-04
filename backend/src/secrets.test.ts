@@ -33,20 +33,31 @@ describe("no-secrets guard", () => {
     ).toThrow(SecretLeakError);
   });
 
-  it("rejects a connection PUT that includes a secret field", async () => {
-    const response = await app.inject({
+  it("injected connect secret is refused, then a clean retry stores the connection", async () => {
+    const injected = await app.inject({
       method: "PUT",
       url: "/v1/orgs/org-a/connections",
       headers: ORG,
       payload: {
-        tenantId: "t",
-        subscriptionId: "s",
+        tenantId: "tenant-a",
+        subscriptionId: "main",
         clientSecret: "not-a-real-secret",
       },
     });
-    expect(response.statusCode).toBe(400);
-    expect(response.json().title).toBe("Secret rejected");
+    expect(injected.statusCode).toBe(400);
+    expect(injected.json().title).toBe("Secret rejected");
     expect(store.snapshot("org-a").connections).toEqual([]);
+
+    const retry = await app.inject({
+      method: "PUT",
+      url: "/v1/orgs/org-a/connections",
+      headers: ORG,
+      payload: { tenantId: "tenant-a", subscriptionId: "main" },
+    });
+    expect(retry.statusCode).toBe(201);
+    expect(retry.json()).toMatchObject({ tenantId: "tenant-a", subscriptionId: "main" });
+    expect(secretPaths(retry.json())).toEqual([]);
+    expect(store.snapshot("org-a").connections).toHaveLength(1);
   });
 
   it("scans stored records and responses for secret patterns", async () => {
