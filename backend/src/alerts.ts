@@ -42,9 +42,32 @@ export type AlertDigest = {
   recipients: string[];
   alerts: SpendAlert[];
   withheldRepeats: number;
-  delivered: false;
-  reason: "no_mail_path" | "no_recipients" | "no_new_alerts";
+  delivered: boolean;
+  reason: "no_mail_path" | "no_recipients" | "no_new_alerts" | "sent";
 };
+
+export type DigestMailer = {
+  send: (digest: AlertDigest) => void;
+};
+
+export function memoryMailer() {
+  const sent: AlertDigest[] = [];
+  return {
+    sent,
+    send(digest: AlertDigest) {
+      sent.push(digest);
+    },
+  };
+}
+
+export function deliverDigest(digest: AlertDigest, mailer?: DigestMailer): AlertDigest {
+  if (digest.reason !== "no_mail_path" || !mailer) {
+    return digest;
+  }
+  const next = { ...digest, delivered: true, reason: "sent" as const };
+  mailer.send(next);
+  return next;
+}
 
 export type HistoryGate = {
   historyDays: number;
@@ -306,6 +329,7 @@ export function analyzeAlerts(input: {
   asOf: string;
   previous?: SpendAlert[];
   recipients?: string[];
+  mailer?: DigestMailer | undefined;
 }): AlertAnalysis {
   const rows = input.rows;
   const asOf = input.asOf;
@@ -315,7 +339,7 @@ export function analyzeAlerts(input: {
     historyDays: evaluated.historyDays,
     floorBurst: evaluated.undetermined?.reason === "mixed_currency" ? [] : floorBurst(rows, asOf),
     alerts: evaluated.alerts,
-    digest: buildDigest(asOf, evaluated.alerts, input.recipients ?? []),
+    digest: deliverDigest(buildDigest(asOf, evaluated.alerts, input.recipients ?? []), input.mailer),
     undetermined: evaluated.undetermined,
   };
 }

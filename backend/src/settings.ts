@@ -7,6 +7,7 @@ export type OrgSettings = {
   scanScheduleEnabled: boolean;
   scanIntervalHours: number;
   scanRetryLimit: number;
+  alertRecipients: readonly string[];
   updatedAt: string;
 };
 
@@ -19,6 +20,7 @@ export const DEFAULT_SETTINGS: OrgSettings = {
   scanScheduleEnabled: true,
   scanIntervalHours: 24,
   scanRetryLimit: 3,
+  alertRecipients: [],
   updatedAt: "1970-01-01T00:00:00.000Z",
 };
 
@@ -38,5 +40,6 @@ export function settingsFromInput(input: SettingsInput): Omit<OrgSettings, "upda
     scanScheduleEnabled: input.scanScheduleEnabled ?? DEFAULT_SETTINGS.scanScheduleEnabled,
     scanIntervalHours: input.scanIntervalHours ?? DEFAULT_SETTINGS.scanIntervalHours,
     scanRetryLimit: input.scanRetryLimit ?? DEFAULT_SETTINGS.scanRetryLimit,
+    alertRecipients: input.alertRecipients ?? [...DEFAULT_SETTINGS.alertRecipients],
   };
 }
