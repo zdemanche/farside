@@ -23,9 +23,10 @@ The GCP control spec lists every launch check from the proposal table as unverif
 | E6-S7-T2 | #218 | Headline emits per-cloud figures. Mixed-currency money is `byCloud` and is never summed. |
 | E6-S2-T2 | #197 | Injected Cloud Asset client pages `pageToken` across every launch asset type from the ground-truth fixture. Throttle → `throttling`, other errors → `failed_call`. Default scan path stays the fixture harvester. Live Cloud Asset on a project leftover. |
 | E6-S6-T1 | #213 | Injected BigQuery export client pages fixture spend rows and stores service/project aggregates. Harvest stays `unverified`. Live export and console comparison leftover. |
+| E6-S7-T4 | #220 | GCP support-matrix table is linted against `launch-checks.json` (id, group, title, role, billing export, status, support, live run). Live rerun leftover. |
 
 ## Leftovers
 
 ### Live GCP project, Identity, AIF collectors
 
-A funded project (#189), federated credentials (#190), Connect screen (#191 / #243), live role proof (#192), and billing export enablement (#194) need D7. An injected Cloud Asset client pages launch types against the fixture (#197). A live Cloud Asset list stays leftover. Do not copy AIF client names. Fixture BigQuery pages store unverified service/project aggregates (#213); a live export and console comparison stay leftover.
+A funded project (#189), federated credentials (#190), Connect screen (#191 / #243), live role proof (#192), and billing export enablement (#194) need D7. An injected Cloud Asset client pages launch types against the fixture (#197). A live Cloud Asset list stays leftover. Do not copy AIF client names. Fixture BigQuery pages store unverified service/project aggregates (#213); a live export and console comparison stay leftover. The GCP matrix is linted against the spec (#220); a live rerun stays leftover.

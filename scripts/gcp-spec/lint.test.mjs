@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { REQUIRED_GCP_LAUNCH_CHECK_IDS } from "../reuse-review/lint.mjs";
-import { lintGcpSpec, lintGcpSpecFile } from "./lint.mjs";
+import { lintGcpMatrix, lintGcpMatrixFile, lintGcpSpec, lintGcpSpecFile } from "./lint.mjs";
 
 function validSpec() {
   return {
@@ -51,5 +51,61 @@ describe("gcp spec lint", () => {
     const path = join(dir, "bad.json");
     writeFileSync(path, JSON.stringify(spec));
     expect(lintGcpSpecFile(path).some((error) => error.includes("status"))).toBe(true);
+  });
+});
+
+function gcpMatrixMarkdown(rows) {
+  const header = [
+    "| Check id | Group | Title | Role | Billing export | Status | Support | Live run |",
+    "|---|---|---|---|---|---|---|---|",
+  ];
+  const body = rows.map(
+    (row) =>
+      `| ${row.id} | ${row.group} | ${row.title} | ${row.role} | ${row.billingExport} | ${row.status} | ${row.support} | ${row.liveRun} |`,
+  );
+  return [...header, ...body].join("\n");
+}
+
+describe("gcp support matrix lint", () => {
+  it("accepts the committed support matrix", () => {
+    expect(lintGcpMatrixFile()).toEqual([]);
+  });
+
+  it("fails when the matrix drops a launch check", () => {
+    const spec = validSpec();
+    const rows = spec.checks.slice(1).map((check) => ({
+      id: check.id,
+      group: check.group,
+      title: check.title,
+      role: check.role,
+      billingExport: check.billingExportRequired ? "yes" : "no",
+      status: check.status,
+      support: check.support,
+      liveRun: "—",
+    }));
+    expect(
+      lintGcpMatrix(spec, gcpMatrixMarkdown(rows)).some((error) =>
+        error.includes(`support matrix is missing launch check '${spec.checks[0].id}'`),
+      ),
+    ).toBe(true);
+  });
+
+  it("fails when billing export disagrees with the spec", () => {
+    const spec = validSpec();
+    const rows = spec.checks.map((check) => ({
+      id: check.id,
+      group: check.group,
+      title: check.title,
+      role: check.role,
+      billingExport: "no",
+      status: check.status,
+      support: check.support,
+      liveRun: "—",
+    }));
+    expect(
+      lintGcpMatrix(spec, gcpMatrixMarkdown(rows)).some((error) =>
+        error.includes("billing export 'no' does not match spec 'yes'"),
+      ),
+    ).toBe(true);
   });
 });
