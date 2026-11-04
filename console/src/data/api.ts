@@ -2,11 +2,13 @@ import type { Finding } from "@farside/scan-contracts";
 import { DataError, errorFromStatus, toDataError } from "./error";
 import { formatEvidence, toMoney, lifecycleFrom, recoveryFrom } from "./derive";
 import type {
+  BillingView,
   BlindSpot,
   ConnectInput,
   ConnectResult,
   CostWasteView,
   DataSource,
+  DeletionView,
   EstateOverview,
   Headline,
   InventoryRow,
@@ -61,7 +63,7 @@ export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): Dat
   const call = fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
 
   async function request<T>(
-    method: "GET" | "PUT",
+    method: "GET" | "PUT" | "POST",
     path: string,
     signal?: AbortSignal,
     body?: unknown,
@@ -144,6 +146,19 @@ export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): Dat
       (await get<{ issues: StoredIssue[] }>("/issues", signal)).issues.map(issueRow),
     costWaste: (signal) => get<CostWasteView>("/cost-waste", signal),
     headline: (signal) => get<Headline>("/headline", signal),
+    billing: (signal) => get<BillingView>("/contract", signal),
+    deletion: async (signal) => {
+      try {
+        return await get<DeletionView>("/deletion", signal);
+      } catch (error) {
+        if (error instanceof DataError && error.kind === "not-found") {
+          return null;
+        }
+        throw error;
+      }
+    },
+    offboard: (signal) =>
+      request<DeletionView>("POST", "/offboard", signal, { confirm: true, exportOffered: true }),
     scans: async (signal) => (await get<{ scans: ScanRow[] }>("/scans", signal)).scans,
     scan: (id, signal) => get<ScanRow>(`/scans/${encodeURIComponent(id)}`, signal),
     blindSpots: async (signal) => {

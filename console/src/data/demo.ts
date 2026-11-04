@@ -7,6 +7,7 @@ import {
 import { DataError } from "./error";
 import { formatEvidence, toMoney, lifecycleFrom, recoveryFrom } from "./derive";
 import type {
+  BillingView,
   BlindSpot,
   CostWasteView,
   DataSource,
@@ -452,6 +453,22 @@ const COST_WASTE: CostWasteView = {
   totals: { min: "8.00", max: "12.00", currency: "USD", assessedCount: 1, unassessedScopes: 2 },
 };
 
+const BILLING: BillingView = {
+  contract: {
+    plan: "Farside Standard",
+    startDate: "2026-10-01T00:00:00.000Z",
+    endDate: null,
+    state: "active",
+    amountDue: "0.00",
+    currency: "USD",
+    unpaidAt: null,
+    stateChangedAt: "2026-10-01T00:00:00.000Z",
+  },
+  canScan: true,
+  invoices: [],
+  retainUntil: null,
+};
+
 const HEADLINE: Headline = {
   sentence:
     "Your Azure and GCP costs, nameable waste, backup gaps, support losses, and what Farside could not see. Unproven checks are not supported and are left out of every figure.",
@@ -504,6 +521,11 @@ export function demoSource(): DataSource {
     issues: async () => ISSUES,
     costWaste: async () => COST_WASTE,
     headline: async () => HEADLINE,
+    billing: async () => BILLING,
+    deletion: async () => null,
+    offboard: async () => {
+      throw new DataError("failed", 403, "Demo mode: nothing was offboarded");
+    },
     scans: async () => SCANS,
     scan: async (id) => {
       const scan = SCANS.find((row) => row.id === id);

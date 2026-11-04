@@ -218,6 +218,41 @@ export type HeadlineFigure = {
 /** Read model of GET /v1/orgs/:orgId/headline. */
 export type Headline = { sentence: string; figures: HeadlineFigure[] };
 
+export type ContractState = "active" | "warning" | "grace" | "paused" | "retaining" | "ended";
+
+/** Read model of GET /v1/orgs/:orgId/contract. Farside holds no card data. */
+export type BillingView = {
+  contract: {
+    plan: string;
+    startDate: string;
+    endDate: string | null;
+    state: ContractState;
+    amountDue: string;
+    currency: string;
+    unpaidAt: string | null;
+    stateChangedAt: string;
+  };
+  canScan: boolean;
+  invoices: never[];
+  retainUntil: string | null;
+};
+
+export type GrantToRemove = { kind: string; name: string; optional?: boolean };
+
+/** Read model of GET /v1/orgs/:orgId/deletion and the POST /offboard result. */
+export type DeletionView = {
+  orgId: string;
+  requestedBy: string;
+  deletedAt: string;
+  rowsPurged: Record<string, number>;
+  connectionsRemoved: number;
+  scansStopped: number;
+  scheduleCancelled: boolean;
+  accountClosureAt: string | null;
+  trigger: "customer" | "retention";
+  grantsToRemove: GrantToRemove[];
+};
+
 export type ExportKind = "issues" | "inventory" | "cost";
 
 export type ExportFile = { filename: string; content: string };
@@ -232,6 +267,12 @@ export type DataSource = {
   issues(signal?: AbortSignal): Promise<IssueRow[]>;
   costWaste(signal?: AbortSignal): Promise<CostWasteView>;
   headline(signal?: AbortSignal): Promise<Headline>;
+  /** Rejects with a not-found DataError when the org has no contract yet. */
+  billing(signal?: AbortSignal): Promise<BillingView>;
+  /** Null until the org has been offboarded. */
+  deletion(signal?: AbortSignal): Promise<DeletionView | null>;
+  /** Requires the customer to confirm and to have been offered the export. */
+  offboard(signal?: AbortSignal): Promise<DeletionView>;
   scans(signal?: AbortSignal): Promise<ScanRow[]>;
   scan(id: string, signal?: AbortSignal): Promise<ScanRow>;
   blindSpots(signal?: AbortSignal): Promise<BlindSpotsView>;

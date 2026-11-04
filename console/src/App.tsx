@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ComponentType, type MouseEvent } from
 import { apiSource } from "./data/api";
 import { DataProvider } from "./data/context";
 import type { DataSource } from "./data/types";
+import { Billing } from "./Billing";
 import { BlindSpots } from "./BlindSpots";
 import { Connect } from "./Connect";
 import { CostWaste } from "./CostWaste";
@@ -13,6 +14,7 @@ import { Recovery } from "./Recovery";
 import { Scans } from "./Scans";
 import { Settings } from "./Settings";
 import { NotFound } from "./NotFound";
+import { Offboarding } from "./Offboarding";
 import { DEMO_LABEL, NOT_CONNECTED_STATE, PRODUCT_NAME, SHELL_NAV, slugOf } from "./shell";
 
 function configuredSource(): DataSource | null {
@@ -44,6 +46,8 @@ const PAGES: Record<string, ComponentType> = {
   lifecycle: Lifecycle,
   recovery: Recovery,
   "blind-spots": BlindSpots,
+  billing: Billing,
+  offboarding: Offboarding,
 };
 
 const DETAIL_PAGES = new Set(["issues", "scans"]);

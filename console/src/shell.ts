@@ -16,6 +16,8 @@ export const SHELL_NAV = [
   "Lifecycle",
   "Recovery",
   "Blind spots",
+  "Billing",
+  "Offboarding",
 ] as const;
 
 export const slugOf = (item: string): string => item.toLowerCase().replaceAll(" ", "-");
