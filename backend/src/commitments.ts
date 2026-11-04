@@ -35,6 +35,13 @@ export type SavingsPlanRecord = {
   currency: string;
 };
 
+export const COMMITMENT_HARVEST_UNVERIFIED = {
+  harvestStatus: "unverified",
+  liveRunAt: null,
+  harvestStatusReason:
+    "The test estate will not buy reservations or savings plans. Fixture utilization is not a live purchase.",
+} as const;
+
 export type CommitmentSnapshot = {
   subscriptionId: string;
   billingScope: string;
@@ -43,6 +50,9 @@ export type CommitmentSnapshot = {
   reservations: ReservationRecord[];
   savingsPlans: SavingsPlanRecord[];
   noneFound: { reservations: boolean; savingsPlans: boolean };
+  harvestStatus?: "unverified";
+  liveRunAt?: string | null;
+  harvestStatusReason?: string;
 };
 
 export type CommitmentHarvestResult =
@@ -238,6 +248,9 @@ export async function harvestCommitments(input: {
         reservations: listed.reservations.length === 0,
         savingsPlans: listed.savingsPlans.length === 0,
       },
+      harvestStatus: COMMITMENT_HARVEST_UNVERIFIED.harvestStatus,
+      liveRunAt: COMMITMENT_HARVEST_UNVERIFIED.liveRunAt,
+      harvestStatusReason: COMMITMENT_HARVEST_UNVERIFIED.harvestStatusReason,
     };
     const findings = [
       ...checkReservations(listed.reservations, {
