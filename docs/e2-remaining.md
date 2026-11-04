@@ -24,6 +24,7 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 | E2-S7-T1 | #79 | `docs/demo-script.md` scripts Estate and Blind spots. Live rehearsal on the test subscription leftover. |
 | E2-S3-T1 | #59 | Injected Resource Graph client pages `$skipToken` across every launch type. 429 → `throttling`, other errors → `failed_call`. Default scan path stays the fixture harvester. Live ARG on the test subscription leftover. |
 | E2-S2-T3 | #55 | Connect probes roles through an injected `RoleLister` and stores each missing role plus the checks it blocks. Tests remove Cost Management Reader / Backup Reader. Live ARM role list leftover. |
+| E2-S3-T2 | #60 | Injected hierarchy client lists the fixture root/test management groups and both ground-truth subscriptions. Live ARM listing leftover. |
 
 ## Leftovers
 
@@ -35,9 +36,9 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 
 Connect does not call Azure. Role gaps are stored from an injected lister (#55). Disconnect and revoked-grant proof against a live grant stay leftover.
 
-### Live harvest (#58, #60, #63)
+### Live harvest (#58, #63)
 
-Inventory is mapped from the ground-truth fixture. An injected Resource Graph client pages launch types against that fixture (#59). Management-group discovery and a live ARG diff wait on Azure and unread dashmeta/AIF clients.
+Inventory is mapped from the ground-truth fixture. Resource Graph paging (#59) and hierarchy discovery (#60) run against that fixture. A live ARG diff waits on Azure.
 
 ### Live coverage proof
 
