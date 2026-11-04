@@ -1,36 +1,32 @@
 import { useSource } from "./data/context";
 import type { CostWasteView } from "./data/types";
+import { formatEvidence } from "./data/derive";
 import { useResource } from "./data/use-resource";
+import { formatAmount, formatMoney } from "./format";
 import { ExportButton } from "./ExportButton";
 import { LastScan } from "./LastScan";
 import { ScreenState } from "./ScreenState";
 import { plural } from "./plural";
 import { TERMS, shortName } from "./terms";
 
-function money(amount: string, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
-      currencyDisplay: "code",
-    }).format(Number(amount));
-  } catch {
-    return `${amount} ${currency}`;
-  }
-}
+const money = formatAmount;
 
 function range(min: string, max: string, currency: string): string {
-  return `${money(min, currency)} to ${money(max, currency)} per month`;
+  return formatMoney({ min, max, currency, period: "month" });
 }
 
 function Spend({ spend }: { spend: NonNullable<CostWasteView["spend"]> }) {
+  // The per-service figures cover one month, not the whole harvested range.
+  const first = spend.services[0];
+  const changes = new Map(spend.monthOnMonth.map((row) => [row.serviceName, row]));
   return (
     <section aria-labelledby="spend-title">
       <h2 id="spend-title">Spend by service</h2>
-      <p className="page-meta">
-        {spend.periodStart} to {spend.periodEnd}
-        {spend.provisionalDate ? `, provisional from ${spend.provisionalDate}` : ""}
-      </p>
+      {first ? (
+        <p className="page-meta">
+          {first.periodStart} to {first.periodEnd}
+        </p>
+      ) : null}
       <div className="table-wrap" role="region" aria-labelledby="spend-caption" tabIndex={0}>
         <table>
           <caption id="spend-caption">Monthly cost per service</caption>
@@ -43,9 +39,7 @@ function Spend({ spend }: { spend: NonNullable<CostWasteView["spend"]> }) {
           </thead>
           <tbody>
             {spend.services.map((service) => {
-              const change = spend.monthOnMonth.find(
-                (row) => row.serviceName === service.serviceName,
-              );
+              const change = changes.get(service.serviceName);
               return (
                 <tr key={service.serviceName}>
                   <th scope="row">{service.serviceName}</th>
@@ -88,15 +82,52 @@ function FloorBurst({ points }: { points: NonNullable<CostWasteView["floorBurst"
 
 function Commitments({ commitments }: { commitments: NonNullable<CostWasteView["commitments"]> }) {
   const none = commitments.noneFound.reservations && commitments.noneFound.savingsPlans;
+  const rows = [
+    ...commitments.reservations.map((r) => ({
+      id: r.reservationId,
+      kind: `Reservation ${r.skuName}`,
+      use: `${r.utilisationPercent}%`,
+      expiry: r.expiryDate,
+    })),
+    ...commitments.savingsPlans.map((p) => ({
+      id: p.savingsPlanId,
+      kind: "Savings plan",
+      use: `${p.utilisationPercent}% (${formatAmount(p.usedAmount, p.currency)} of ${formatAmount(p.committedAmount, p.currency)})`,
+      expiry: p.expiryDate,
+    })),
+  ];
   return (
     <section aria-labelledby="commit-title">
       <h2 id="commit-title">Commitment use</h2>
       <p>
-        {none
-          ? "No reservations or savings plans were found."
-          : `${plural(commitments.reservations.length, "reservation")} and ${plural(commitments.savingsPlans.length, "savings plan")} found.`}
+        {none ? "No reservations or savings plans were found." : null}
         {commitments.harvestStatus === "unverified" ? " Not verified against a live run." : ""}
       </p>
+      {rows.length > 0 ? (
+        <div className="table-wrap" role="region" aria-labelledby="commit-caption" tabIndex={0}>
+          <table>
+            <caption id="commit-caption">Reservations and savings plans in use</caption>
+            <thead>
+              <tr>
+                <th scope="col">Commitment</th>
+                <th scope="col">Type</th>
+                <th scope="col">Used</th>
+                <th scope="col">Expires</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id}>
+                  <th scope="row">{row.id}</th>
+                  <td>{row.kind}</td>
+                  <td>{row.use}</td>
+                  <td>{row.expiry}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -125,20 +156,27 @@ function Waste({ view }: { view: CostWasteView }) {
               <tr>
                 <th scope="col">Resource</th>
                 <th scope="col">Check</th>
+                <th scope="col">Evidence</th>
                 <th scope="col">Savings</th>
                 <th scope="col">Issue</th>
               </tr>
             </thead>
             <tbody>
               {view.waste.map((item) => (
-                <tr key={`${item.checkId}:${item.resourceId}`}>
+                <tr key={item.issueHref}>
                   <th scope="row" title={item.resourceId}>
                     {shortName(item.resourceId)}
                   </th>
                   <td>{item.checkId}</td>
+                  <td>{formatEvidence(item.evidence)}</td>
                   <td>{range(item.savings.min, item.savings.max, item.savings.currency)}</td>
                   <td>
-                    <a href={item.issueHref}>View issue</a>
+                    <a
+                      href={item.issueHref}
+                      aria-label={`View issue for ${shortName(item.resourceId)}`}
+                    >
+                      View issue
+                    </a>
                   </td>
                 </tr>
               ))}

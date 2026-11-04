@@ -69,7 +69,9 @@ describe("waste totals", () => {
     expect(view.reason).toBe("cost could not be read");
     expect(view.spend).toBeNull();
     expect(view.waste).toHaveLength(1);
-    expect(view.waste[0]?.issueHref).toBe("#issues/disk-unattached");
+    expect(view.waste[0]?.issueHref).toBe(
+      `#issues/${encodeURIComponent("azure-waste-unattached-disks:disk-unattached:main:azure-waste-unattached-disks")}`,
+    );
   });
 
   it("includes assessed GCP waste ranges in the same totals", () => {

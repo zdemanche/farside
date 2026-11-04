@@ -123,7 +123,9 @@ export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): Dat
         const problem: { title?: string } | null = await response.json().catch(() => null);
         throw errorFromStatus(response.status, problem?.title ?? response.statusText);
       }
-      const named = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "");
+      const named = /filename="([\w.-]+\.json)"/.exec(
+        response.headers.get("content-disposition") ?? "",
+      );
       return { filename: named?.[1] ?? `farside-${kind}.json`, content: await response.text() };
     },
     overview: (signal) => get<EstateOverview>("/estate", signal),

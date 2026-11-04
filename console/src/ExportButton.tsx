@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSource } from "./data/context";
 import { failureMessage, toDataError } from "./data/error";
 import type { ExportKind } from "./data/types";
@@ -11,7 +11,8 @@ function save(filename: string, content: string): void {
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Revoking in the same tick can cancel the download in some browsers.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 /** Downloads the farside-export/1 file for one screen. Hidden when the source cannot export. */
@@ -19,21 +20,29 @@ export function ExportButton({ kind, label }: { kind: ExportKind; label: string 
   const source = useSource();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const abort = useRef<AbortController | null>(null);
+  useEffect(() => () => abort.current?.abort(), []);
   if (!source.exportFile) {
     return null;
   }
-  const exportFile = source.exportFile.bind(source);
+  const exportFile = source.exportFile;
   const run = async () => {
     setBusy(true);
     setMessage("");
+    const controller = new AbortController();
+    abort.current = controller;
     try {
-      const file = await exportFile(kind);
+      const file = await exportFile.call(source, kind, controller.signal);
       save(file.filename, file.content);
       setMessage(`Downloaded ${file.filename}`);
     } catch (error) {
-      setMessage(failureMessage(toDataError(error), `export ${kind}`));
+      if (!controller.signal.aborted) {
+        setMessage(failureMessage(toDataError(error), `export ${kind}`));
+      }
     } finally {
-      setBusy(false);
+      if (!controller.signal.aborted) {
+        setBusy(false);
+      }
     }
   };
   return (

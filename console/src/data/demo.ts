@@ -398,8 +398,20 @@ const COST_WASTE: CostWasteView = {
     periodEnd: "2026-10-31",
     provisionalDate: null,
     services: [
-      { serviceName: "Virtual Machines", costAmount: "1840.00", provisional: false },
-      { serviceName: "Storage", costAmount: "412.50", provisional: false },
+      {
+        serviceName: "Virtual Machines",
+        costAmount: "1840.00",
+        provisional: false,
+        periodStart: "2026-10-01",
+        periodEnd: "2026-10-31",
+      },
+      {
+        serviceName: "Storage",
+        costAmount: "412.50",
+        provisional: false,
+        periodStart: "2026-10-01",
+        periodEnd: "2026-10-31",
+      },
     ],
     monthOnMonth: [
       {
@@ -415,21 +427,28 @@ const COST_WASTE: CostWasteView = {
     { date: "2026-10-30", actual: "74.00", floor: "58.00", burst: "16.00", currency: "USD" },
   ],
   commitments: {
-    reservations: [],
+    reservations: [
+      {
+        reservationId: "res-d2s",
+        skuName: "Standard_D2s_v5",
+        utilisationPercent: 62,
+        expiryDate: "2027-03-01",
+      },
+    ],
     savingsPlans: [],
-    noneFound: { reservations: true, savingsPlans: true },
+    noneFound: { reservations: false, savingsPlans: true },
   },
   waste: [
     {
       checkId: "azure-waste-unattached-disks",
-      resourceId: "disk-orphan-1",
-      subscriptionId: "sub-demo",
-      evidence: { diskId: "disk-orphan-1", sizeGb: 128 },
-      savings: { min: "9.00", max: "12.00", currency: "USD" },
-      issueHref: "#issues/disk-orphan-1",
+      resourceId: "disk-unattached",
+      subscriptionId: SUBSCRIPTION,
+      evidence: { diskId: "disk-unattached", diskState: "Unattached", sizeGb: 128 },
+      savings: { min: "8.00", max: "12.00", currency: "USD" },
+      issueHref: "#issues/disk-unattached",
     },
   ],
-  totals: { min: "9.00", max: "12.00", currency: "USD", assessedCount: 1, unassessedScopes: 2 },
+  totals: { min: "8.00", max: "12.00", currency: "USD", assessedCount: 1, unassessedScopes: 2 },
 };
 
 export function demoSource(): DataSource {

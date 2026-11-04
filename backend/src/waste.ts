@@ -4,6 +4,7 @@ import type { CommitmentSnapshot } from "./commitments.js";
 import type { CostSnapshot } from "./cost.js";
 import type { CoverageEntry } from "./coverage.js";
 import { scopeId } from "./coverage.js";
+import { issueIdentity, resourceIdFromFinding } from "./issues.js";
 
 export type WasteItem = {
   checkId: string;
@@ -106,7 +107,8 @@ export function costWasteView(input: {
         subscriptionId: finding.scope.subscriptionOrProject,
         evidence: finding.evidence.fields,
         savings: finding.savings,
-        issueHref: `#issues/${resourceId}`,
+        // The Issues screen selects by the stored issue id (checkId:resourceId:scopeId).
+        issueHref: `#issues/${encodeURIComponent(issueIdentity(finding.checkId, resourceIdFromFinding(finding), finding.scope.id))}`,
       },
     ];
   });

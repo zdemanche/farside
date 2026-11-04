@@ -126,7 +126,29 @@ export type ConnectInput = { tenantId: string; subscriptionId: string };
 
 export type ConnectResult = { scanStarted: boolean; attention: string | null };
 
-export type SpendFigure = { serviceName: string; costAmount: string; provisional: boolean };
+export type SpendFigure = {
+  serviceName: string;
+  costAmount: string;
+  provisional: boolean;
+  periodStart: string;
+  periodEnd: string;
+};
+
+export type ReservationUse = {
+  reservationId: string;
+  skuName: string;
+  utilisationPercent: number;
+  expiryDate: string;
+};
+
+export type SavingsPlanUse = {
+  savingsPlanId: string;
+  committedAmount: string;
+  usedAmount: string;
+  utilisationPercent: number;
+  expiryDate: string;
+  currency: string;
+};
 
 export type SpendChange = {
   serviceName: string;
@@ -140,8 +162,9 @@ export type WasteItem = {
   checkId: string;
   resourceId: string;
   subscriptionId: string;
-  evidence: Record<string, unknown>;
+  evidence: Record<string, string | number | boolean | null>;
   savings: { min: string; max: string; currency: string };
+  /** Hash link to the stored issue; the backend builds it from the issue identity. */
   issueHref: string;
 };
 
@@ -160,8 +183,8 @@ export type CostWasteView = {
   floorBurst:
     { date: string; actual: string; floor: string; burst: string; currency: string }[] | null;
   commitments: {
-    reservations: unknown[];
-    savingsPlans: unknown[];
+    reservations: ReservationUse[];
+    savingsPlans: SavingsPlanUse[];
     noneFound: { reservations: boolean; savingsPlans: boolean };
     harvestStatus?: "unverified";
   } | null;

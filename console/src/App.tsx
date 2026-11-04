@@ -13,14 +13,7 @@ import { Recovery } from "./Recovery";
 import { Scans } from "./Scans";
 import { Settings } from "./Settings";
 import { NotFound } from "./NotFound";
-import {
-  COMING_SOON,
-  DEMO_LABEL,
-  NOT_CONNECTED_STATE,
-  PRODUCT_NAME,
-  SHELL_NAV,
-  slugOf,
-} from "./shell";
+import { DEMO_LABEL, NOT_CONNECTED_STATE, PRODUCT_NAME, SHELL_NAV, slugOf } from "./shell";
 
 function configuredSource(): DataSource | null {
   const baseUrl: string | undefined = import.meta.env.VITE_FARSIDE_API_URL;
@@ -127,18 +120,12 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
               const itemSlug = slugOf(item);
               return (
                 <li key={item}>
-                  {COMING_SOON.includes(item) ? (
-                    <span className="nav-soon">
-                      {item} <span className="chip chip-neutral">coming soon</span>
-                    </span>
-                  ) : (
-                    <a
-                      href={`#${itemSlug}`}
-                      aria-current={Page && itemSlug === slug ? "page" : undefined}
-                    >
-                      {item}
-                    </a>
-                  )}
+                  <a
+                    href={`#${itemSlug}`}
+                    aria-current={Page && itemSlug === slug ? "page" : undefined}
+                  >
+                    {item}
+                  </a>
                 </li>
               );
             })}

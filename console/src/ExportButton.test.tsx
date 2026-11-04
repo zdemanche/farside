@@ -34,7 +34,7 @@ describe("ExportButton", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Export issues" }));
     await waitFor(() => expect(screen.getByText("Downloaded farside-issues.json")).toBeTruthy());
-    expect(exportFile).toHaveBeenCalledWith("issues");
+    expect(exportFile).toHaveBeenCalledWith("issues", expect.any(AbortSignal));
     expect(click).toHaveBeenCalledOnce();
     await expectAxeClean(container);
   });
