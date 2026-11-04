@@ -11,9 +11,12 @@ const ROUTES = [
   "settings",
   "inventory",
   "issues",
+  "cost-and-waste",
   "lifecycle",
   "recovery",
   "blind-spots",
+  "billing",
+  "offboarding",
   "scans/scan-1",
   "issues/disk-unattached",
   `inventory?resource=${encodeURIComponent(DEMO_DISK)}`,
@@ -28,9 +31,12 @@ const NAV_ITEMS = [
   "Settings",
   "Inventory",
   "Issues",
+  "Cost and waste",
   "Lifecycle",
   "Recovery",
   "Blind spots",
+  "Billing",
+  "Offboarding",
 ] as const;
 
 async function open(page: Page, route: string) {
@@ -80,6 +86,8 @@ test("the navigation is reachable and operable from the keyboard", async ({ page
   await open(page, "estate");
   const nav = page.getByRole("navigation", { name: "Farside" });
   await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(page.getByLabel("Cloud")).toBeFocused();
   for (const name of NAV_ITEMS) {
     await page.keyboard.press("Tab");
     await expect(nav.getByRole("link", { name, exact: true })).toBeFocused();
