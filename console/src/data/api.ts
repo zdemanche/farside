@@ -104,6 +104,27 @@ export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): Dat
   return {
     mode: "api",
     orgId,
+    exportFile: async (kind, signal) => {
+      let response: Response;
+      try {
+        response = await call(`${root}/export/${kind}`, {
+          method: "GET",
+          ...(signal ? { signal } : {}),
+          headers: { accept: "application/json", [ORG_HEADER]: orgId },
+        });
+      } catch (error) {
+        if (signal?.aborted) {
+          throw error;
+        }
+        throw toDataError(error);
+      }
+      if (!response.ok) {
+        const problem: { title?: string } | null = await response.json().catch(() => null);
+        throw errorFromStatus(response.status, problem?.title ?? response.statusText);
+      }
+      const named = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "");
+      return { filename: named?.[1] ?? `farside-${kind}.json`, content: await response.text() };
+    },
     overview: (signal) => get<EstateOverview>("/estate", signal),
     inventory: async (signal) => {
       try {

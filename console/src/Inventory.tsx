@@ -3,6 +3,7 @@ import { useSource } from "./data/context";
 import type { InventoryRow } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { plural } from "./plural";
+import { ExportButton } from "./ExportButton";
 import { LastScan } from "./LastScan";
 import { ScreenState } from "./ScreenState";
 import { shortName } from "./terms";
@@ -267,6 +268,7 @@ export function Inventory({
         Inventory
       </h1>
       <LastScan />
+      <ExportButton kind="inventory" label="Export inventory" />
       <ScreenState
         label="the inventory"
         resource={resources}

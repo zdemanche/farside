@@ -126,9 +126,15 @@ export type ConnectInput = { tenantId: string; subscriptionId: string };
 
 export type ConnectResult = { scanStarted: boolean; attention: string | null };
 
+export type ExportKind = "issues" | "inventory" | "cost";
+
+export type ExportFile = { filename: string; content: string };
+
 export type DataSource = {
   readonly mode: "demo" | "api";
   readonly orgId: string;
+  /** Absent when the source cannot produce a farside-export/1 file (demo mode). */
+  exportFile?(kind: ExportKind, signal?: AbortSignal): Promise<ExportFile>;
   overview(signal?: AbortSignal): Promise<EstateOverview>;
   inventory(signal?: AbortSignal): Promise<InventoryRow[]>;
   issues(signal?: AbortSignal): Promise<IssueRow[]>;

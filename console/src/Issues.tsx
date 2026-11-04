@@ -4,6 +4,7 @@ import { useSource } from "./data/context";
 import type { IssueRow, IssueStatus } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { formatMoney, Time } from "./format";
+import { ExportButton } from "./ExportButton";
 import { LastScan } from "./LastScan";
 import { inventoryHref, scanHref } from "./links";
 import { ScreenState } from "./ScreenState";
@@ -245,6 +246,7 @@ export function Issues({ hash = currentHash() }: { hash?: string }) {
         was {TERMS.assessed}.
       </p>
       <LastScan />
+      <ExportButton kind="issues" label="Export issues" />
       <ScreenState
         label="issues"
         resource={issues}
