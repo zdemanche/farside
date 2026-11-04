@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   REQUIRED_LAUNCH_CHECK_IDS,
+  lintMatrix,
+  lintMatrixFile,
   lintSpec,
   lintSpecFile,
 } from "./lint.mjs";
@@ -64,5 +66,85 @@ describe("azure spec lint", () => {
     const path = join(dir, "bad.json");
     writeFileSync(path, JSON.stringify(spec));
     expect(lintSpecFile(path).some((error) => error.includes("dataSource"))).toBe(true);
+  });
+});
+
+function matrixMarkdown(rows) {
+  const header = [
+    "| Check id | Group | Title | Role | Status | Support | Live run | Notes |",
+    "|---|---|---|---|---|---|---|---|",
+  ];
+  const body = rows.map(
+    (row) =>
+      `| ${row.id} | ${row.group} | ${row.title} | ${row.role} | ${row.status} | ${row.support} | ${row.liveRun} | |`,
+  );
+  return [...header, ...body].join("\n");
+}
+
+function matchingMatrix(spec) {
+  return matrixMarkdown(
+    spec.checks.map((check) => ({
+      id: check.id,
+      group: check.group,
+      title: check.title,
+      role: check.role,
+      status: check.status,
+      support: check.support,
+      liveRun: check.liveRunAt ?? "—",
+    })),
+  );
+}
+
+describe("azure support matrix lint", () => {
+  it("accepts the committed support matrix", () => {
+    expect(lintMatrixFile()).toEqual([]);
+  });
+
+  it("accepts a matrix that matches the spec", () => {
+    expect(lintMatrix(validSpec(), matchingMatrix(validSpec()))).toEqual([]);
+  });
+
+  it("fails when the matrix drops a launch check", () => {
+    const spec = validSpec();
+    const rows = spec.checks.slice(1).map((check) => ({
+      id: check.id,
+      group: check.group,
+      title: check.title,
+      role: check.role,
+      status: check.status,
+      support: check.support,
+      liveRun: "—",
+    }));
+    expect(
+      lintMatrix(spec, matrixMarkdown(rows)).some((error) =>
+        error.includes(`support matrix is missing launch check '${spec.checks[0].id}'`),
+      ),
+    ).toBe(true);
+  });
+
+  it("fails when status disagrees with the spec", () => {
+    const spec = validSpec();
+    const markdown = matchingMatrix(spec).replace("| unverified |", "| verified |");
+    expect(
+      lintMatrix(spec, markdown).some((error) => error.includes("status 'verified' does not match spec")),
+    ).toBe(true);
+  });
+
+  it("fails when live run disagrees with the spec", () => {
+    const spec = validSpec();
+    spec.checks[0].liveRunAt = "2026-11-04";
+    expect(
+      lintMatrix(spec, matchingMatrix({ ...spec, checks: [{ ...spec.checks[0], liveRunAt: null }, ...spec.checks.slice(1)] })).some(
+        (error) => error.includes("live run '—' does not match spec '2026-11-04'"),
+      ),
+    ).toBe(true);
+  });
+
+  it("fails when the matrix has an unknown check", () => {
+    const spec = validSpec();
+    const extra = matchingMatrix(spec) + "\n| not-a-launch-check | inventory | Extra | Reader | unverified | not-supported | — | |";
+    expect(lintMatrix(spec, extra).some((error) => error.includes("unknown check 'not-a-launch-check'"))).toBe(
+      true,
+    );
   });
 });

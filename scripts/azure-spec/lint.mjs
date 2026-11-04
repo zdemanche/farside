@@ -53,6 +53,120 @@ const DEFAULT_SPEC_PATH = join(
   "../../docs/azure/launch-checks.json",
 );
 
+const DEFAULT_MATRIX_PATH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../docs/azure/support-matrix.md",
+);
+
+function formatLiveRun(liveRunAt) {
+  if (liveRunAt == null || liveRunAt === "") {
+    return "—";
+  }
+  return String(liveRunAt);
+}
+
+export function parseMatrixRows(markdown) {
+  const rows = [];
+  if (typeof markdown !== "string") {
+    return rows;
+  }
+  for (const line of markdown.split(/\r?\n/)) {
+    if (!line.startsWith("|")) {
+      continue;
+    }
+    const cells = line
+      .split("|")
+      .slice(1, -1)
+      .map((cell) => cell.trim());
+    if (cells.length < 7) {
+      continue;
+    }
+    const id = cells[0];
+    if (!id || id === "Check id" || /^-+$/.test(id.replaceAll(":", ""))) {
+      continue;
+    }
+    rows.push({
+      id,
+      group: cells[1],
+      title: cells[2],
+      role: cells[3],
+      status: cells[4],
+      support: cells[5],
+      liveRun: cells[6],
+    });
+  }
+  return rows;
+}
+
+export function lintMatrix(spec, markdown) {
+  if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
+    return ["spec must be an object"];
+  }
+  if (!Array.isArray(spec.checks)) {
+    return ["spec.checks must be an array"];
+  }
+  const errors = [];
+  const rows = parseMatrixRows(markdown);
+  const byId = new Map();
+  for (const row of rows) {
+    if (byId.has(row.id)) {
+      errors.push(`support matrix has duplicate check '${row.id}'`);
+    } else {
+      byId.set(row.id, row);
+    }
+  }
+  for (const check of spec.checks) {
+    if (!check || typeof check !== "object" || typeof check.id !== "string") {
+      continue;
+    }
+    const row = byId.get(check.id);
+    if (!row) {
+      errors.push(`support matrix is missing launch check '${check.id}'`);
+      continue;
+    }
+    if (row.group !== check.group) {
+      errors.push(
+        `support matrix '${check.id}' group '${row.group}' does not match spec '${check.group}'`,
+      );
+    }
+    if (row.title !== check.title) {
+      errors.push(`support matrix '${check.id}' title does not match spec`);
+    }
+    if (row.role !== check.role) {
+      errors.push(
+        `support matrix '${check.id}' role '${row.role}' does not match spec '${check.role}'`,
+      );
+    }
+    if (row.status !== check.status) {
+      errors.push(
+        `support matrix '${check.id}' status '${row.status}' does not match spec '${check.status}'`,
+      );
+    }
+    if (row.support !== check.support) {
+      errors.push(
+        `support matrix '${check.id}' support '${row.support}' does not match spec '${check.support}'`,
+      );
+    }
+    const expectedLive = formatLiveRun(check.liveRunAt);
+    if (row.liveRun !== expectedLive) {
+      errors.push(
+        `support matrix '${check.id}' live run '${row.liveRun}' does not match spec '${expectedLive}'`,
+      );
+    }
+  }
+  const specIds = new Set(
+    spec.checks
+      .filter((check) => check && typeof check === "object" && typeof check.id === "string")
+      .map((check) => check.id),
+  );
+  for (const row of rows) {
+    if (!specIds.has(row.id)) {
+      errors.push(`support matrix has unknown check '${row.id}'`);
+    }
+  }
+  return errors;
+}
+
 export function lintSpec(spec, requiredIds = REQUIRED_LAUNCH_CHECK_IDS) {
   const errors = [];
   if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
@@ -139,13 +253,29 @@ export function lintSpecFile(path = DEFAULT_SPEC_PATH) {
   return lintSpec(spec);
 }
 
+export function lintMatrixFile(
+  specPath = DEFAULT_SPEC_PATH,
+  matrixPath = DEFAULT_MATRIX_PATH,
+) {
+  const spec = JSON.parse(readFileSync(specPath, "utf8"));
+  const markdown = readFileSync(matrixPath, "utf8");
+  return lintMatrix(spec, markdown);
+}
+
+export function lintAzureSpecFiles(
+  specPath = DEFAULT_SPEC_PATH,
+  matrixPath = DEFAULT_MATRIX_PATH,
+) {
+  return [...lintSpecFile(specPath), ...lintMatrixFile(specPath, matrixPath)];
+}
+
 function isMain() {
   const entry = process.argv[1];
   return Boolean(entry) && pathToFileURL(entry).href === import.meta.url;
 }
 
 if (isMain()) {
-  const errors = lintSpecFile();
+  const errors = lintAzureSpecFiles();
   if (errors.length > 0) {
     for (const error of errors) {
       console.error(error);

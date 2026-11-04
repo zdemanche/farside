@@ -27,4 +27,4 @@ Roles and API names come from general Azure knowledge (`docs/proposal.md`). They
 | azure-lifecycle-expiring-app-service-certs | lifecycle | Expiring App Service certificates | Reader | unverified | not-supported | — | |
 | azure-lifecycle-expiring-gateway-certs | lifecycle | Expiring gateway certificates | Reader | unverified | not-supported | — | |
 
-Source of rows: [`launch-checks.json`](launch-checks.json). The lint in `scripts/azure-spec/lint.mjs` fails if a launch check is missing, if a required field is missing, or if `status` is missing.
+Source of rows: [`launch-checks.json`](launch-checks.json). The lint in `scripts/azure-spec/lint.mjs` fails if a launch check is missing, if a required field is missing, if `status` is missing, or if a matrix row disagrees with the spec on id, group, title, role, status, support, or live run.
