@@ -143,10 +143,48 @@ describe("Cost and waste screen", () => {
     expect(screen.getByText(/enabled, 2026-11-03, forward/)).toBeTruthy();
     expect(screen.getByText(/1 day of daily history since 2026-11-03/)).toBeTruthy();
     expect(
-      screen.getByText(/undetermined until there is more history: 13 more completed export days/),
+      screen.getByText(/undetermined\. What would close this: 13 more completed export days/),
     ).toBeTruthy();
     expect(screen.queryByText("Spend by service", { selector: "h2" })).toBeNull();
     await expectAxeClean(container);
+  });
+
+  it("says why alerts are undetermined for mixed currencies, which have no days still to wait", async () => {
+    const base = await demoSource().costWaste();
+    renderScreen(
+      <CostWaste />,
+      sourceWith({
+        costWaste: async () => ({
+          ...base,
+          history: {
+            days: 20,
+            firstDay: "2026-10-01",
+            daysNeeded: 0,
+            closer: "Daily cost rows in a single currency",
+          },
+        }),
+      }),
+    );
+    expect(
+      await screen.findByText(/What would close this: Daily cost rows in a single currency/),
+    ).toBeTruthy();
+  });
+
+  it("shows the cloud of each waste row", async () => {
+    renderScreen(<CostWaste />);
+    expect(
+      await screen.findByRole("row", {
+        name: /disk-unattached.*Azure.*azure-waste-unattached-disks/,
+      }),
+    ).toBeTruthy();
+  });
+
+  it("shows no Azure spend under a single non-Azure cloud, and says why", async () => {
+    renderScreen(<CostWaste />, demoSource("gcp"));
+    expect(await screen.findByText(/No cost is read for GCP/)).toBeTruthy();
+    expect(screen.queryByText("Spend by service", { selector: "h2" })).toBeNull();
+    expect(screen.queryByText("Commitment use", { selector: "h2" })).toBeNull();
+    expect(screen.queryByText(/disk-unattached/)).toBeNull();
   });
 
   it("reports a load failure with a retry", async () => {

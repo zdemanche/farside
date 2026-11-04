@@ -67,9 +67,10 @@ function Confirm({ onDone }: { onDone: (record: DeletionView) => void }) {
         history and settings. This cannot be undone. Download your data first.
       </p>
       <h2>Take your data with you</h2>
-      <ExportButton kind="issues" label="Export issues" />
-      <ExportButton kind="inventory" label="Export inventory" />
-      <ExportButton kind="cost" label="Export cost" />
+      <p>These files cover all clouds, whichever cloud is selected above.</p>
+      <ExportButton kind="issues" label="Export issues" allClouds />
+      <ExportButton kind="inventory" label="Export inventory" allClouds />
+      <ExportButton kind="cost" label="Export cost" allClouds />
       <div className="field">
         <input
           id={exportId}

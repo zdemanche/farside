@@ -129,7 +129,7 @@ export function costWasteView(input: {
     totals: wasteTotals(input.findings, input.coverage),
     history: {
       days: input.alerts?.historyDays ?? null,
-      firstDay: input.cost?.periodStart ?? null,
+      firstDay: input.alerts?.firstDay ?? null,
       daysNeeded: input.alerts?.undetermined?.daysNeeded ?? null,
       closer: input.alerts?.undetermined?.closer ?? null,
     },

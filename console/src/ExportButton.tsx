@@ -16,7 +16,16 @@ function save(filename: string, content: string): void {
 }
 
 /** Downloads the farside-export/1 file for one screen. Hidden when the source cannot export. */
-export function ExportButton({ kind, label }: { kind: ExportKind; label: string }) {
+export function ExportButton({
+  kind,
+  label,
+  allClouds,
+}: {
+  kind: ExportKind;
+  label: string;
+  /** Ignore the Cloud selector; used where a partial file would lose data. */
+  allClouds?: boolean;
+}) {
   const source = useSource();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -32,7 +41,12 @@ export function ExportButton({ kind, label }: { kind: ExportKind; label: string 
     const controller = new AbortController();
     abort.current = controller;
     try {
-      const file = await exportFile.call(source, kind, controller.signal);
+      const file = await exportFile.call(
+        source,
+        kind,
+        controller.signal,
+        allClouds ? { allClouds } : undefined,
+      );
       save(file.filename, file.content);
       setMessage(`Downloaded ${file.filename}`);
     } catch (error) {

@@ -64,7 +64,7 @@ function issueRow(issue: StoredIssue): IssueRow {
 
 export function apiSource({ baseUrl, orgId, cloud, fetch: fetchImpl }: ApiOptions): DataSource {
   const root = `${baseUrl.replace(/\/+$/, "")}/v1/orgs/${encodeURIComponent(orgId)}`;
-  const query = cloud ? `?cloud=${cloud}` : "";
+  const query = cloud ? `?cloud=${encodeURIComponent(cloud)}` : "";
   const call = fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
 
   async function request<T>(
@@ -113,10 +113,11 @@ export function apiSource({ baseUrl, orgId, cloud, fetch: fetchImpl }: ApiOption
   return {
     mode: "api",
     orgId,
-    exportFile: async (kind, signal) => {
+    ...(cloud ? { cloud } : {}),
+    exportFile: async (kind, signal, options) => {
       let response: Response;
       try {
-        response = await call(`${root}/export/${kind}${query}`, {
+        response = await call(`${root}/export/${kind}${options?.allClouds ? "" : query}`, {
           method: "GET",
           ...(signal ? { signal } : {}),
           headers: { accept: "application/json", [ORG_HEADER]: orgId },

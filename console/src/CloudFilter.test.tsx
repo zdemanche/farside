@@ -25,6 +25,17 @@ describe("cloud dimension", () => {
     expect(fetch.mock.calls[1]?.[0]).toBe("http://x/v1/orgs/o/issues");
   });
 
+  it("filters a screen export by cloud but never an all-clouds export", async () => {
+    const fetch = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => new Response("{}", { status: 200 }),
+    );
+    const source = apiSource({ baseUrl: "http://x", orgId: "o", cloud: "gcp", fetch });
+    await source.exportFile?.("issues");
+    await source.exportFile?.("issues", undefined, { allClouds: true });
+    expect(fetch.mock.calls[0]?.[0]).toBe("http://x/v1/orgs/o/export/issues?cloud=gcp");
+    expect(fetch.mock.calls[1]?.[0]).toBe("http://x/v1/orgs/o/export/issues");
+  });
+
   it("reads the cloud of each stored issue", async () => {
     const fetch = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>

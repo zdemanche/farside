@@ -123,6 +123,11 @@ describe("cost-waste history", () => {
     expect(view(null).history).toEqual({ days: null, firstDay: null, daysNeeded: null, closer: null });
   });
 
+  it("names the first export day on a first-day snapshot, not a month start", () => {
+    const alerts = analyzeAlerts({ rows: [row("2026-10-17")], asOf: "2026-10-17" });
+    expect(view(alerts).history).toMatchObject({ days: 0, firstDay: "2026-10-17" });
+  });
+
   it("says how many more days close an alert rule that history is too short for", () => {
     const alerts = analyzeAlerts({
       rows: [row("2026-10-01"), row("2026-10-02"), row("2026-10-03")],
@@ -130,6 +135,7 @@ describe("cost-waste history", () => {
     });
     const { history } = view(alerts);
     expect(history.days).toBe(2);
+    expect(history.firstDay).toBe("2026-10-01");
     expect(history.daysNeeded).toBe(WINDOW_DAYS - 2);
     expect(history.closer).toBe(`${WINDOW_DAYS - 2} more completed export days`);
   });

@@ -444,6 +444,7 @@ const COST_WASTE: CostWasteView = {
   },
   waste: [
     {
+      cloud: "azure",
       checkId: "azure-waste-unattached-disks",
       resourceId: "disk-unattached",
       subscriptionId: SUBSCRIPTION,
@@ -514,16 +515,32 @@ const HEADLINE: Headline = {
   ],
 };
 
+function costWasteFor(cloud?: Cloud): CostWasteView {
+  if (!cloud) {
+    return COST_WASTE;
+  }
+  const waste = COST_WASTE.waste.filter((item) => item.cloud === cloud);
+  return {
+    ...COST_WASTE,
+    waste,
+    totals:
+      waste.length === COST_WASTE.waste.length
+        ? COST_WASTE.totals
+        : { ...COST_WASTE.totals, min: "0.00", max: "0.00", assessedCount: 0 },
+  };
+}
+
 export function demoSource(cloud?: Cloud): DataSource {
   let settings = DEFAULT_SETTINGS;
   return {
     mode: "demo",
     orgId: "demo",
+    ...(cloud ? { cloud } : {}),
     overview: async () => OVERVIEW,
     inventory: async () =>
       DEMO_RESOURCES.map(inventoryRow).filter((row) => !cloud || row.cloud === cloud),
     issues: async () => ISSUES.filter((row) => !cloud || row.cloud === cloud),
-    costWaste: async () => COST_WASTE,
+    costWaste: async () => costWasteFor(cloud),
     headline: async () => HEADLINE,
     billing: async () => BILLING,
     deletion: async () => null,

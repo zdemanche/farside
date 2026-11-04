@@ -160,6 +160,7 @@ export type SpendChange = {
 };
 
 export type WasteItem = {
+  cloud: Cloud;
   checkId: string;
   resourceId: string;
   subscriptionId: string;
@@ -267,8 +268,14 @@ export type ExportFile = { filename: string; content: string };
 export type DataSource = {
   readonly mode: "demo" | "api";
   readonly orgId: string;
+  /** The single cloud every read is limited to; absent when showing all clouds. */
+  readonly cloud?: Cloud;
   /** Absent when the source cannot produce a farside-export/1 file (demo mode). */
-  exportFile?(kind: ExportKind, signal?: AbortSignal): Promise<ExportFile>;
+  exportFile?(
+    kind: ExportKind,
+    signal?: AbortSignal,
+    options?: { allClouds?: boolean },
+  ): Promise<ExportFile>;
   overview(signal?: AbortSignal): Promise<EstateOverview>;
   inventory(signal?: AbortSignal): Promise<InventoryRow[]>;
   issues(signal?: AbortSignal): Promise<IssueRow[]>;

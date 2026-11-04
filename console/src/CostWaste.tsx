@@ -1,3 +1,4 @@
+import type { Cloud } from "@farside/scan-contracts";
 import { useSource } from "./data/context";
 import type { CostWasteView } from "./data/types";
 import { formatEvidence } from "./data/derive";
@@ -7,9 +8,7 @@ import { ExportButton } from "./ExportButton";
 import { LastScan } from "./LastScan";
 import { ScreenState } from "./ScreenState";
 import { plural } from "./plural";
-import { TERMS, shortName } from "./terms";
-
-const money = formatAmount;
+import { CLOUD_LABEL, TERMS, shortName } from "./terms";
 
 function range(min: string, max: string, currency: string): string {
   return formatMoney({ min, max, currency, period: "month" });
@@ -44,12 +43,12 @@ function Spend({ spend }: { spend: NonNullable<CostWasteView["spend"]> }) {
                 <tr key={service.serviceName}>
                   <th scope="row">{service.serviceName}</th>
                   <td>
-                    {money(service.costAmount, spend.currency)}
+                    {formatAmount(service.costAmount, spend.currency)}
                     {service.provisional ? " (provisional)" : ""}
                   </td>
                   <td>
                     {change
-                      ? `${money(change.deltaAmount, spend.currency)} (${change.deltaPercent}%)`
+                      ? `${formatAmount(change.deltaAmount, spend.currency)} (${change.deltaPercent}%)`
                       : "no prior month"}
                   </td>
                 </tr>
@@ -69,9 +68,9 @@ function FloorBurst({ points }: { points: NonNullable<CostWasteView["floorBurst"
       <h2 id="floor-title">Floor and burst</h2>
       {latest ? (
         <p>
-          On {latest.date} spend was {money(latest.actual, latest.currency)}: a floor of{" "}
-          {money(latest.floor, latest.currency)} and a burst of{" "}
-          {money(latest.burst, latest.currency)}.
+          On {latest.date} spend was {formatAmount(latest.actual, latest.currency)}: a floor of{" "}
+          {formatAmount(latest.floor, latest.currency)} and a burst of{" "}
+          {formatAmount(latest.burst, latest.currency)}.
         </p>
       ) : (
         <p>There is not enough daily history to show a floor and burst yet.</p>
@@ -151,9 +150,9 @@ function History({ view }: { view: CostWasteView }) {
           {history.firstDay ? ` since ${history.firstDay}` : ""}.
         </p>
       ) : null}
-      {history.daysNeeded ? (
+      {history.closer ? (
         <p>
-          Spend alerts are {TERMS.undetermined} until there is more history: {history.closer}.
+          Spend alerts are {TERMS.undetermined}. What would close this: {history.closer}.
         </p>
       ) : null}
     </section>
@@ -183,6 +182,7 @@ function Waste({ view }: { view: CostWasteView }) {
             <thead>
               <tr>
                 <th scope="col">Resource</th>
+                <th scope="col">Cloud</th>
                 <th scope="col">Check</th>
                 <th scope="col">Evidence</th>
                 <th scope="col">Savings</th>
@@ -195,6 +195,7 @@ function Waste({ view }: { view: CostWasteView }) {
                   <th scope="row" title={item.resourceId}>
                     {shortName(item.resourceId)}
                   </th>
+                  <td>{CLOUD_LABEL[item.cloud]}</td>
                   <td>{item.checkId}</td>
                   <td>{formatEvidence(item.evidence)}</td>
                   <td>{range(item.savings.min, item.savings.max, item.savings.currency)}</td>
@@ -216,8 +217,12 @@ function Waste({ view }: { view: CostWasteView }) {
   );
 }
 
+// Billing is read from Azure only, so the cost sections have nothing to show for another cloud.
+const COST_CLOUDS: readonly Cloud[] = ["azure"];
+
 export function CostWaste() {
   const source = useSource();
+  const costShown = !source.cloud || COST_CLOUDS.includes(source.cloud);
   const view = useResource((signal) => source.costWaste(signal), [source]);
   return (
     <>
@@ -234,10 +239,20 @@ export function CostWaste() {
         {(data) =>
           data.readable && data.spend ? (
             <>
-              {data.spend.services.length > 0 ? <Spend spend={data.spend} /> : null}
-              <History view={data} />
-              {data.floorBurst ? <FloorBurst points={data.floorBurst} /> : null}
-              {data.commitments ? <Commitments commitments={data.commitments} /> : null}
+              {costShown ? (
+                <>
+                  {data.spend.services.length > 0 ? <Spend spend={data.spend} /> : null}
+                  <History view={data} />
+                  {data.floorBurst ? <FloorBurst points={data.floorBurst} /> : null}
+                  {data.commitments ? <Commitments commitments={data.commitments} /> : null}
+                </>
+              ) : (
+                <p className="notice">
+                  Spend, floor and burst, and commitments are read from Azure billing. No cost is
+                  read for {source.cloud ? CLOUD_LABEL[source.cloud] : "this cloud"}, so none is
+                  shown.
+                </p>
+              )}
               <Waste view={data} />
             </>
           ) : (

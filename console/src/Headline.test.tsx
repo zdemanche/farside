@@ -78,7 +78,7 @@ describe("Headline", () => {
       }),
     );
     expect(
-      await screen.findByText(/azure: USD\s100\.00 a month; gcp: EUR\s80\.00 a month/),
+      await screen.findByText(/Azure: USD\s100\.00 a month; GCP: EUR\s80\.00 a month/),
     ).toBeTruthy();
   });
 

@@ -92,6 +92,18 @@ describe("Offboarding screen", () => {
     expect(screen.queryByRole("button", { name: "Leave Farside" })).toBeNull();
   });
 
+  it("asks for every export across all clouds, whatever the cloud selector says", async () => {
+    const exportFile = vi.fn(async (kind: string) => ({ filename: `${kind}.json`, content: "{}" }));
+    renderScreen(<Offboarding />, sourceWith({ exportFile }));
+    for (const name of ["Export issues", "Export inventory", "Export cost"]) {
+      fireEvent.click(await screen.findByRole("button", { name }));
+    }
+    await waitFor(() => expect(exportFile).toHaveBeenCalledTimes(3));
+    for (const call of exportFile.mock.calls) {
+      expect((call as unknown[])[2]).toEqual({ allClouds: true });
+    }
+  });
+
   it("shows the grant list for an org that already left", async () => {
     renderScreen(<Offboarding />, sourceWith({ deletion: async () => RECORD }));
     expect(

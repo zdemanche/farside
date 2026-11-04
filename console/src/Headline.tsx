@@ -3,12 +3,16 @@ import type { HeadlineFigure, HeadlineValue } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { formatAmount } from "./format";
 import { plural } from "./plural";
-import { TERMS } from "./terms";
+import { CLOUD_LABEL, TERMS } from "./terms";
 
-function describe(value: HeadlineValue, id: HeadlineFigure["id"]): string {
+function cloudName(key: string): string {
+  return (CLOUD_LABEL as Record<string, string>)[key] ?? key;
+}
+
+function describeValue(value: HeadlineValue, id: HeadlineFigure["id"]): string {
   if ("byCloud" in value) {
     return Object.entries(value.byCloud)
-      .map(([cloud, inner]) => `${cloud}: ${describe(inner, id)}`)
+      .map(([cloud, inner]) => `${cloudName(cloud)}: ${describeValue(inner, id)}`)
       .join("; ");
   }
   if ("amount" in value) {
@@ -31,7 +35,7 @@ function Figure({ figure }: { figure: HeadlineFigure }) {
   // A figure whose checks were not assessed, or have no live run, never shows a number.
   const text =
     figure.status === "ok" && figure.value
-      ? describe(figure.value, figure.id)
+      ? describeValue(figure.value, figure.id)
       : figure.status === "not_supported"
         ? "not supported"
         : TERMS.notAssessed;
