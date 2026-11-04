@@ -22,13 +22,15 @@ import {
   rowsPurged,
   sweepRetention,
 } from "./org-ops.js";
-import { DEFAULT_CLOUD, providerFor } from "./providers/index.js";
+import { DEFAULT_CLOUD } from "./providers/index.js";
+import { presentRoles, probeRoles } from "./role-probe.js";
 import {
   MAX_SCANS_PER_ORG,
   SUBSCRIPTION_DISCONNECTED,
   type AggregateName,
   type Connection,
   type ConnectionInput,
+  type ConnectionPatch,
   type OrgRepository,
   type OrgState,
   type OrgView,
@@ -159,14 +161,16 @@ export class MemoryStore implements OrgRepository {
       return existing;
     }
     const cloud = input.cloud ?? DEFAULT_CLOUD;
+    const probed = probeRoles(cloud, input.grantedRoles ?? presentRoles(cloud));
     const connection: Connection = {
       id: fixedId ?? `conn-${await this.nextSequence(orgId, "connection")}`,
       cloud,
       tenantId: input.tenantId,
       subscriptionId: input.subscriptionId,
-      roles: [...providerFor(cloud).requiredRoles],
+      roles: probed.roles,
+      missingRoles: probed.missingRoles,
       createdAt: this.clock(),
-      healthy: true,
+      healthy: probed.healthy,
     };
     markVerified(connection);
     const org = this.org(orgId);
@@ -358,13 +362,21 @@ export class MemoryStore implements OrgRepository {
   async patchConnection(
     orgId: string,
     connectionId: string,
-    patch: { healthy: boolean },
+    patch: ConnectionPatch,
   ): Promise<Connection | null> {
     const connection = this.org(orgId).connections.find((item) => item.id === connectionId);
     if (!connection) {
       return null;
     }
-    connection.healthy = patch.healthy;
+    if (patch.healthy !== undefined) {
+      connection.healthy = patch.healthy;
+    }
+    if (patch.roles !== undefined) {
+      connection.roles = patch.roles;
+    }
+    if (patch.missingRoles !== undefined) {
+      connection.missingRoles = patch.missingRoles;
+    }
     assertNoSecrets(connection);
     markVerified(connection);
     return connection;

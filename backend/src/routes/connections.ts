@@ -4,6 +4,7 @@ import { connectionBody, connectionParams, orgParams } from "../http/schemas.js"
 import { canScan } from "../billing.js";
 import { audit } from "../observability.js";
 import type { Cloud } from "../cloud.js";
+import { DEFAULT_CLOUD } from "../providers/index.js";
 
 type ConnectionInput = { tenantId: string; subscriptionId: string; cloud?: Cloud; asOf?: string };
 
@@ -24,9 +25,15 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
     async (request, reply) => {
       const { orgId } = request.params;
       const { tenantId, subscriptionId, cloud, asOf } = request.body;
+      const grantedRoles = await ctx.roleLister.list({
+        tenantId,
+        subscriptionId,
+        cloud: cloud ?? DEFAULT_CLOUD,
+      });
       const connection = await ctx.store.putConnection(orgId, {
         tenantId,
         subscriptionId,
+        grantedRoles,
         ...(cloud ? { cloud } : {}),
       });
       audit(request.log, "connection.connect");

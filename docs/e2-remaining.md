@@ -22,6 +22,7 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 | E2-S6-T2 | #75 | Connect (connection PUT) starts the first scan. |
 | E2-S6-T4 | #77 | One running scan per subscription; mid-failure stores covered scopes and is not marked complete. |
 | E2-S3-T1 | #59 | Injected Resource Graph client pages `$skipToken` across every launch type. 429 → `throttling`, other errors → `failed_call`. Default scan path stays the fixture harvester. Live ARG on the test subscription leftover. |
+| E2-S2-T3 | #55 | Connect probes roles through an injected `RoleLister` and stores each missing role plus the checks it blocks. Tests remove Cost Management Reader / Backup Reader. Live ARM role list leftover. |
 
 ## Leftovers
 
@@ -29,9 +30,9 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 
 `x-farside-org` / `x-farside-actor` headers stand in for tokens. Claim and sign-in screens wait on Identity.
 
-### Live federated connect (#52, #53, #55, #56)
+### Live federated connect (#52, #53, #56)
 
-Connect does not call Azure. Role-gap, disconnect, and revoked-grant proof need the test subscription.
+Connect does not call Azure. Role gaps are stored from an injected lister (#55). Disconnect and revoked-grant proof against a live grant stay leftover.
 
 ### Live harvest (#58, #60, #63)
 

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import Fastify, { LogController } from "fastify";
 import type { DigestMailer } from "./alerts.js";
+import { defaultRoleLister, type RoleLister } from "./role-probe.js";
 import type { BudgetClient } from "./budgets.js";
 import type { Clock } from "./clock.js";
 import type { CommitmentClient } from "./commitments.js";
@@ -57,6 +58,7 @@ export function buildApp(
     logger?: LoggerOptions;
     scanTimeoutMs?: number;
     mailer?: DigestMailer;
+    roleLister?: RoleLister;
   } = {},
 ) {
   const clock = options.clock ?? store.clock;
@@ -95,6 +97,7 @@ export function buildApp(
     log: app.log,
     operatorToken: options.operatorToken,
     mailer: options.mailer,
+    roleLister: options.roleLister ?? defaultRoleLister(),
     clients,
   };
 
