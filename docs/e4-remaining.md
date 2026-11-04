@@ -16,6 +16,7 @@ In-repo Cost Management harvest against a multi-page fake, billing scope and cur
 | E4-S4-T1 | #141 | Floor is the rolling 14-day minimum; burst is actual minus floor. |
 | E4-S4-T2 | #142 | Org, subscription, service, and new-service rules use relative multiples of the customer's own history. |
 | E4-S4-T3 | #143 | Synthetic replay in `docs/azure/alert-replay.json` pins four new alerts. A quieter series must change that count on purpose. |
+| E4-S4-T4 | #144 | One digest per run, Settings recipients, consecutive-day dedupe, injected mailer. Tenant mailbox leftover. |
 | E4-S5-T1 | #146 | GET `/v1/orgs/:orgId/cost-waste` returns spend, floor/burst, commitments, and named waste. Failed cost harvest returns no figures. |
 | E4-S5-T3 | #148 | Waste totals are a range from assessed findings only and count unassessed waste scopes. |
 | E4-S6-T1 | #150 | GET `/v1/orgs/:orgId/headline` combines monthly cost, nameable waste, backup gaps, support losses, and unseen counts with coverage states. |
@@ -49,4 +50,4 @@ The headline API is ready. Rendering it on Estate with drill-through is left for
 
 ### Email digest (#144)
 
-Alerts group into one digest with configured recipients and consecutive-day dedupe. Delivery needs a mail path in the tenant account. Live test-subscription history for the backtest is leftover with #143.
+Alerts group into one digest with `Settings.alertRecipients`, consecutive-day dedupe, and an injected `DigestMailer`. Without a mailer the digest stays `no_mail_path`. A tenant SES/mailbox path stays leftover.

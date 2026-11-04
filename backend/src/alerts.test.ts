@@ -9,10 +9,12 @@ import {
   gcpReplayFixture,
   gcpRowsToDailyCost,
   historyDays,
+  memoryMailer,
   replayFixture,
 } from "./alerts.js";
 import { buildApp } from "./app.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
+import { DEFAULT_SETTINGS } from "./settings.js";
 import { MemoryStore } from "./store.js";
 import { fixedClock, TEST_APP_OPTIONS } from "./test-clock.js";
 
@@ -148,6 +150,29 @@ describe("digest and backtest", () => {
     expect(none.digest.reason).toBe("no_recipients");
   });
 
+  it("sends one digest through an injected mailer and follows a recipient change", () => {
+    const mailer = memoryMailer();
+    const first = analyzeAlerts({
+      rows: FIXTURE.rows,
+      asOf: FIXTURE.asOf,
+      recipients: ["cto@example.test"],
+      mailer,
+    });
+    expect(first.digest.delivered).toBe(true);
+    expect(first.digest.reason).toBe("sent");
+    expect(mailer.sent).toHaveLength(1);
+    expect(mailer.sent[0]?.recipients).toEqual(["cto@example.test"]);
+    expect(mailer.sent[0]?.alerts).toHaveLength(4);
+    const changed = analyzeAlerts({
+      rows: FIXTURE.rows,
+      asOf: FIXTURE.asOf,
+      recipients: ["ops@example.test"],
+      mailer,
+    });
+    expect(changed.digest.recipients).toEqual(["ops@example.test"]);
+    expect(mailer.sent[1]?.recipients).toEqual(["ops@example.test"]);
+  });
+
   it("pins the replay alert count so a quieter series must update the expected count", () => {
     expect(backtest()).toBe(FIXTURE.expectedNewAlerts);
     const quiet = FIXTURE.rows.filter((row) => row.date < FIXTURE.asOf);
@@ -180,5 +205,27 @@ describe("alert routes", () => {
       headers: ORG,
     });
     expect(stored.json().floorBurst.at(-1).burst).toBe("160.00");
+  });
+
+  it("uses Settings.alertRecipients when the POST omits recipients", async () => {
+    const store = new MemoryStore(fixedClock);
+    const mailer = memoryMailer();
+    const app = buildApp(store, { ...TEST_APP_OPTIONS, mailer });
+    await store.putSettings("org-b", {
+      ...DEFAULT_SETTINGS,
+      alertRecipients: ["finance@example.test"],
+      updatedAt: fixedClock(),
+    });
+    const posted = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-b/alerts",
+      headers: { [ORG_HEADER]: "org-b", [ACTOR_HEADER]: "actor-b" },
+      payload: { rows: FIXTURE.rows, asOf: FIXTURE.asOf },
+    });
+    expect(posted.statusCode).toBe(200);
+    expect(posted.json().digest.recipients).toEqual(["finance@example.test"]);
+    expect(posted.json().digest.delivered).toBe(true);
+    expect(mailer.sent[0]?.recipients).toEqual(["finance@example.test"]);
+    await app.close();
   });
 });

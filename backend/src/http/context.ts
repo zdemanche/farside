@@ -1,4 +1,5 @@
 import type { FastifyBaseLogger, FastifyPluginAsync } from "fastify";
+import type { DigestMailer } from "../alerts.js";
 import type { BudgetClient } from "../budgets.js";
 import type { Clock } from "../clock.js";
 import type { CommitmentClient } from "../commitments.js";
@@ -30,6 +31,7 @@ export type AppContext = {
   scheduler: ScanScheduler;
   log: FastifyBaseLogger;
   operatorToken: string | undefined;
+  mailer?: DigestMailer | undefined;
   clients: {
     cost?: CostQueryClient | undefined;
     commitment?: CommitmentClient | undefined;

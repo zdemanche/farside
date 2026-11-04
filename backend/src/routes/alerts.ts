@@ -39,11 +39,13 @@ export const alertRoutes: RoutePlugin = (ctx) => async (app) => {
         ctx.trustClientClock && typeof body.asOf === "string"
           ? body.asOf
           : ctx.clock().slice(0, 10);
+      const settings = (await ctx.store.read(request.params.orgId, "settings")).settings;
       const analysis = analyzeAlerts({
         rows: body.rows,
         asOf,
-        recipients: body.recipients ?? [],
+        recipients: body.recipients ?? [...settings.alertRecipients],
         previous: body.previous ?? [],
+        mailer: ctx.mailer,
       });
       await ctx.store.putAlerts(request.params.orgId, analysis);
       return sendClean(reply, 200, analysis);

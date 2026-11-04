@@ -128,6 +128,11 @@ export const settingsBody = object(
     scanScheduleEnabled: { type: "boolean" },
     scanIntervalHours: { type: "integer", minimum: 1 },
     scanRetryLimit: { type: "integer", minimum: 1 },
+    alertRecipients: {
+      type: "array",
+      maxItems: MAX_RECIPIENTS,
+      items: { type: "string", format: "email", maxLength: 254 },
+    },
     asOf: instant,
   },
   ["ownerTagKey", "productionTagKey", "productionTagValue"],

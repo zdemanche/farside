@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import Fastify, { LogController } from "fastify";
+import type { DigestMailer } from "./alerts.js";
 import type { BudgetClient } from "./budgets.js";
 import type { Clock } from "./clock.js";
 import type { CommitmentClient } from "./commitments.js";
@@ -55,6 +56,7 @@ export function buildApp(
     operatorToken?: string | undefined;
     logger?: LoggerOptions;
     scanTimeoutMs?: number;
+    mailer?: DigestMailer;
   } = {},
 ) {
   const clock = options.clock ?? store.clock;
@@ -92,6 +94,7 @@ export function buildApp(
     scheduler: new ScanScheduler(store, runner, clock, app.log),
     log: app.log,
     operatorToken: options.operatorToken,
+    mailer: options.mailer,
     clients,
   };
 
