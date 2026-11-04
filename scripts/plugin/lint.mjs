@@ -8,7 +8,7 @@ const DEFAULT_MANIFEST = join(ROOT, "plugin/.claude-plugin/plugin.json");
 const DEFAULT_PACKAGE = join(ROOT, "package.json");
 const DEFAULT_SKILL = join(ROOT, "plugin/skills/findings-method/SKILL.md");
 const DEFAULT_COMMANDS = join(ROOT, "plugin/commands");
-const COMMAND_NAMES = ["connect", "scan", "findings"];
+const COMMAND_NAMES = ["connect", "scan", "findings", "report"];
 const DEFAULT_WORKSPACE_PHRASE = "farside-engagements";
 
 export const FINDINGS_SKILL_PHRASES = [

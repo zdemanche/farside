@@ -25,6 +25,7 @@ Workspace files default to `~/farside-engagements` (outside the git repo, like A
 1. `/farside:connect --cloud azure` (or `gcp`) — probes local credentials and names missing roles.
 2. `/farside:scan --cloud azure --scope <subscription-id> --fixture` — runs the bundled CLI against the synthetic estate. Drop `--fixture` only when live harvest exists (#59 / #197).
 3. `/farside:findings` — explains issues from workspace files. Cite issue ids. Never state a finding the CLI did not produce.
+4. `/farside:report` — writes `report.html` from the workspace export (headline, issues by category, savings ranges, blind spots, coverage, undetermined).
 
 Equivalent CLI:
 
@@ -32,9 +33,8 @@ Equivalent CLI:
 npm run farside -w @farside/backend -- connect --cloud azure --fixture
 npm run farside -w @farside/backend -- scan --cloud azure --scope main --fixture
 npm run farside -w @farside/backend -- findings
+npm run farside -w @farside/backend -- report
 ```
-
-`/farside:report` is leftover until E7-S3.
 
 ## What stays in the CLI
 
