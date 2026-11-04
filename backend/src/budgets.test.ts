@@ -33,6 +33,18 @@ describe("no-budget check", () => {
     expect(main?.evidence.fields.lastConfirmed).toBe(CONFIRMED);
   });
 
+  it("stores fixture definitions as aggregates and marks the harvest unverified", async () => {
+    const harvested = await harvestBudgets({ client: fixtureBudgetClient() });
+    expect(harvested.snapshot.subscriptions).toHaveLength(2);
+    expect(harvested.snapshot.subscriptions.map((row) => row.subscriptionId).sort()).toEqual([
+      "empty-no-budget",
+      "main",
+    ]);
+    expect(harvested.snapshot.harvestStatus).toBe("unverified");
+    expect(harvested.snapshot.liveRunAt).toBeNull();
+    expect(harvested.snapshot.harvestStatusReason).toMatch(/ground-truth fixture/);
+  });
+
   it("returns undetermined when budgets cannot be read", async () => {
     const harvested = await harvestBudgets({ client: unreadBudgetClient("empty-no-budget") });
     const unread = harvested.findings.find(
