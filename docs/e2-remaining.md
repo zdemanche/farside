@@ -21,6 +21,7 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 | E2-S6-T1 | #74 | Background scan job with stored success and failure status. |
 | E2-S6-T2 | #75 | Connect (connection PUT) starts the first scan. |
 | E2-S6-T4 | #77 | One running scan per subscription; mid-failure stores covered scopes and is not marked complete. |
+| E2-S7-T1 | #79 | `docs/demo-script.md` scripts Estate and Blind spots. Live rehearsal on the test subscription leftover. |
 | E2-S3-T1 | #59 | Injected Resource Graph client pages `$skipToken` across every launch type. 429 → `throttling`, other errors → `failed_call`. Default scan path stays the fixture harvester. Live ARG on the test subscription leftover. |
 
 ## Leftovers
@@ -44,3 +45,7 @@ Blind spots is fixture-backed. A missing-role or failed-call row from a live sca
 ### Unattended federated scan (#76)
 
 The job runner can start as `actor: system` without a user request. Token exchange against a live subscription is still leftover.
+
+### Week-8 session (#80, #81)
+
+The Estate / Blind spots script is written (`docs/demo-script.md`). The prospect sitting, willingness-to-pay notes, and the continue-or-stop record stay leftover.
