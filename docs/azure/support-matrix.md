@@ -28,3 +28,14 @@ Roles and API names come from general Azure knowledge (`docs/proposal.md`). They
 | azure-lifecycle-expiring-gateway-certs | lifecycle | Expiring gateway certificates | Reader | unverified | not-supported | — | |
 
 Source of rows: [`launch-checks.json`](launch-checks.json). The lint in `scripts/azure-spec/lint.mjs` fails if a launch check is missing, if a required field is missing, if `status` is missing, or if a matrix row disagrees with the spec on id, group, title, role, status, support, or live run.
+
+## Untested agreement types
+
+Cost figures record `agreementType`. No live Cost Management harvest has been compared to the portal ([#131](https://github.com/zdemanche/farside/issues/131)). Until a dated live run exists, these agreement types stay unverified and cost checks stay **not supported**.
+
+| Agreement type | Fixture label | Live portal |
+|---|---|---|
+| Pay-as-you-go | `payg` | untested |
+| Microsoft Customer Agreement | `MicrosoftCustomerAgreement` | untested |
+| Enterprise Agreement | `EnterpriseAgreement` | untested |
+| Cloud Solution Provider | — | untested |

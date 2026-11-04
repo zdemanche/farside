@@ -1,6 +1,7 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   REQUIRED_LAUNCH_CHECK_IDS,
@@ -8,6 +9,7 @@ import {
   lintMatrixFile,
   lintSpec,
   lintSpecFile,
+  lintUntestedAgreementTypes,
 } from "./lint.mjs";
 
 function validSpec(overrides = {}) {
@@ -159,5 +161,21 @@ describe("azure support matrix lint", () => {
     expect(lintMatrix(spec, extra).some((error) => error.includes("unknown check 'not-a-launch-check'"))).toBe(
       true,
     );
+  });
+});
+
+describe("untested agreement types", () => {
+  it("accepts the committed support matrix", () => {
+    expect(lintUntestedAgreementTypes(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/azure/support-matrix.md"), "utf8"))).toEqual(
+      [],
+    );
+  });
+
+  it("fails when an agreement type is missing", () => {
+    expect(
+      lintUntestedAgreementTypes("## Untested agreement types\nPay-as-you-go untested").some((error) =>
+        error.includes("Microsoft Customer Agreement"),
+      ),
+    ).toBe(true);
   });
 });
