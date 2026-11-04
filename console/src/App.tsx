@@ -4,6 +4,7 @@ import { DataProvider } from "./data/context";
 import type { DataSource } from "./data/types";
 import { BlindSpots } from "./BlindSpots";
 import { Connect } from "./Connect";
+import { CostWaste } from "./CostWaste";
 import { Estate } from "./Estate";
 import { Inventory } from "./Inventory";
 import { Issues } from "./Issues";
@@ -46,6 +47,7 @@ const PAGES: Record<string, ComponentType> = {
   settings: Settings,
   inventory: Inventory,
   issues: Issues,
+  "cost-and-waste": CostWaste,
   lifecycle: Lifecycle,
   recovery: Recovery,
   "blind-spots": BlindSpots,

@@ -126,6 +126,55 @@ export type ConnectInput = { tenantId: string; subscriptionId: string };
 
 export type ConnectResult = { scanStarted: boolean; attention: string | null };
 
+export type SpendFigure = { serviceName: string; costAmount: string; provisional: boolean };
+
+export type SpendChange = {
+  serviceName: string;
+  currentMonthCost: string;
+  previousMonthCost: string;
+  deltaAmount: string;
+  deltaPercent: string;
+};
+
+export type WasteItem = {
+  checkId: string;
+  resourceId: string;
+  subscriptionId: string;
+  evidence: Record<string, unknown>;
+  savings: { min: string; max: string; currency: string };
+  issueHref: string;
+};
+
+/** Read model of GET /v1/orgs/:orgId/cost-waste. */
+export type CostWasteView = {
+  readable: boolean;
+  reason: string | null;
+  spend: {
+    currency: string;
+    periodStart: string;
+    periodEnd: string;
+    provisionalDate: string | null;
+    services: SpendFigure[];
+    monthOnMonth: SpendChange[];
+  } | null;
+  floorBurst:
+    { date: string; actual: string; floor: string; burst: string; currency: string }[] | null;
+  commitments: {
+    reservations: unknown[];
+    savingsPlans: unknown[];
+    noneFound: { reservations: boolean; savingsPlans: boolean };
+    harvestStatus?: "unverified";
+  } | null;
+  waste: WasteItem[];
+  totals: {
+    min: string;
+    max: string;
+    currency: string;
+    assessedCount: number;
+    unassessedScopes: number;
+  };
+};
+
 export type ExportKind = "issues" | "inventory" | "cost";
 
 export type ExportFile = { filename: string; content: string };
@@ -138,6 +187,7 @@ export type DataSource = {
   overview(signal?: AbortSignal): Promise<EstateOverview>;
   inventory(signal?: AbortSignal): Promise<InventoryRow[]>;
   issues(signal?: AbortSignal): Promise<IssueRow[]>;
+  costWaste(signal?: AbortSignal): Promise<CostWasteView>;
   scans(signal?: AbortSignal): Promise<ScanRow[]>;
   scan(id: string, signal?: AbortSignal): Promise<ScanRow>;
   blindSpots(signal?: AbortSignal): Promise<BlindSpotsView>;

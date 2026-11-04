@@ -18,6 +18,6 @@ export const SHELL_NAV = [
   "Blind spots",
 ] as const;
 
-export const COMING_SOON: readonly string[] = ["Cost and waste"];
+export const COMING_SOON: readonly string[] = [];
 
 export const slugOf = (item: string): string => item.toLowerCase().replaceAll(" ", "-");

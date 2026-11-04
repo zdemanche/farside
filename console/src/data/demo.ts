@@ -8,6 +8,7 @@ import { DataError } from "./error";
 import { formatEvidence, toMoney, lifecycleFrom, recoveryFrom } from "./derive";
 import type {
   BlindSpot,
+  CostWasteView,
   DataSource,
   EstateOverview,
   InventoryRow,
@@ -388,6 +389,49 @@ function inventoryRow(resource: InventoryRecord): InventoryRow {
   };
 }
 
+const COST_WASTE: CostWasteView = {
+  readable: true,
+  reason: null,
+  spend: {
+    currency: "USD",
+    periodStart: "2026-10-01",
+    periodEnd: "2026-10-31",
+    provisionalDate: null,
+    services: [
+      { serviceName: "Virtual Machines", costAmount: "1840.00", provisional: false },
+      { serviceName: "Storage", costAmount: "412.50", provisional: false },
+    ],
+    monthOnMonth: [
+      {
+        serviceName: "Virtual Machines",
+        currentMonthCost: "1840.00",
+        previousMonthCost: "1600.00",
+        deltaAmount: "240.00",
+        deltaPercent: "15.00",
+      },
+    ],
+  },
+  floorBurst: [
+    { date: "2026-10-30", actual: "74.00", floor: "58.00", burst: "16.00", currency: "USD" },
+  ],
+  commitments: {
+    reservations: [],
+    savingsPlans: [],
+    noneFound: { reservations: true, savingsPlans: true },
+  },
+  waste: [
+    {
+      checkId: "azure-waste-unattached-disks",
+      resourceId: "disk-orphan-1",
+      subscriptionId: "sub-demo",
+      evidence: { diskId: "disk-orphan-1", sizeGb: 128 },
+      savings: { min: "9.00", max: "12.00", currency: "USD" },
+      issueHref: "#issues/disk-orphan-1",
+    },
+  ],
+  totals: { min: "9.00", max: "12.00", currency: "USD", assessedCount: 1, unassessedScopes: 2 },
+};
+
 export function demoSource(): DataSource {
   let settings = DEFAULT_SETTINGS;
   return {
@@ -396,6 +440,7 @@ export function demoSource(): DataSource {
     overview: async () => OVERVIEW,
     inventory: async () => DEMO_RESOURCES.map(inventoryRow),
     issues: async () => ISSUES,
+    costWaste: async () => COST_WASTE,
     scans: async () => SCANS,
     scan: async (id) => {
       const scan = SCANS.find((row) => row.id === id);
