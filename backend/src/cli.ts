@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -411,7 +411,12 @@ function isMain(): boolean {
   if (!entry) {
     return false;
   }
-  return pathToFileURL(entry).href === import.meta.url;
+  // import.meta.url is the resolved path; argv[1] keeps symlinks (macOS /var -> /private/var).
+  try {
+    return pathToFileURL(realpathSync(entry)).href === import.meta.url;
+  } catch {
+    return false;
+  }
 }
 
 if (isMain()) {
