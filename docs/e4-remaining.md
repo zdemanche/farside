@@ -23,12 +23,13 @@ In-repo Cost Management harvest against a multi-page fake, billing scope and cur
 | E4-S6-T3 | #152 | Checks without a `liveRunAt` are `not_supported` and left out of every headline figure. Removing a record drops that check from the totals. |
 | E4-S2-T1 | #133 | Commitment harvest states `harvestStatus: unverified` and `liveRunAt: null`. The test estate will not buy reservations. A dated live run stays leftover. |
 | E4-S3-T1 | #137 | Budget harvest reads fixture definitions as aggregates and states `harvestStatus: unverified`. A live Cost Management budgets list stays leftover. |
+| E4-S7-T4 | #157 | Support matrix lists Pay-as-you-go, MCA, EA, and CSP as untested. Cost checks stay not-supported until a dated live run. Portal comparison leftover (#131). |
 
 ## Leftovers
 
 ### Portal totals and agreement types (#131)
 
-The fake pages are not billed months from a live subscription. Compare harvest totals to the Cost Management portal and list untested agreement types when a test estate exists.
+The matrix lists PAYG, MCA, EA, and CSP as untested (#157). The fake pages are not billed months from a live subscription. Compare harvest totals to the Cost Management portal when a test estate exists.
 
 ### Missing Cost Management Reader live proof
 

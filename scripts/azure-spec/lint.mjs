@@ -270,11 +270,41 @@ export function lintMatrixFile(
   return lintMatrix(spec, markdown);
 }
 
+export const REQUIRED_UNTESTED_AGREEMENT_TYPES = [
+  "Pay-as-you-go",
+  "Microsoft Customer Agreement",
+  "Enterprise Agreement",
+  "Cloud Solution Provider",
+];
+
+export function lintUntestedAgreementTypes(markdown) {
+  if (typeof markdown !== "string") {
+    return ["support matrix must list untested agreement types"];
+  }
+  const errors = [];
+  if (!markdown.includes("## Untested agreement types")) {
+    errors.push("support matrix is missing the untested agreement types section");
+  }
+  for (const name of REQUIRED_UNTESTED_AGREEMENT_TYPES) {
+    if (!markdown.includes(name)) {
+      errors.push(`support matrix is missing untested agreement type '${name}'`);
+    } else if (!new RegExp(`${name}[\\s\\S]{0,80}untested`, "i").test(markdown)) {
+      errors.push(`support matrix must mark '${name}' as untested`);
+    }
+  }
+  return errors;
+}
+
 export function lintAzureSpecFiles(
   specPath = DEFAULT_SPEC_PATH,
   matrixPath = DEFAULT_MATRIX_PATH,
 ) {
-  return [...lintSpecFile(specPath), ...lintMatrixFile(specPath, matrixPath)];
+  const markdown = readFileSync(matrixPath, "utf8");
+  return [
+    ...lintSpecFile(specPath),
+    ...lintMatrixFile(specPath, matrixPath),
+    ...lintUntestedAgreementTypes(markdown),
+  ];
 }
 
 function isMain() {
