@@ -21,6 +21,7 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 | E2-S6-T1 | #74 | Background scan job with stored success and failure status. |
 | E2-S6-T2 | #75 | Connect (connection PUT) starts the first scan. |
 | E2-S6-T4 | #77 | One running scan per subscription; mid-failure stores covered scopes and is not marked complete. |
+| E2-S3-T1 | #59 | Injected Resource Graph client pages `$skipToken` across every launch type. 429 → `throttling`, other errors → `failed_call`. Default scan path stays the fixture harvester. Live ARG on the test subscription leftover. |
 
 ## Leftovers
 
@@ -32,9 +33,9 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 
 Connect does not call Azure. Role-gap, disconnect, and revoked-grant proof need the test subscription.
 
-### Live harvest (#58, #59, #60, #63)
+### Live harvest (#58, #60, #63)
 
-Inventory is mapped from the ground-truth fixture. Resource Graph, management-group discovery, and a live diff wait on Azure and unread dashmeta/AIF clients.
+Inventory is mapped from the ground-truth fixture. An injected Resource Graph client pages launch types against that fixture (#59). Management-group discovery and a live ARG diff wait on Azure and unread dashmeta/AIF clients.
 
 ### Live coverage proof
 
