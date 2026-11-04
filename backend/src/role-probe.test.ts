@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
 import { checksForRole } from "./cli-credentials.js";
-import { grantedRoleLister, probeRoles } from "./role-probe.js";
+import { grantedRoleLister, mutableRoleLister, presentRoles, probeRoles } from "./role-probe.js";
 import { REQUIRED_AZURE_ROLES } from "./roles.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
 import { MemoryStore } from "./store.js";
@@ -66,5 +66,50 @@ describe("connect stores role gaps", () => {
       blockedCheckIds: expect.arrayContaining(["azure-cost-spend-by-service"]),
     });
     expect((await store.read("org-a", "connections")).connections[0]?.missingRoles).toEqual(body.missingRoles);
+  });
+});
+
+describe("disconnect and revoked grants", () => {
+  const store = new MemoryStore();
+  const lister = mutableRoleLister(presentRoles("azure"));
+  const app = buildApp(store, { ...TEST_APP_OPTIONS, roleLister: lister });
+
+  afterAll(() => app.close());
+
+  it("marks the connection broken when the grant is revoked and removes it on disconnect", async () => {
+    const created = await app.inject({
+      method: "PUT",
+      url: "/v1/orgs/org-revoke/connections",
+      headers: { [ORG_HEADER]: "org-revoke", [ACTOR_HEADER]: "actor-revoke" },
+      payload: { tenantId: "tenant-1", subscriptionId: "main" },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().healthy).toBe(true);
+    const id = created.json().id as string;
+
+    lister.grant(["Cost Management Reader"]);
+    const revoked = await app.inject({
+      method: "POST",
+      url: `/v1/orgs/org-revoke/connections/${id}/roles`,
+      headers: { [ORG_HEADER]: "org-revoke", [ACTOR_HEADER]: "actor-revoke" },
+    });
+    expect(revoked.statusCode).toBe(200);
+    expect(revoked.json()).toMatchObject({
+      id,
+      healthy: false,
+      roles: ["Cost Management Reader"],
+    });
+    expect(revoked.json().missingRoles.map((gap: { role: string }) => gap.role)).toEqual(
+      expect.arrayContaining(["Reader", "Monitoring Reader", "Reservations Reader"]),
+    );
+    expect((await store.read("org-revoke", "connections")).connections[0]?.healthy).toBe(false);
+
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/v1/orgs/org-revoke/connections/${id}`,
+      headers: { [ORG_HEADER]: "org-revoke", [ACTOR_HEADER]: "actor-revoke" },
+    });
+    expect(removed.statusCode).toBe(204);
+    expect((await store.read("org-revoke", "connections")).connections).toEqual([]);
   });
 });

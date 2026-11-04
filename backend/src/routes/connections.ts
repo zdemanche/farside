@@ -5,6 +5,7 @@ import { canScan } from "../billing.js";
 import { audit } from "../observability.js";
 import type { Cloud } from "../cloud.js";
 import { DEFAULT_CLOUD } from "../providers/index.js";
+import { probeRoles } from "../role-probe.js";
 
 type ConnectionInput = { tenantId: string; subscriptionId: string; cloud?: Cloud; asOf?: string };
 
@@ -48,6 +49,29 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
       }
       const scan = await ctx.runner.start({ orgId, subscriptionId, actor: "user" });
       return sendClean(reply, 201, { ...connection, scan: scan.job, scanStarted: scan.started });
+    },
+  );
+
+  app.post<{ Params: { orgId: string; connectionId: string } }>(
+    "/v1/orgs/:orgId/connections/:connectionId/roles",
+    { schema: { params: connectionParams } },
+    async (request, reply) => {
+      const { orgId, connectionId } = request.params;
+      const existing = (await ctx.store.read(orgId, "connections")).connections.find(
+        (item) => item.id === connectionId,
+      );
+      if (!existing) {
+        return problem(reply, 404, "Not found");
+      }
+      const grantedRoles = await ctx.roleLister.list({
+        tenantId: existing.tenantId,
+        subscriptionId: existing.subscriptionId,
+        cloud: existing.cloud,
+      });
+      const probed = probeRoles(existing.cloud, grantedRoles);
+      const patched = await ctx.store.patchConnection(orgId, connectionId, probed);
+      audit(request.log, probed.healthy ? "connection.roles" : "connection.revoked");
+      return sendClean(reply, 200, patched);
     },
   );
 

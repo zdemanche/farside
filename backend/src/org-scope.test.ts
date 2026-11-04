@@ -53,6 +53,7 @@ const ROUTES = [
   { method: "GET" as const, url: "/v1/orgs/org-a/alerts" },
   { method: "POST" as const, url: "/v1/orgs/org-a/alerts" },
   { method: "DELETE" as const, url: "/v1/orgs/org-a/connections/conn-1" },
+  { method: "POST" as const, url: "/v1/orgs/org-a/connections/conn-1/roles" },
 ];
 
 const OPERATOR_ROUTES = ROUTES.filter((route) => route.url.includes("/contract") && route.method !== "GET");

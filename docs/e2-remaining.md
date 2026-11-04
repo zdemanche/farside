@@ -25,6 +25,7 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 | E2-S3-T1 | #59 | Injected Resource Graph client pages `$skipToken` across every launch type. 429 → `throttling`, other errors → `failed_call`. Default scan path stays the fixture harvester. Live ARG on the test subscription leftover. |
 | E2-S2-T3 | #55 | Connect probes roles through an injected `RoleLister` and stores each missing role plus the checks it blocks. Tests remove Cost Management Reader / Backup Reader. Live ARM role list leftover. |
 | E2-S3-T2 | #60 | Injected hierarchy client lists the fixture root/test management groups and both ground-truth subscriptions. Live ARM listing leftover. |
+| E2-S2-T4 | #56 | Re-probe `POST .../connections/:id/roles` marks a revoked grant `healthy: false`. DELETE removes the connection. Live revoke on the test subscription leftover. |
 
 ## Leftovers
 
@@ -32,9 +33,9 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 
 `x-farside-org` / `x-farside-actor` headers stand in for tokens. Claim and sign-in screens wait on Identity.
 
-### Live federated connect (#52, #53, #56)
+### Live federated connect (#52, #53)
 
-Connect does not call Azure. Role gaps are stored from an injected lister (#55). Disconnect and revoked-grant proof against a live grant stay leftover.
+Connect does not call Azure. Role gaps (#55) and a revoked-grant re-probe (#56) use an injected lister. Token exchange against the test subscription stays leftover.
 
 ### Live harvest (#58, #63)
 

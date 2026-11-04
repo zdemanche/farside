@@ -33,6 +33,18 @@ export function grantedRoleLister(roles: readonly string[]): RoleLister {
   };
 }
 
+export function mutableRoleLister(roles: readonly string[]): RoleLister & { grant: (next: readonly string[]) => void } {
+  let granted = [...roles];
+  return {
+    grant(next) {
+      granted = [...next];
+    },
+    async list() {
+      return [...granted];
+    },
+  };
+}
+
 export function probeRoles(cloud: Cloud, granted: readonly string[]): RoleProbe {
   const missing = missingRoles(cloud, granted);
   return {
