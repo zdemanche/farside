@@ -17,6 +17,7 @@ import {
 } from "./cli.js";
 import { TOKEN_FLAG_MESSAGE } from "./cli-credentials.js";
 import { EXPORT_FORMAT, exportFilename, validateExport } from "./export.js";
+import { REPORT_FILENAME, unsourcedReportClaims } from "./report.js";
 import { PROVIDER_NOT_CONFIGURED } from "./providers/unconfigured.js";
 import { secretPaths } from "./secrets.js";
 import { fixedClock } from "./test-clock.js";
@@ -237,6 +238,23 @@ describe("farside CLI", () => {
     expect(unverified.expectedRoles?.find((gap) => gap.role === "Recommender Viewer")?.blockedCheckIds).toContain(
       "gcp-waste-idle-vm-and-disk-recommendations",
     );
+  });
+
+  it("writes a consultant report from workspace export rows", async () => {
+    const dir = workspace();
+    const io = capture();
+    const opts = { ...io, clock: fixedClock };
+    expect(
+      await runCli(["scan", "--cloud", "azure", "--scope", "main", "--workspace", dir, "--fixture"], opts),
+    ).toBe(EXIT_OK);
+    io.stdout.chunks.length = 0;
+    expect(await runCli(["report", "--workspace", dir], opts)).toBe(EXIT_OK);
+    const written = JSON.parse(io.text(io.stdout.chunks)) as { report: string };
+    expect(written.report).toBe(join(dir, REPORT_FILENAME));
+    const html = readFileSync(written.report, "utf8");
+    const issues = JSON.parse(readFileSync(join(dir, exportFilename("issues")), "utf8"));
+    const cost = JSON.parse(readFileSync(join(dir, exportFilename("cost")), "utf8"));
+    expect(unsourcedReportClaims(html, issues, cost)).toEqual([]);
   });
 
   it("does not import Fastify or the AWS SDK", () => {

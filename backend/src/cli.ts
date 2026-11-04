@@ -14,6 +14,8 @@ import {
   exportInventory,
   exportIssues,
 } from "./export.js";
+import { REPORT_FILENAME, buildConsultantReport } from "./report.js";
+import type { CoverageEntry } from "./coverage.js";
 import type { StoredIssue } from "./issues.js";
 import {
   isTokenFlag,
@@ -43,9 +45,10 @@ export const USAGE = `Usage:
   farside scan --cloud <azure|gcp> --scope <id> [--workspace <dir>] [--fixture]
   farside findings [--workspace <dir>]
   farside export [--workspace <dir>]
+  farside report [--workspace <dir>]
 `;
 
-const COMMANDS = ["connect", "scan", "findings", "export"] as const;
+const COMMANDS = ["connect", "scan", "findings", "export", "report"] as const;
 type Command = (typeof COMMANDS)[number];
 
 const WORKSPACE_FILES = {
@@ -304,30 +307,33 @@ function runFindings(flags: Flags, io: CliIo): number {
   }
 }
 
+function writeExportFiles(dir: string, exportedAt: string) {
+  const issues = readWorkspaceFile<StoredIssue[]>(dir, WORKSPACE_FILES.issues);
+  const inventory = readWorkspaceFile<Inventory | null>(dir, WORKSPACE_FILES.inventory);
+  const cost = readWorkspaceFile<CostSnapshot | null>(dir, WORKSPACE_FILES.cost);
+  assertNoSecrets({ issues, inventory, cost });
+  const envelopes = [
+    exportIssues(CLI_ORG_ID, issues, exportedAt),
+    exportInventory(CLI_ORG_ID, inventory, exportedAt),
+    exportCost(CLI_ORG_ID, cost, exportedAt),
+  ];
+  mkdirSync(dir, { recursive: true });
+  for (const envelope of envelopes) {
+    if (envelope.format !== EXPORT_FORMAT) {
+      throw new Error("export format drifted");
+    }
+    writeWorkspaceFile(dir, exportFilename(envelope.kind), envelope);
+  }
+  return { issues, inventory, cost, envelopes };
+}
+
 function runExport(flags: Flags, io: CliIo): number {
   const stdout = io.stdout ?? process.stdout;
   const stderr = io.stderr ?? process.stderr;
   const dir = resolveWorkspace(flags, io);
   const clock = io.clock ?? systemClock;
   try {
-    const issues = readWorkspaceFile<StoredIssue[]>(dir, WORKSPACE_FILES.issues);
-    const inventory = readWorkspaceFile<Inventory | null>(dir, WORKSPACE_FILES.inventory);
-    const cost = readWorkspaceFile<CostSnapshot | null>(dir, WORKSPACE_FILES.cost);
-    assertNoSecrets({ issues, inventory, cost });
-    const exportedAt = clock();
-    const envelopes = [
-      exportIssues(CLI_ORG_ID, issues, exportedAt),
-      exportInventory(CLI_ORG_ID, inventory, exportedAt),
-      exportCost(CLI_ORG_ID, cost, exportedAt),
-    ];
-    mkdirSync(dir, { recursive: true });
-    for (const envelope of envelopes) {
-      if (envelope.format !== EXPORT_FORMAT) {
-        writeLine(stderr, "export format drifted");
-        return EXIT_FAILED;
-      }
-      writeWorkspaceFile(dir, exportFilename(envelope.kind), envelope);
-    }
+    const { envelopes } = writeExportFiles(dir, clock());
     writeLine(
       stdout,
       envelopes.map((envelope) => exportFilename(envelope.kind)),
@@ -335,6 +341,41 @@ function runExport(flags: Flags, io: CliIo): number {
     return EXIT_OK;
   } catch (error) {
     writeLine(stderr, error instanceof Error ? error.message : "export failed");
+    return EXIT_FAILED;
+  }
+}
+
+function runReport(flags: Flags, io: CliIo): number {
+  const stdout = io.stdout ?? process.stdout;
+  const stderr = io.stderr ?? process.stderr;
+  const dir = resolveWorkspace(flags, io);
+  const clock = io.clock ?? systemClock;
+  try {
+    const exportedAt = clock();
+    const { issues, cost, envelopes } = writeExportFiles(dir, exportedAt);
+    const findings = readWorkspaceFile<Finding[]>(dir, WORKSPACE_FILES.findings);
+    const coverage = readWorkspaceFile<CoverageEntry[]>(dir, WORKSPACE_FILES.coverage);
+    const exportedIssues = envelopes.find((envelope) => envelope.kind === "issues");
+    const exportedCost = envelopes.find((envelope) => envelope.kind === "cost");
+    if (!exportedIssues || !exportedCost) {
+      writeLine(stderr, "export format drifted");
+      return EXIT_FAILED;
+    }
+    const html = buildConsultantReport({
+      issues,
+      findings,
+      coverage,
+      cost,
+      exportedIssues,
+      exportedCost,
+      now: exportedAt,
+    });
+    assertNoSecrets(html);
+    writeFileSync(join(dir, REPORT_FILENAME), html);
+    writeLine(stdout, { report: join(dir, REPORT_FILENAME) });
+    return EXIT_OK;
+  } catch (error) {
+    writeLine(stderr, error instanceof Error ? error.message : "report failed");
     return EXIT_FAILED;
   }
 }
@@ -359,7 +400,10 @@ export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
   if (parsed.flags.command === "findings") {
     return runFindings(parsed.flags, io);
   }
-  return runExport(parsed.flags, io);
+  if (parsed.flags.command === "export") {
+    return runExport(parsed.flags, io);
+  }
+  return runReport(parsed.flags, io);
 }
 
 function isMain(): boolean {

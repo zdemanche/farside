@@ -68,7 +68,7 @@ describe("plugin manifest lint", () => {
     expect(lintFindingsMethodSkill("# empty").some((error) => error.includes("issue id"))).toBe(true);
   });
 
-  it("accepts connect, scan and findings command wrappers", () => {
+  it("accepts connect, scan, findings and report command wrappers", () => {
     expect(lintPluginCommands()).toEqual([]);
   });
 });
