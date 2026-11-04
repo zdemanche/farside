@@ -35,6 +35,7 @@ In-repo check engine, leftover waste checks, idle plan/LB/NAT checks, Recovery g
 | E3-S7-T1 | #118 | Scan history API returns duration, coverage summary, per-check outcomes, and `current` on the latest complete success. |
 | E3-S7-T2 | #119 | Console `#scans` lists start, duration, status and coverage; detail shows assessed / unassessed / `undetermined` with reasons. |
 | E3-S7-T3 | #120 | A running fixture scan updates to succeeded without a page reload. Failed scans show the error and are never current. |
+| E3-S1-T5 | #89 | Injected metrics client returns ByteCount totals for load balancers and NAT gateways. Missing Monitoring Reader is unassessed. Live Monitor on the test subscription leftover. |
 
 ## Leftovers
 
@@ -42,9 +43,9 @@ In-repo check engine, leftover waste checks, idle plan/LB/NAT checks, Recovery g
 
 A recorded full scan of the test subscription into the deployed console. The fixture Issues list is not that proof.
 
-### Metrics harvest (#89)
+### Live metrics harvest
 
-Monitoring Reader on the test subscription.
+Fixture ByteCount totals cover idle LB/NAT (#89). A Monitoring Reader series on the test subscription stays leftover.
 
 ### Later E3 stories
 
