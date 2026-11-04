@@ -15,6 +15,7 @@ import type {
   IssueRow,
   IssueStatus,
   OrgSettings,
+  RoleGap,
   ScanRow,
 } from "./types";
 
@@ -185,15 +186,31 @@ export function apiSource({ baseUrl, orgId, cloud, fetch: fetchImpl }: ApiOption
     settings: (signal) => get<OrgSettings>("/settings", signal),
     saveSettings: (settings, signal) => request<OrgSettings>("PUT", "/settings", signal, settings),
     connect: async (input: ConnectInput, signal) => {
-      const result = await request<{ scanStarted?: boolean; attention?: string }>(
+      const result = await request<{ id?: string; scanStarted?: boolean; attention?: string }>(
         "PUT",
         "/connections",
         signal,
         input,
       );
+      let roleGaps: RoleGap[] | null = null;
+      if (result.id) {
+        try {
+          const probed = await request<{ missingRoles?: RoleGap[] }>(
+            "POST",
+            `/connections/${encodeURIComponent(result.id)}/roles`,
+            signal,
+          );
+          roleGaps = probed.missingRoles ?? [];
+        } catch (error) {
+          if (signal?.aborted) {
+            throw error;
+          }
+        }
+      }
       const connected: ConnectResult = {
         scanStarted: result.scanStarted === true,
         attention: result.attention ?? null,
+        roleGaps,
       };
       return connected;
     },

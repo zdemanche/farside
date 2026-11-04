@@ -123,9 +123,16 @@ export type OrgSettings = {
   scanRetryLimit: number;
 };
 
-export type ConnectInput = { tenantId: string; subscriptionId: string };
+export type ConnectInput = { tenantId: string; subscriptionId: string; cloud?: Cloud };
 
-export type ConnectResult = { scanStarted: boolean; attention: string | null };
+export type RoleGap = { role: string; required: boolean };
+
+export type ConnectResult = {
+  scanStarted: boolean;
+  attention: string | null;
+  /** Roles the connection lacks; null when they could not be checked. Absent in demo mode. */
+  roleGaps?: RoleGap[] | null;
+};
 
 export type SpendFigure = {
   serviceName: string;
