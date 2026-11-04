@@ -198,6 +198,26 @@ export type CostWasteView = {
   };
 };
 
+export type HeadlineStatus = "ok" | "not_assessed" | "not_supported";
+
+export type HeadlineValue =
+  | { amount: string | null; currency: string }
+  | { min: string; max: string; currency: string }
+  | { unprotected: number; production: number; undetermined: number }
+  | { count: number }
+  | { byCloud: Record<string, HeadlineValue>; mixedCurrencies: boolean };
+
+export type HeadlineFigure = {
+  id: "monthlyCost" | "waste" | "backup" | "lifecycle" | "unseen";
+  label: string;
+  href: string;
+  status: HeadlineStatus;
+  value: HeadlineValue | null;
+};
+
+/** Read model of GET /v1/orgs/:orgId/headline. */
+export type Headline = { sentence: string; figures: HeadlineFigure[] };
+
 export type ExportKind = "issues" | "inventory" | "cost";
 
 export type ExportFile = { filename: string; content: string };
@@ -211,6 +231,7 @@ export type DataSource = {
   inventory(signal?: AbortSignal): Promise<InventoryRow[]>;
   issues(signal?: AbortSignal): Promise<IssueRow[]>;
   costWaste(signal?: AbortSignal): Promise<CostWasteView>;
+  headline(signal?: AbortSignal): Promise<Headline>;
   scans(signal?: AbortSignal): Promise<ScanRow[]>;
   scan(id: string, signal?: AbortSignal): Promise<ScanRow>;
   blindSpots(signal?: AbortSignal): Promise<BlindSpotsView>;

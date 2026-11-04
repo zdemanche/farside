@@ -8,6 +8,7 @@ import type {
   CostWasteView,
   DataSource,
   EstateOverview,
+  Headline,
   InventoryRow,
   IssueRow,
   IssueStatus,
@@ -142,6 +143,7 @@ export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): Dat
     issues: async (signal) =>
       (await get<{ issues: StoredIssue[] }>("/issues", signal)).issues.map(issueRow),
     costWaste: (signal) => get<CostWasteView>("/cost-waste", signal),
+    headline: (signal) => get<Headline>("/headline", signal),
     scans: async (signal) => (await get<{ scans: ScanRow[] }>("/scans", signal)).scans,
     scan: (id, signal) => get<ScanRow>(`/scans/${encodeURIComponent(id)}`, signal),
     blindSpots: async (signal) => {

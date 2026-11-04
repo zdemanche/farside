@@ -11,6 +11,7 @@ import type {
   CostWasteView,
   DataSource,
   EstateOverview,
+  Headline,
   InventoryRow,
   IssueRow,
   IssueStatus,
@@ -451,6 +452,48 @@ const COST_WASTE: CostWasteView = {
   totals: { min: "8.00", max: "12.00", currency: "USD", assessedCount: 1, unassessedScopes: 2 },
 };
 
+const HEADLINE: Headline = {
+  sentence:
+    "Your Azure and GCP costs, nameable waste, backup gaps, support losses, and what Farside could not see. Unproven checks are not supported and are left out of every figure.",
+  figures: [
+    {
+      id: "monthlyCost",
+      label: "Monthly cost",
+      href: "#cost-and-waste",
+      status: "ok",
+      value: { amount: "2252.50", currency: "USD" },
+    },
+    {
+      id: "waste",
+      label: "Nameable waste",
+      href: "#issues",
+      status: "ok",
+      value: { min: "8.00", max: "12.00", currency: "USD" },
+    },
+    {
+      id: "backup",
+      label: "Production systems not backed up",
+      href: "#recovery",
+      status: "ok",
+      value: { unprotected: 1, production: 3, undetermined: 0 },
+    },
+    {
+      id: "lifecycle",
+      label: "Things losing support in 90 days",
+      href: "#lifecycle",
+      status: "not_assessed",
+      value: null,
+    },
+    {
+      id: "unseen",
+      label: "What Farside could not see",
+      href: "#blind-spots",
+      status: "ok",
+      value: { count: 2 },
+    },
+  ],
+};
+
 export function demoSource(): DataSource {
   let settings = DEFAULT_SETTINGS;
   return {
@@ -460,6 +503,7 @@ export function demoSource(): DataSource {
     inventory: async () => DEMO_RESOURCES.map(inventoryRow),
     issues: async () => ISSUES,
     costWaste: async () => COST_WASTE,
+    headline: async () => HEADLINE,
     scans: async () => SCANS,
     scan: async (id) => {
       const scan = SCANS.find((row) => row.id === id);
