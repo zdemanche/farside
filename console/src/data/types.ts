@@ -189,6 +189,12 @@ export type CostWasteView = {
     harvestStatus?: "unverified";
   } | null;
   waste: WasteItem[];
+  history: {
+    days: number | null;
+    firstDay: string | null;
+    daysNeeded: number | null;
+    closer: string | null;
+  };
   totals: {
     min: string;
     max: string;

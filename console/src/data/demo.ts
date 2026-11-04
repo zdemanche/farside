@@ -451,6 +451,7 @@ const COST_WASTE: CostWasteView = {
     },
   ],
   totals: { min: "8.00", max: "12.00", currency: "USD", assessedCount: 1, unassessedScopes: 2 },
+  history: { days: 30, firstDay: "2026-09-01", daysNeeded: null, closer: null },
 };
 
 const BILLING: BillingView = {

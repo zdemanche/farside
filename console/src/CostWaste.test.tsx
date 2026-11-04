@@ -119,6 +119,36 @@ describe("Cost and waste screen", () => {
     await expectAxeClean(container);
   });
 
+  it("shows an honest empty first-day state with no numbers, and what closes the alerts", async () => {
+    const base = await demoSource().costWaste();
+    const { container } = renderScreen(
+      <CostWaste />,
+      sourceWith({
+        costWaste: async () => ({
+          ...base,
+          spend: { ...base.spend!, services: [], monthOnMonth: [] },
+          floorBurst: [],
+          waste: [],
+          totals: { ...base.totals, assessedCount: 0 },
+          history: {
+            days: 1,
+            firstDay: "2026-11-03",
+            daysNeeded: 13,
+            closer: "13 more completed export days",
+          },
+        }),
+      }),
+    );
+    expect(await screen.findByText(/No complete month of cost data exists yet/)).toBeTruthy();
+    expect(screen.getByText(/enabled, 2026-11-03, forward/)).toBeTruthy();
+    expect(screen.getByText(/1 day of daily history since 2026-11-03/)).toBeTruthy();
+    expect(
+      screen.getByText(/undetermined until there is more history: 13 more completed export days/),
+    ).toBeTruthy();
+    expect(screen.queryByText("Spend by service", { selector: "h2" })).toBeNull();
+    await expectAxeClean(container);
+  });
+
   it("reports a load failure with a retry", async () => {
     const { DataError } = await import("./data/error");
     renderScreen(

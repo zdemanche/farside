@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Finding } from "@farside/scan-contracts";
-import { replayFixture } from "./alerts.js";
+import { analyzeAlerts, replayFixture, WINDOW_DAYS } from "./alerts.js";
 import { buildApp } from "./app.js";
 import { fixtureBudgetClient } from "./budgets.js";
 import { fixtureCommitmentClient } from "./commitments.js";
@@ -105,6 +105,33 @@ describe("waste totals", () => {
       findings: [gcpFail],
       coverage: [assessed],
     }).waste[0]?.resourceId).toBe("disk-parked");
+  });
+});
+
+describe("cost-waste history", () => {
+  const row = (date: string) => ({
+    date,
+    subscriptionId: "main",
+    serviceName: "Compute",
+    costAmount: "10.00",
+    currency: "USD",
+  });
+  const view = (alerts: ReturnType<typeof analyzeAlerts> | null) =>
+    costWasteView({ cost: null, alerts, commitments: null, findings: [], coverage: [] });
+
+  it("reports no history when there are no alerts", () => {
+    expect(view(null).history).toEqual({ days: null, firstDay: null, daysNeeded: null, closer: null });
+  });
+
+  it("says how many more days close an alert rule that history is too short for", () => {
+    const alerts = analyzeAlerts({
+      rows: [row("2026-10-01"), row("2026-10-02"), row("2026-10-03")],
+      asOf: "2026-10-03",
+    });
+    const { history } = view(alerts);
+    expect(history.days).toBe(2);
+    expect(history.daysNeeded).toBe(WINDOW_DAYS - 2);
+    expect(history.closer).toBe(`${WINDOW_DAYS - 2} more completed export days`);
   });
 });
 

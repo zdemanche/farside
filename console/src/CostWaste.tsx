@@ -132,6 +132,34 @@ function Commitments({ commitments }: { commitments: NonNullable<CostWasteView["
   );
 }
 
+function History({ view }: { view: CostWasteView }) {
+  const { history, spend } = view;
+  return (
+    <section aria-labelledby="history-title">
+      <h2 id="history-title">Cost history</h2>
+      {spend && spend.services.length === 0 ? (
+        <p>
+          No complete month of cost data exists yet. The billing export fills only from the day it
+          was enabled
+          {history.firstDay ? `, ${history.firstDay}` : ""}, forward. Farside shows no figures and
+          makes no estimate for earlier days.
+        </p>
+      ) : null}
+      {history.days !== null ? (
+        <p>
+          {plural(history.days, "day")} of daily history
+          {history.firstDay ? ` since ${history.firstDay}` : ""}.
+        </p>
+      ) : null}
+      {history.daysNeeded ? (
+        <p>
+          Spend alerts are {TERMS.undetermined} until there is more history: {history.closer}.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 function Waste({ view }: { view: CostWasteView }) {
   const { totals } = view;
   return (
@@ -206,7 +234,8 @@ export function CostWaste() {
         {(data) =>
           data.readable && data.spend ? (
             <>
-              <Spend spend={data.spend} />
+              {data.spend.services.length > 0 ? <Spend spend={data.spend} /> : null}
+              <History view={data} />
               {data.floorBurst ? <FloorBurst points={data.floorBurst} /> : null}
               {data.commitments ? <Commitments commitments={data.commitments} /> : null}
               <Waste view={data} />

@@ -32,6 +32,13 @@ export type CostWasteView = {
   commitments: CommitmentSnapshot | null;
   waste: WasteItem[];
   totals: WasteTotals;
+  /** How much daily history exists; spend alerts are undetermined until it is long enough. */
+  history: {
+    days: number | null;
+    firstDay: string | null;
+    daysNeeded: number | null;
+    closer: string | null;
+  };
 };
 
 function addDecimal(left: string, right: string): string {
@@ -120,5 +127,11 @@ export function costWasteView(input: {
     commitments: input.commitments,
     waste,
     totals: wasteTotals(input.findings, input.coverage),
+    history: {
+      days: input.alerts?.historyDays ?? null,
+      firstDay: input.cost?.periodStart ?? null,
+      daysNeeded: input.alerts?.undetermined?.daysNeeded ?? null,
+      closer: input.alerts?.undetermined?.closer ?? null,
+    },
   };
 }
