@@ -22,6 +22,7 @@ In-repo Cost Management harvest against a multi-page fake, billing scope and cur
 | E4-S6-T1 | #150 | GET `/v1/orgs/:orgId/headline` combines monthly cost, nameable waste, backup gaps, support losses, and unseen counts with coverage states. |
 | E4-S6-T3 | #152 | Checks without a `liveRunAt` are `not_supported` and left out of every headline figure. Removing a record drops that check from the totals. |
 | E4-S2-T1 | #133 | Commitment harvest states `harvestStatus: unverified` and `liveRunAt: null`. The test estate will not buy reservations. A dated live run stays leftover. |
+| E4-S3-T1 | #137 | Budget harvest reads fixture definitions as aggregates and states `harvestStatus: unverified`. A live Cost Management budgets list stays leftover. |
 
 ## Leftovers
 
@@ -37,9 +38,9 @@ The missing-role path is covered by a fake client. A live 403 from Azure is left
 
 Harvest stores fixture utilization and states unverified (#133). A dated live run against a real purchase stays leftover.
 
-### Live budget harvest (#137)
+### Live budget harvest
 
-Budget definitions are read from the ground-truth manifest. A live Cost Management budgets list stays leftover.
+Harvest stores fixture definitions as aggregates and states unverified (#137). A live Cost Management budgets list stays leftover.
 
 ### Cost and waste page (#147)
 

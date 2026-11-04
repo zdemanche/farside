@@ -22,9 +22,19 @@ export type BudgetDefinition = {
   readable: boolean;
 };
 
+export const BUDGET_HARVEST_UNVERIFIED = {
+  harvestStatus: "unverified",
+  liveRunAt: null,
+  harvestStatusReason:
+    "Budget definitions are read from the ground-truth fixture. A live Cost Management budgets list stays leftover.",
+} as const;
+
 export type BudgetSnapshot = {
   lastConfirmed: string;
   subscriptions: BudgetDefinition[];
+  harvestStatus?: "unverified";
+  liveRunAt?: string | null;
+  harvestStatusReason?: string;
 };
 
 export type BudgetHarvestResult = {
@@ -146,7 +156,13 @@ export async function harvestBudgets(input: {
     }),
   );
   return {
-    snapshot: { lastConfirmed, subscriptions },
+    snapshot: {
+      lastConfirmed,
+      subscriptions,
+      harvestStatus: BUDGET_HARVEST_UNVERIFIED.harvestStatus,
+      liveRunAt: BUDGET_HARVEST_UNVERIFIED.liveRunAt,
+      harvestStatusReason: BUDGET_HARVEST_UNVERIFIED.harvestStatusReason,
+    },
     findings,
     coverage,
   };
