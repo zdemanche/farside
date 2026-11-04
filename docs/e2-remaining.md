@@ -22,6 +22,7 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 | E2-S6-T2 | #75 | Connect (connection PUT) starts the first scan. |
 | E2-S6-T4 | #77 | One running scan per subscription; mid-failure stores covered scopes and is not marked complete. |
 | E2-S7-T1 | #79 | `docs/demo-script.md` scripts Estate and Blind spots. Live rehearsal on the test subscription leftover. |
+| E2-S7-T4 | #82 | `docs/pricing-floor.md` compares an estimated dedicated-account plus test-estate cost. Kevin replaces the ranges from actuals. |
 | E2-S3-T1 | #59 | Injected Resource Graph client pages `$skipToken` across every launch type. 429 → `throttling`, other errors → `failed_call`. Default scan path stays the fixture harvester. Live ARG on the test subscription leftover. |
 | E2-S2-T3 | #55 | Connect probes roles through an injected `RoleLister` and stores each missing role plus the checks it blocks. Tests remove Cost Management Reader / Backup Reader. Live ARM role list leftover. |
 | E2-S3-T2 | #60 | Injected hierarchy client lists the fixture root/test management groups and both ground-truth subscriptions. Live ARM listing leftover. |
