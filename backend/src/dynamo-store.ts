@@ -36,12 +36,14 @@ import {
   sweepRetention,
   type Draft,
 } from "./org-ops.js";
-import { DEFAULT_CLOUD, providerFor } from "./providers/index.js";
+import { DEFAULT_CLOUD } from "./providers/index.js";
+import { presentRoles, probeRoles } from "./role-probe.js";
 import {
   MAX_SCANS_PER_ORG,
   type AggregateName,
   type Connection,
   type ConnectionInput,
+  type ConnectionPatch,
   type OrgRepository,
   type OrgState,
   type OrgView,
@@ -671,14 +673,16 @@ export class DynamoStore implements OrgRepository {
   async putConnection(orgId: string, input: ConnectionInput, fixedId?: string): Promise<Connection> {
     assertNoSecrets(input);
     const cloud = input.cloud ?? DEFAULT_CLOUD;
+    const probed = probeRoles(cloud, input.grantedRoles ?? presentRoles(cloud));
     const connection: Connection = {
       id: fixedId ?? `conn-${await this.nextSequence(orgId, "connection")}`,
       cloud,
       tenantId: input.tenantId,
       subscriptionId: input.subscriptionId,
-      roles: [...providerFor(cloud).requiredRoles],
+      roles: probed.roles,
+      missingRoles: probed.missingRoles,
       createdAt: this.clock(),
-      healthy: true,
+      healthy: probed.healthy,
     };
     markVerified(connection);
     if (fixedId === undefined) {
@@ -702,13 +706,21 @@ export class DynamoStore implements OrgRepository {
   async patchConnection(
     orgId: string,
     connectionId: string,
-    patch: { healthy: boolean },
+    patch: ConnectionPatch,
   ): Promise<Connection | null> {
     let patched: Connection | null = null;
     await this.#mutate(orgId, ["connections"], (draft) => {
       patched = draft.connections.find((item) => item.id === connectionId) ?? null;
       if (patched) {
-        patched.healthy = patch.healthy;
+        if (patch.healthy !== undefined) {
+          patched.healthy = patch.healthy;
+        }
+        if (patch.roles !== undefined) {
+          patched.roles = patch.roles;
+        }
+        if (patch.missingRoles !== undefined) {
+          patched.missingRoles = patch.missingRoles;
+        }
         assertNoSecrets(patched);
         markVerified(patched);
       }

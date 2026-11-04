@@ -1,4 +1,5 @@
 import type { Cloud, Finding, Inventory } from "@farside/scan-contracts";
+import type { RoleGap } from "./cli-credentials.js";
 import type { AlertAnalysis } from "./alerts.js";
 import type { Contract } from "./billing.js";
 import type { BudgetSnapshot } from "./budgets.js";
@@ -20,6 +21,7 @@ export type Connection = {
   tenantId: string;
   subscriptionId: string;
   roles: string[];
+  missingRoles: RoleGap[];
   createdAt: string;
   healthy: boolean;
 };
@@ -60,7 +62,18 @@ export type ScanMergeDraft = Pick<
   "inventories" | "facts" | "findings" | "coverage" | "issues" | "cost" | "costs"
 >;
 
-export type ConnectionInput = { tenantId: string; subscriptionId: string; cloud?: Cloud };
+export type ConnectionInput = {
+  tenantId: string;
+  subscriptionId: string;
+  cloud?: Cloud;
+  grantedRoles?: readonly string[];
+};
+
+export type ConnectionPatch = {
+  healthy?: boolean;
+  roles?: string[];
+  missingRoles?: RoleGap[];
+};
 
 export interface OrgRepository {
   readonly clock: Clock;
@@ -83,7 +96,7 @@ export interface OrgRepository {
   nextSequence(orgId: string, kind: Sequence): Promise<number>;
 
   putConnection(orgId: string, input: ConnectionInput, fixedId?: string): Promise<Connection>;
-  patchConnection(orgId: string, connectionId: string, patch: { healthy: boolean }): Promise<Connection | null>;
+  patchConnection(orgId: string, connectionId: string, patch: ConnectionPatch): Promise<Connection | null>;
   deleteConnection(orgId: string, connectionId: string): Promise<boolean>;
   isConnected(orgId: string, subscriptionId: string): Promise<boolean>;
   purgeSubscription(orgId: string, subscriptionId: string): Promise<void>;
