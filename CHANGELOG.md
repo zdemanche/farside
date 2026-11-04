@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0](https://github.com/zdemanche/farside/compare/v0.2.0...v0.3.0) (2026-11-04)
+
+
+### Features
+
+* discover management groups and subscriptions ([#388](https://github.com/zdemanche/farside/issues/388)) ([a60f87c](https://github.com/zdemanche/farside/commit/a60f87c6be65f25fce9b747040ccac15213a0111))
+* harvest GCP spend from BigQuery pages ([#398](https://github.com/zdemanche/farside/issues/398)) ([99aa644](https://github.com/zdemanche/farside/commit/99aa64406ec7150cadbe10a0e63fcf5bcef014e0))
+* harvest utilization metrics as aggregates ([#389](https://github.com/zdemanche/farside/issues/389)) ([197560c](https://github.com/zdemanche/farside/commit/197560c83f181ec9dc223dda2d417a679ba57b63))
+* mark budget harvest unverified ([#399](https://github.com/zdemanche/farside/issues/399)) ([8bdf0e1](https://github.com/zdemanche/farside/commit/8bdf0e1716b4c7f7e614fe9291901ff64d7402ad))
+* mark reservation harvest unverified ([#390](https://github.com/zdemanche/farside/issues/390)) ([670317b](https://github.com/zdemanche/farside/commit/670317be9c95d169b97bf524c98f5415a014cd56))
+* mark revoked connections broken ([#394](https://github.com/zdemanche/farside/issues/394)) ([fd68425](https://github.com/zdemanche/farside/commit/fd68425173a58f53db32a072bc1dbc8921657e1b))
+* page Cloud Asset across launch types ([#397](https://github.com/zdemanche/farside/issues/397)) ([af85c12](https://github.com/zdemanche/farside/commit/af85c12606532799b1856a10d02891253b2c74b4))
+* page Resource Graph across launch types ([#386](https://github.com/zdemanche/farside/issues/386)) ([36a5e66](https://github.com/zdemanche/farside/commit/36a5e664af818ebd67961a796cc55c7a43489bf0))
+* render a consultant report from export rows ([36728ae](https://github.com/zdemanche/farside/commit/36728aea17490e65f62f4d6db0f9a00450706f13))
+* send one alert digest to Settings recipients ([0f4f7e5](https://github.com/zdemanche/farside/commit/0f4f7e52bff7bb2c61480d95dfbc540275479dc0))
+* store role gaps on each connection ([#387](https://github.com/zdemanche/farside/issues/387)) ([449ed56](https://github.com/zdemanche/farside/commit/449ed564d83317b79258aa6da37699dea0b7d2cc))
+
 ## [0.2.0](https://github.com/zdemanche/farside/compare/v0.1.0...v0.2.0) (2026-11-03)
 
 
