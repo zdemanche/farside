@@ -16,7 +16,13 @@ After D5, install from the Moonaan marketplace:
 /plugin install farside@moonaan-marketplace
 ```
 
-That marketplace entry is leftover. Do not treat it as available yet.
+That marketplace entry is leftover: it is a PR to `Moonaan/moonaan-marketplace` ([#362](https://github.com/zdemanche/farside/issues/362)) and has not been made. Do not treat it as available yet.
+
+## The bundled CLI
+
+The plugin runs `plugin/bin/farside-cli.mjs`, a single-file build of `backend/src/cli.ts` that is committed in `plugin/`. An install of the plugin alone, with no checkout, can therefore scan. The version in `plugin/.claude-plugin/plugin.json` is bumped by release-please (`docs/releasing.md`).
+
+After changing anything the CLI imports, run `npm run plugin:bundle` and commit the result. `npm run lint` fails with "plugin CLI bundle is out of date" if you forget, so a PR cannot merge a plugin that runs stale checks.
 
 ## First scan
 
