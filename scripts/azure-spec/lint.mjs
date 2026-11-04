@@ -175,6 +175,14 @@ export function lintSpec(spec, requiredIds = REQUIRED_LAUNCH_CHECK_IDS) {
   if (!Array.isArray(spec.checks)) {
     return ["spec.checks must be an array"];
   }
+  if (
+    spec.cloud !== "gcp" &&
+    (typeof spec.statusAsOf !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(spec.statusAsOf))
+  ) {
+    errors.push(
+      "spec.statusAsOf must be a YYYY-MM-DD date when entries were last marked verified or unverified",
+    );
+  }
 
   const seen = new Set();
   for (const [index, check] of spec.checks.entries()) {

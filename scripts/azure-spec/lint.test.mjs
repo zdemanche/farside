@@ -13,6 +13,7 @@ import {
 function validSpec(overrides = {}) {
   return {
     version: 1,
+    statusAsOf: "2026-11-04",
     checks: REQUIRED_LAUNCH_CHECK_IDS.map((id) => ({
       id,
       group: "inventory",
@@ -40,6 +41,18 @@ describe("azure spec lint", () => {
     delete spec.checks[0].role;
     expect(lintSpec(spec).some((error) => error.includes("missing required field 'role'"))).toBe(
       true,
+    );
+  });
+
+  it("fails when statusAsOf is missing", () => {
+    const spec = validSpec();
+    delete spec.statusAsOf;
+    expect(lintSpec(spec).some((error) => error.includes("statusAsOf"))).toBe(true);
+  });
+
+  it("does not require statusAsOf on a GCP spec", () => {
+    expect(lintSpec({ cloud: "gcp", checks: [] }, []).some((error) => error.includes("statusAsOf"))).toBe(
+      false,
     );
   });
 
