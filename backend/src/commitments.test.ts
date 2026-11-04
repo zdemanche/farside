@@ -102,6 +102,9 @@ describe("commitment harvest", () => {
     expect(harvested.snapshot.reservations).toHaveLength(2);
     expect(harvested.snapshot.savingsPlans).toHaveLength(2);
     expect(harvested.snapshot.noneFound).toEqual({ reservations: false, savingsPlans: false });
+    expect(harvested.snapshot.harvestStatus).toBe("unverified");
+    expect(harvested.snapshot.liveRunAt).toBeNull();
+    expect(harvested.snapshot.harvestStatusReason).toMatch(/not a live purchase/);
     expect(harvested.findings.some((finding) => finding.result === "fail")).toBe(true);
     expect(harvested.coverage.every((entry) => entry.state === "assessed")).toBe(true);
   });
