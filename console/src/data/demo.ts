@@ -1,6 +1,7 @@
 import {
   HEALTH_SCORE_FORMULA,
   scoreHealth,
+  type Cloud,
   type Finding,
   type InventoryRecord,
 } from "@farside/scan-contracts";
@@ -263,6 +264,7 @@ function issueRow(seed: IssueSeed): IssueRow {
   const coverage = coverageOf(seed.checkId);
   return {
     id: seed.id,
+    cloud: "azure",
     checkId: seed.checkId,
     resourceId: seed.id,
     subscription: SUBSCRIPTION,
@@ -512,14 +514,15 @@ const HEADLINE: Headline = {
   ],
 };
 
-export function demoSource(): DataSource {
+export function demoSource(cloud?: Cloud): DataSource {
   let settings = DEFAULT_SETTINGS;
   return {
     mode: "demo",
     orgId: "demo",
     overview: async () => OVERVIEW,
-    inventory: async () => DEMO_RESOURCES.map(inventoryRow),
-    issues: async () => ISSUES,
+    inventory: async () =>
+      DEMO_RESOURCES.map(inventoryRow).filter((row) => !cloud || row.cloud === cloud),
+    issues: async () => ISSUES.filter((row) => !cloud || row.cloud === cloud),
     costWaste: async () => COST_WASTE,
     headline: async () => HEADLINE,
     billing: async () => BILLING,

@@ -24,6 +24,7 @@ export type IssueStatus = "open" | "closed" | "not_confirmed";
 
 export type IssueRow = {
   id: string;
+  cloud: Cloud;
   checkId: string;
   resourceId: string;
   subscription: string;

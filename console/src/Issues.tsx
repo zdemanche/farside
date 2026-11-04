@@ -9,7 +9,7 @@ import { LastScan } from "./LastScan";
 import { inventoryHref, scanHref } from "./links";
 import { ScreenState } from "./ScreenState";
 import { plural } from "./plural";
-import { TERMS, coverageStateLabel, shortName } from "./terms";
+import { CLOUD_LABEL, TERMS, coverageStateLabel, shortName } from "./terms";
 
 const STATUS_TONE: Record<IssueStatus, Tone> = {
   open: "warn",
@@ -158,6 +158,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
             <thead>
               <tr>
                 <th scope="col">Resource</th>
+                <th scope="col">Cloud</th>
                 <th scope="col">Check</th>
                 <th scope="col">Status</th>
                 <th scope="col">Coverage</th>
@@ -172,6 +173,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
                       {shortName(issue.resourceId)}
                     </a>
                   </th>
+                  <td>{CLOUD_LABEL[issue.cloud]}</td>
                   <td>{issue.checkId}</td>
                   <td>
                     <Chip tone={STATUS_TONE[issue.status]}>

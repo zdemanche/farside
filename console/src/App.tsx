@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ComponentType, type MouseEvent } from "react";
+import { CLOUDS, type Cloud } from "@farside/scan-contracts";
 import { apiSource } from "./data/api";
 import { DataProvider } from "./data/context";
 import type { DataSource } from "./data/types";
@@ -16,19 +17,23 @@ import { Settings } from "./Settings";
 import { NotFound } from "./NotFound";
 import { Offboarding } from "./Offboarding";
 import { DEMO_LABEL, NOT_CONNECTED_STATE, PRODUCT_NAME, SHELL_NAV, slugOf } from "./shell";
+import { CLOUD_LABEL } from "./terms";
 
-function configuredSource(): DataSource | null {
+function configuredSource(cloud: Cloud | ""): DataSource | null {
   const baseUrl: string | undefined = import.meta.env.VITE_FARSIDE_API_URL;
   const orgId: string | undefined = import.meta.env.VITE_FARSIDE_ORG;
-  return baseUrl && orgId ? apiSource({ baseUrl, orgId }) : null;
+  return baseUrl && orgId ? apiSource({ baseUrl, orgId, ...(cloud ? { cloud } : {}) }) : null;
 }
 
-async function resolveSource(demo: boolean | undefined): Promise<DataSource | null> {
+async function resolveSource(
+  demo: boolean | undefined,
+  cloud: Cloud | "",
+): Promise<DataSource | null> {
   if (demo ?? import.meta.env.VITE_FARSIDE_DEMO === "1") {
     const { demoSource } = await import("./data/demo");
-    return demoSource();
+    return demoSource(cloud || undefined);
   }
-  return configuredSource();
+  return configuredSource(cloud);
 }
 
 function currentHash(): string {
@@ -62,6 +67,7 @@ function skipToMain(event: MouseEvent<HTMLAnchorElement>) {
 export function App({ demo, source }: { demo?: boolean; source?: DataSource | null } = {}) {
   const [resolved, setResolved] = useState<DataSource | null | undefined>(source);
   const [hash, setHash] = useState(currentHash);
+  const [cloud, setCloud] = useState<Cloud | "">("");
 
   useEffect(() => {
     if (source !== undefined) {
@@ -69,7 +75,7 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
       return;
     }
     let cancelled = false;
-    void resolveSource(demo).then((next) => {
+    void resolveSource(demo, cloud).then((next) => {
       if (!cancelled) {
         setResolved(next);
       }
@@ -77,7 +83,7 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
     return () => {
       cancelled = true;
     };
-  }, [demo, source]);
+  }, [demo, source, cloud]);
 
   useEffect(() => {
     const onHash = () => setHash(currentHash());
@@ -116,6 +122,24 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
       <header className="topbar">
         <p className="brand">{PRODUCT_NAME}</p>
         {resolved?.mode === "demo" ? <p className="chip chip-warn">{DEMO_LABEL}</p> : null}
+        {source === undefined && resolved ? (
+          <div className="field cloud-filter">
+            <label htmlFor="cloud-filter">Cloud</label>
+            <select
+              className="input"
+              id="cloud-filter"
+              value={cloud}
+              onChange={(event) => setCloud(event.target.value as Cloud | "")}
+            >
+              <option value="">All clouds</option>
+              {CLOUDS.map((value) => (
+                <option key={value} value={value}>
+                  {CLOUD_LABEL[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
       </header>
       <div className="layout">
         <nav className="sidenav" aria-label="Farside">

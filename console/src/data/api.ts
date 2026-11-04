@@ -1,4 +1,4 @@
-import type { Finding } from "@farside/scan-contracts";
+import type { Cloud, Finding } from "@farside/scan-contracts";
 import { DataError, errorFromStatus, toDataError } from "./error";
 import { formatEvidence, toMoney, lifecycleFrom, recoveryFrom } from "./derive";
 import type {
@@ -22,6 +22,7 @@ const ORG_HEADER = "x-farside-org";
 
 type StoredIssue = {
   id: string;
+  cloud?: Cloud;
   checkId: string;
   resourceId: string;
   subscriptionOrProject: string;
@@ -38,12 +39,15 @@ type StoredIssue = {
 type ApiOptions = {
   baseUrl: string;
   orgId: string;
+  /** Limit every read to one cloud; omit for all clouds. */
+  cloud?: Cloud;
   fetch?: typeof fetch;
 };
 
 function issueRow(issue: StoredIssue): IssueRow {
   return {
     id: issue.id,
+    cloud: issue.cloud ?? "azure",
     checkId: issue.checkId,
     resourceId: issue.resourceId,
     subscription: issue.subscriptionOrProject,
@@ -58,8 +62,9 @@ function issueRow(issue: StoredIssue): IssueRow {
   };
 }
 
-export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): DataSource {
+export function apiSource({ baseUrl, orgId, cloud, fetch: fetchImpl }: ApiOptions): DataSource {
   const root = `${baseUrl.replace(/\/+$/, "")}/v1/orgs/${encodeURIComponent(orgId)}`;
+  const query = cloud ? `?cloud=${cloud}` : "";
   const call = fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
 
   async function request<T>(
@@ -70,7 +75,7 @@ export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): Dat
   ): Promise<T> {
     let response: Response;
     try {
-      response = await call(`${root}${path}`, {
+      response = await call(`${root}${path}${method === "GET" ? query : ""}`, {
         method,
         ...(signal ? { signal } : {}),
         headers: {
@@ -111,7 +116,7 @@ export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): Dat
     exportFile: async (kind, signal) => {
       let response: Response;
       try {
-        response = await call(`${root}/export/${kind}`, {
+        response = await call(`${root}/export/${kind}${query}`, {
           method: "GET",
           ...(signal ? { signal } : {}),
           headers: { accept: "application/json", [ORG_HEADER]: orgId },

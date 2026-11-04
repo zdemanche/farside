@@ -1,3 +1,7 @@
+import type { Cloud } from "@farside/scan-contracts";
+
+export const CLOUD_LABEL: Record<Cloud, string> = { azure: "Azure", gcp: "GCP" };
+
 export const TERMS = {
   assessed: "assessed",
   notAssessed: "not assessed",
