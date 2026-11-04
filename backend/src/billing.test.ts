@@ -1,7 +1,13 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { buildApp } from "./app.js";
 import {
   CardDataError,
+  GRACE_DAYS,
+  RETAIN_DAYS,
+  WARNING_DAYS,
   advanceContract,
   billingView,
   canScan,
@@ -439,5 +445,19 @@ describe("operator-only contract writes and ladder enforcement", () => {
       payload: { ownerTagKey: "owner", productionTagKey: "env", productionTagValue: "prod" },
     });
     expect(response.statusCode).toBe(200);
+  });
+});
+
+describe("billing approach note", () => {
+  it("records the D8 ladder and what BillingHub is reused for", () => {
+    const note = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../docs/billing.md"), "utf8");
+    expect(note).toContain(`WARNING_DAYS = ${WARNING_DAYS}`);
+    expect(note).toContain(`GRACE_DAYS = ${GRACE_DAYS}`);
+    expect(note).toContain(`RETAIN_DAYS = ${RETAIN_DAYS}`);
+    expect(note).toContain("BillingHub");
+    expect(note).toContain("MLOC");
+    expect(note).toContain("dedicated customer account");
+    expect(note).toContain("no invoices");
+    expect(note).toContain("canScan");
   });
 });

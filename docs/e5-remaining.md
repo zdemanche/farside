@@ -12,6 +12,7 @@ Demo mode serves a generated synthetic estate. Recurring scans tick from Setting
 | E5-S2-T1 | #164 | `ScanScheduler` starts a system scan when the clock reaches `nextRunAt`. |
 | E5-S2-T2 | #165 | Overlap is skipped and recorded, failed runs retry within a limit, and a late clock records a missed run. A broken connection does not start a scan. |
 | E5-S2-T3 | #166 | Settings stores interval and retry limit; saving moves `nextRunAt`. |
+| E5-S3-T1 | #169 | `docs/billing.md` records D8, the dedicated-account meter, empty invoices, and what `BillingHub` is reused for. |
 | E5-S3-T2 | #170 | PUT `/v1/orgs/:orgId/contract` stores plan, start, state, and amount due. Card numbers are rejected. |
 | E5-S3-T4 | #172 | Active/warning/grace allow scans. Paused, retaining, and ended return 409 and block the scheduler. |
 | E5-S4-T1 | #174 | `docs/operator-runbook.md` lists contract → iac-hub → account → base → Identity → Launch → Farside → claim → connect → first scan, each with Check and Rollback. |
