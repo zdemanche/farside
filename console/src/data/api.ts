@@ -1,16 +1,21 @@
-import type { Finding } from "@farside/scan-contracts";
+import type { Cloud, Finding } from "@farside/scan-contracts";
 import { DataError, errorFromStatus, toDataError } from "./error";
 import { formatEvidence, toMoney, lifecycleFrom, recoveryFrom } from "./derive";
 import type {
+  BillingView,
   BlindSpot,
   ConnectInput,
   ConnectResult,
+  CostWasteView,
   DataSource,
+  DeletionView,
   EstateOverview,
+  Headline,
   InventoryRow,
   IssueRow,
   IssueStatus,
   OrgSettings,
+  RoleGap,
   ScanRow,
 } from "./types";
 
@@ -18,6 +23,7 @@ const ORG_HEADER = "x-farside-org";
 
 type StoredIssue = {
   id: string;
+  cloud?: Cloud;
   checkId: string;
   resourceId: string;
   subscriptionOrProject: string;
@@ -34,12 +40,15 @@ type StoredIssue = {
 type ApiOptions = {
   baseUrl: string;
   orgId: string;
+  /** Limit every read to one cloud; omit for all clouds. */
+  cloud?: Cloud;
   fetch?: typeof fetch;
 };
 
 function issueRow(issue: StoredIssue): IssueRow {
   return {
     id: issue.id,
+    cloud: issue.cloud ?? "azure",
     checkId: issue.checkId,
     resourceId: issue.resourceId,
     subscription: issue.subscriptionOrProject,
@@ -54,19 +63,20 @@ function issueRow(issue: StoredIssue): IssueRow {
   };
 }
 
-export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): DataSource {
+export function apiSource({ baseUrl, orgId, cloud, fetch: fetchImpl }: ApiOptions): DataSource {
   const root = `${baseUrl.replace(/\/+$/, "")}/v1/orgs/${encodeURIComponent(orgId)}`;
+  const query = cloud ? `?cloud=${encodeURIComponent(cloud)}` : "";
   const call = fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
 
   async function request<T>(
-    method: "GET" | "PUT",
+    method: "GET" | "PUT" | "POST",
     path: string,
     signal?: AbortSignal,
     body?: unknown,
   ): Promise<T> {
     let response: Response;
     try {
-      response = await call(`${root}${path}`, {
+      response = await call(`${root}${path}${method === "GET" ? query : ""}`, {
         method,
         ...(signal ? { signal } : {}),
         headers: {
@@ -104,6 +114,30 @@ export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): Dat
   return {
     mode: "api",
     orgId,
+    ...(cloud ? { cloud } : {}),
+    exportFile: async (kind, signal, options) => {
+      let response: Response;
+      try {
+        response = await call(`${root}/export/${kind}${options?.allClouds ? "" : query}`, {
+          method: "GET",
+          ...(signal ? { signal } : {}),
+          headers: { accept: "application/json", [ORG_HEADER]: orgId },
+        });
+      } catch (error) {
+        if (signal?.aborted) {
+          throw error;
+        }
+        throw toDataError(error);
+      }
+      if (!response.ok) {
+        const problem: { title?: string } | null = await response.json().catch(() => null);
+        throw errorFromStatus(response.status, problem?.title ?? response.statusText);
+      }
+      const named = /filename="([\w.-]+\.json)"/.exec(
+        response.headers.get("content-disposition") ?? "",
+      );
+      return { filename: named?.[1] ?? `farside-${kind}.json`, content: await response.text() };
+    },
     overview: (signal) => get<EstateOverview>("/estate", signal),
     inventory: async (signal) => {
       try {
@@ -117,6 +151,21 @@ export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): Dat
     },
     issues: async (signal) =>
       (await get<{ issues: StoredIssue[] }>("/issues", signal)).issues.map(issueRow),
+    costWaste: (signal) => get<CostWasteView>("/cost-waste", signal),
+    headline: (signal) => get<Headline>("/headline", signal),
+    billing: (signal) => get<BillingView>("/contract", signal),
+    deletion: async (signal) => {
+      try {
+        return await get<DeletionView>("/deletion", signal);
+      } catch (error) {
+        if (error instanceof DataError && error.kind === "not-found") {
+          return null;
+        }
+        throw error;
+      }
+    },
+    offboard: (signal) =>
+      request<DeletionView>("POST", "/offboard", signal, { confirm: true, exportOffered: true }),
     scans: async (signal) => (await get<{ scans: ScanRow[] }>("/scans", signal)).scans,
     scan: (id, signal) => get<ScanRow>(`/scans/${encodeURIComponent(id)}`, signal),
     blindSpots: async (signal) => {
@@ -137,15 +186,31 @@ export function apiSource({ baseUrl, orgId, fetch: fetchImpl }: ApiOptions): Dat
     settings: (signal) => get<OrgSettings>("/settings", signal),
     saveSettings: (settings, signal) => request<OrgSettings>("PUT", "/settings", signal, settings),
     connect: async (input: ConnectInput, signal) => {
-      const result = await request<{ scanStarted?: boolean; attention?: string }>(
+      const result = await request<{ id?: string; scanStarted?: boolean; attention?: string }>(
         "PUT",
         "/connections",
         signal,
         input,
       );
+      let roleGaps: RoleGap[] | null = null;
+      if (result.id) {
+        try {
+          const probed = await request<{ missingRoles?: RoleGap[] }>(
+            "POST",
+            `/connections/${encodeURIComponent(result.id)}/roles`,
+            signal,
+          );
+          roleGaps = probed.missingRoles ?? [];
+        } catch (error) {
+          if (signal?.aborted) {
+            throw error;
+          }
+        }
+      }
       const connected: ConnectResult = {
         scanStarted: result.scanStarted === true,
         attention: result.attention ?? null,
+        roleGaps,
       };
       return connected;
     },

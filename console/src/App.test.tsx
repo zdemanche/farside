@@ -100,14 +100,16 @@ describe("console shell", () => {
     expect(document.querySelector("[aria-current]")?.textContent).toBe("Estate");
   });
 
-  it("marks Cost and waste as coming soon instead of linking to a dead page", () => {
+  it("links Cost and waste in the nav now the page exists", () => {
     render(<App demo />);
     const nav = screen.getByRole("navigation", { name: PRODUCT_NAME });
-    expect(within(nav).queryByRole("link", { name: /Cost and waste/ })).toBeNull();
-    expect(within(nav).getByText("coming soon")).toBeTruthy();
+    expect(within(nav).getByRole("link", { name: "Cost and waste" }).getAttribute("href")).toBe(
+      "#cost-and-waste",
+    );
+    expect(within(nav).queryByText("coming soon")).toBeNull();
   });
 
-  it.each(["#nope", "#estate/extra", "#cost-and-waste"])(
+  it.each(["#nope", "#estate/extra", "#cost-and-waste/extra"])(
     "shows a not-found view with a way back for %s",
     async (hash) => {
       window.location.hash = hash;

@@ -259,6 +259,7 @@ export function generateDemoEstate(): {
   const alerts: AlertAnalysis = {
     asOf: "2026-10-15",
     historyDays: 14,
+    firstDay: "2026-10-01",
     floorBurst: [
       {
         date: "2026-10-15",

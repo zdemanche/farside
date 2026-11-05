@@ -88,6 +88,8 @@ function mixedCurrencyGate(rows: DailyCost[], asOf: string): HistoryGate | null 
 export type AlertAnalysis = {
   asOf: string;
   historyDays: number;
+  /** Earliest daily cost row on or before asOf; null when there are none. */
+  firstDay: string | null;
   floorBurst: FloorBurstPoint[];
   alerts: SpendAlert[];
   digest: AlertDigest;
@@ -337,6 +339,7 @@ export function analyzeAlerts(input: {
   return {
     asOf,
     historyDays: evaluated.historyDays,
+    firstDay: datesOnOrBefore(rows, asOf)[0] ?? null,
     floorBurst: evaluated.undetermined?.reason === "mixed_currency" ? [] : floorBurst(rows, asOf),
     alerts: evaluated.alerts,
     digest: deliverDigest(buildDigest(asOf, evaluated.alerts, input.recipients ?? []), input.mailer),

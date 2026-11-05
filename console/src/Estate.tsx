@@ -1,4 +1,5 @@
 import { useOverview } from "./data/context";
+import { Headline } from "./Headline";
 import { LastScan } from "./LastScan";
 import { ScreenState } from "./ScreenState";
 import { TERMS, sentenceCase } from "./terms";
@@ -25,6 +26,7 @@ export function Estate() {
       >
         {(data) => (
           <>
+            <Headline />
             <ul className="stats" role="list">
               <li className="stat">Resources {data.resourceTotal}</li>
               <li className="stat">No owner {data.noOwnerTotal}</li>

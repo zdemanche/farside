@@ -92,6 +92,7 @@ describe("Issues screen", () => {
     const base = {
       subscription: "s",
       status: "open" as const,
+      cloud: "azure" as const,
       evidence: "",
       savings: null,
       coverage: "assessed",
@@ -106,7 +107,7 @@ describe("Issues screen", () => {
       sourceWith({
         issues: async () => [
           { ...base, id: "i-az", resourceId: azure },
-          { ...base, id: "i-gcp", resourceId: gcp },
+          { ...base, id: "i-gcp", cloud: "gcp" as const, resourceId: gcp },
           { ...base, id: "i-plain", resourceId: "plain-id" },
         ],
       }),

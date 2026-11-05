@@ -1,15 +1,19 @@
 import {
   HEALTH_SCORE_FORMULA,
   scoreHealth,
+  type Cloud,
   type Finding,
   type InventoryRecord,
 } from "@farside/scan-contracts";
 import { DataError } from "./error";
 import { formatEvidence, toMoney, lifecycleFrom, recoveryFrom } from "./derive";
 import type {
+  BillingView,
   BlindSpot,
+  CostWasteView,
   DataSource,
   EstateOverview,
+  Headline,
   InventoryRow,
   IssueRow,
   IssueStatus,
@@ -260,6 +264,7 @@ function issueRow(seed: IssueSeed): IssueRow {
   const coverage = coverageOf(seed.checkId);
   return {
     id: seed.id,
+    cloud: "azure",
     checkId: seed.checkId,
     resourceId: seed.id,
     subscription: SUBSCRIPTION,
@@ -388,14 +393,160 @@ function inventoryRow(resource: InventoryRecord): InventoryRow {
   };
 }
 
-export function demoSource(): DataSource {
+const COST_WASTE: CostWasteView = {
+  readable: true,
+  reason: null,
+  spend: {
+    currency: "USD",
+    periodStart: "2026-10-01",
+    periodEnd: "2026-10-31",
+    provisionalDate: null,
+    services: [
+      {
+        serviceName: "Virtual Machines",
+        costAmount: "1840.00",
+        provisional: false,
+        periodStart: "2026-10-01",
+        periodEnd: "2026-10-31",
+      },
+      {
+        serviceName: "Storage",
+        costAmount: "412.50",
+        provisional: false,
+        periodStart: "2026-10-01",
+        periodEnd: "2026-10-31",
+      },
+    ],
+    monthOnMonth: [
+      {
+        serviceName: "Virtual Machines",
+        currentMonthCost: "1840.00",
+        previousMonthCost: "1600.00",
+        deltaAmount: "240.00",
+        deltaPercent: "15.00",
+      },
+    ],
+  },
+  floorBurst: [
+    { date: "2026-10-30", actual: "74.00", floor: "58.00", burst: "16.00", currency: "USD" },
+  ],
+  commitments: {
+    reservations: [
+      {
+        reservationId: "res-d2s",
+        skuName: "Standard_D2s_v5",
+        utilisationPercent: 62,
+        expiryDate: "2027-03-01",
+      },
+    ],
+    savingsPlans: [],
+    noneFound: { reservations: false, savingsPlans: true },
+  },
+  waste: [
+    {
+      cloud: "azure",
+      checkId: "azure-waste-unattached-disks",
+      resourceId: "disk-unattached",
+      subscriptionId: SUBSCRIPTION,
+      evidence: { diskId: "disk-unattached", diskState: "Unattached", sizeGb: 128 },
+      savings: { min: "8.00", max: "12.00", currency: "USD" },
+      issueHref: "#issues/disk-unattached",
+    },
+  ],
+  totals: { min: "8.00", max: "12.00", currency: "USD", assessedCount: 1, unassessedScopes: 2 },
+  history: { days: 30, firstDay: "2026-09-01", daysNeeded: null, closer: null },
+};
+
+const BILLING: BillingView = {
+  contract: {
+    plan: "Farside Standard",
+    startDate: "2026-10-01T00:00:00.000Z",
+    endDate: null,
+    state: "active",
+    amountDue: "0.00",
+    currency: "USD",
+    unpaidAt: null,
+    stateChangedAt: "2026-10-01T00:00:00.000Z",
+  },
+  canScan: true,
+  invoices: [],
+  retainUntil: null,
+};
+
+const HEADLINE: Headline = {
+  sentence:
+    "Your Azure and GCP costs, nameable waste, backup gaps, support losses, and what Farside could not see. Unproven checks are not supported and are left out of every figure.",
+  figures: [
+    {
+      id: "monthlyCost",
+      label: "Monthly cost",
+      href: "#cost-and-waste",
+      status: "ok",
+      value: { amount: "2252.50", currency: "USD" },
+    },
+    {
+      id: "waste",
+      label: "Nameable waste",
+      href: "#issues",
+      status: "ok",
+      value: { min: "8.00", max: "12.00", currency: "USD" },
+    },
+    {
+      id: "backup",
+      label: "Production systems not backed up",
+      href: "#recovery",
+      status: "ok",
+      value: { unprotected: 1, production: 3, undetermined: 0 },
+    },
+    {
+      id: "lifecycle",
+      label: "Things losing support in 90 days",
+      href: "#lifecycle",
+      status: "not_assessed",
+      value: null,
+    },
+    {
+      id: "unseen",
+      label: "What Farside could not see",
+      href: "#blind-spots",
+      status: "ok",
+      value: { count: 2 },
+    },
+  ],
+};
+
+function costWasteFor(cloud?: Cloud): CostWasteView {
+  if (!cloud) {
+    return COST_WASTE;
+  }
+  const waste = COST_WASTE.waste.filter((item) => item.cloud === cloud);
+  return {
+    ...COST_WASTE,
+    waste,
+    totals:
+      waste.length === COST_WASTE.waste.length
+        ? COST_WASTE.totals
+        : { ...COST_WASTE.totals, min: "0.00", max: "0.00", assessedCount: 0 },
+  };
+}
+
+export function demoSource(cloud?: Cloud): DataSource {
   let settings = DEFAULT_SETTINGS;
   return {
     mode: "demo",
     orgId: "demo",
+    ...(cloud ? { cloud } : {}),
     overview: async () => OVERVIEW,
-    inventory: async () => DEMO_RESOURCES.map(inventoryRow),
-    issues: async () => ISSUES,
+    inventory: async () =>
+      DEMO_RESOURCES.map(inventoryRow).filter((row) => !cloud || row.cloud === cloud),
+    issues: async () => ISSUES.filter((row) => !cloud || row.cloud === cloud),
+    costWaste: async () => costWasteFor(cloud),
+    headline: async () => HEADLINE,
+    billing: async () => BILLING,
+    deletion: async () => null,
+    offboard: async () => {
+      throw new DataError("failed", 403, "Demo mode: nothing was offboarded");
+    },
     scans: async () => SCANS,
     scan: async (id) => {
       const scan = SCANS.find((row) => row.id === id);

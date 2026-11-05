@@ -3,9 +3,10 @@ import { useSource } from "./data/context";
 import type { InventoryRow } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { plural } from "./plural";
+import { ExportButton } from "./ExportButton";
 import { LastScan } from "./LastScan";
 import { ScreenState } from "./ScreenState";
-import { shortName } from "./terms";
+import { CLOUD_LABEL, shortName } from "./terms";
 
 type Filters = {
   owner: string;
@@ -229,6 +230,7 @@ function InventoryBody({
               <thead>
                 <tr>
                   <th scope="col">Name</th>
+                  <th scope="col">Cloud</th>
                   <th scope="col">Service</th>
                   <th scope="col">Subscription</th>
                   <th scope="col">Region</th>
@@ -239,6 +241,7 @@ function InventoryBody({
                 {filtered.map((resource) => (
                   <tr key={resource.resourceUri}>
                     <th scope="row">{resource.displayName}</th>
+                    <td>{resource.cloud ? CLOUD_LABEL[resource.cloud] : ""}</td>
                     <td>{resource.resourceType}</td>
                     <td>{resource.subscriptionOrProject}</td>
                     <td>{resource.region}</td>
@@ -267,6 +270,7 @@ export function Inventory({
         Inventory
       </h1>
       <LastScan />
+      <ExportButton kind="inventory" label="Export inventory" />
       <ScreenState
         label="the inventory"
         resource={resources}

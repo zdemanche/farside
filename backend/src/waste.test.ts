@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Finding } from "@farside/scan-contracts";
-import { replayFixture } from "./alerts.js";
+import { analyzeAlerts, replayFixture, WINDOW_DAYS } from "./alerts.js";
 import { buildApp } from "./app.js";
 import { fixtureBudgetClient } from "./budgets.js";
 import { fixtureCommitmentClient } from "./commitments.js";
@@ -69,7 +69,9 @@ describe("waste totals", () => {
     expect(view.reason).toBe("cost could not be read");
     expect(view.spend).toBeNull();
     expect(view.waste).toHaveLength(1);
-    expect(view.waste[0]?.issueHref).toBe("#issues/disk-unattached");
+    expect(view.waste[0]?.issueHref).toBe(
+      `#issues/${encodeURIComponent("azure-waste-unattached-disks:disk-unattached:main:azure-waste-unattached-disks")}`,
+    );
   });
 
   it("includes assessed GCP waste ranges in the same totals", () => {
@@ -103,6 +105,39 @@ describe("waste totals", () => {
       findings: [gcpFail],
       coverage: [assessed],
     }).waste[0]?.resourceId).toBe("disk-parked");
+  });
+});
+
+describe("cost-waste history", () => {
+  const row = (date: string) => ({
+    date,
+    subscriptionId: "main",
+    serviceName: "Compute",
+    costAmount: "10.00",
+    currency: "USD",
+  });
+  const view = (alerts: ReturnType<typeof analyzeAlerts> | null) =>
+    costWasteView({ cost: null, alerts, commitments: null, findings: [], coverage: [] });
+
+  it("reports no history when there are no alerts", () => {
+    expect(view(null).history).toEqual({ days: null, firstDay: null, daysNeeded: null, closer: null });
+  });
+
+  it("names the first export day on a first-day snapshot, not a month start", () => {
+    const alerts = analyzeAlerts({ rows: [row("2026-10-17")], asOf: "2026-10-17" });
+    expect(view(alerts).history).toMatchObject({ days: 0, firstDay: "2026-10-17" });
+  });
+
+  it("says how many more days close an alert rule that history is too short for", () => {
+    const alerts = analyzeAlerts({
+      rows: [row("2026-10-01"), row("2026-10-02"), row("2026-10-03")],
+      asOf: "2026-10-03",
+    });
+    const { history } = view(alerts);
+    expect(history.days).toBe(2);
+    expect(history.firstDay).toBe("2026-10-01");
+    expect(history.daysNeeded).toBe(WINDOW_DAYS - 2);
+    expect(history.closer).toBe(`${WINDOW_DAYS - 2} more completed export days`);
   });
 });
 

@@ -28,18 +28,21 @@ export function Time({
   return <time dateTime={value}>{dateOnly ? DATE.format(ms) : `${DATE_TIME.format(ms)} UTC`}</time>;
 }
 
+export function formatAmount(amount: string, currency: string): string {
+  try {
+    return new Intl.NumberFormat(LOCALE, {
+      style: "currency",
+      currency,
+      currencyDisplay: "code",
+    }).format(Number(amount));
+  } catch {
+    return `${amount} ${currency}`;
+  }
+}
+
 export function formatMoney(money: Money | null): string {
   if (!money) {
     return "no estimate";
   }
-  try {
-    const currency = new Intl.NumberFormat(LOCALE, {
-      style: "currency",
-      currency: money.currency,
-      currencyDisplay: "code",
-    });
-    return `${currency.format(Number(money.min))} to ${currency.format(Number(money.max))} per ${money.period}`;
-  } catch {
-    return `${money.min} to ${money.max} ${money.currency} per ${money.period}`;
-  }
+  return `${formatAmount(money.min, money.currency)} to ${formatAmount(money.max, money.currency)} per ${money.period}`;
 }

@@ -4,6 +4,7 @@ import type { CommitmentSnapshot } from "./commitments.js";
 import type { CostSnapshot } from "./cost.js";
 import type { CoverageEntry } from "./coverage.js";
 import { scopeId } from "./coverage.js";
+import { issueIdentity, resourceIdFromFinding } from "./issues.js";
 
 export type WasteItem = {
   checkId: string;
@@ -31,6 +32,13 @@ export type CostWasteView = {
   commitments: CommitmentSnapshot | null;
   waste: WasteItem[];
   totals: WasteTotals;
+  /** How much daily history exists; spend alerts are undetermined until it is long enough. */
+  history: {
+    days: number | null;
+    firstDay: string | null;
+    daysNeeded: number | null;
+    closer: string | null;
+  };
 };
 
 function addDecimal(left: string, right: string): string {
@@ -106,7 +114,8 @@ export function costWasteView(input: {
         subscriptionId: finding.scope.subscriptionOrProject,
         evidence: finding.evidence.fields,
         savings: finding.savings,
-        issueHref: `#issues/${resourceId}`,
+        // The Issues screen selects by the stored issue id (checkId:resourceId:scopeId).
+        issueHref: `#issues/${encodeURIComponent(issueIdentity(finding.checkId, resourceIdFromFinding(finding), finding.scope.id))}`,
       },
     ];
   });
@@ -118,5 +127,11 @@ export function costWasteView(input: {
     commitments: input.commitments,
     waste,
     totals: wasteTotals(input.findings, input.coverage),
+    history: {
+      days: input.alerts?.historyDays ?? null,
+      firstDay: input.alerts?.firstDay ?? null,
+      daysNeeded: input.alerts?.undetermined?.daysNeeded ?? null,
+      closer: input.alerts?.undetermined?.closer ?? null,
+    },
   };
 }

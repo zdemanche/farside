@@ -1,7 +1,14 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { CONNECT_STEPS, REQUIRED_AZURE_ROLES } from "./connect-data";
+import {
+  CONNECT_STEPS,
+  GCP_CONNECT_STEPS,
+  OPTIONAL_GCP_ROLES,
+  REQUIRED_AZURE_ROLES,
+  REQUIRED_GCP_ROLES,
+} from "./connect-data";
+import { apiSource } from "./data/api";
 import { DataError } from "./data/error";
 import { expectAxeClean, sourceWith } from "./test-utils";
 
@@ -144,5 +151,110 @@ describe("Connect screen", () => {
     expect(document.body.textContent).not.toContain("Connected tenant");
     finish({ scanStarted: false, attention: null });
     await screen.findByRole("button", { name: "Connect subscription" });
+  });
+
+  describe("GCP", () => {
+    const ORG = "123456789012";
+    const PROJECT = "farside-test";
+
+    function chooseGcp() {
+      fireEvent.change(screen.getByLabelText("Cloud to connect"), { target: { value: "gcp" } });
+    }
+
+    it("shows the spec roles, steps and an unverified note, and no key or secret field", () => {
+      render(<App source={sourceWith({})} />);
+      chooseGcp();
+      expect(screen.getByRole("heading", { name: "Connect GCP" })).toBeTruthy();
+      for (const role of [...REQUIRED_GCP_ROLES, ...OPTIONAL_GCP_ROLES]) {
+        expect(screen.getByText(role)).toBeTruthy();
+      }
+      for (const step of GCP_CONNECT_STEPS) {
+        expect(screen.getByText(step)).toBeTruthy();
+      }
+      expect(screen.getByText(/have not been verified against a live project/)).toBeTruthy();
+      expect(screen.queryByText("Reader")).toBeNull();
+      expect(screen.queryByLabelText(/secret|key/i)).toBeNull();
+    });
+
+    it("sends the cloud with the organization and project ids", async () => {
+      const connect = vi.fn().mockResolvedValue({ scanStarted: true, attention: null });
+      render(<App source={sourceWith({ connect })} />);
+      chooseGcp();
+      fireEvent.change(screen.getByLabelText("GCP organization id"), { target: { value: ORG } });
+      fireEvent.change(screen.getByLabelText("GCP project id"), { target: { value: PROJECT } });
+      fireEvent.click(screen.getByRole("button", { name: "Connect project" }));
+      await waitFor(() => expect(connect).toHaveBeenCalledOnce());
+      expect(connect.mock.calls[0]?.[0]).toEqual({
+        tenantId: ORG,
+        subscriptionId: PROJECT,
+        cloud: "gcp",
+      });
+    });
+
+    it("rejects malformed ids inline and sends nothing", () => {
+      const connect = vi.fn();
+      render(<App source={sourceWith({ connect })} />);
+      chooseGcp();
+      fireEvent.change(screen.getByLabelText("GCP organization id"), { target: { value: "acme" } });
+      fireEvent.change(screen.getByLabelText("GCP project id"), {
+        target: { value: "Bad_Project" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Connect project" }));
+      expect(screen.getByLabelText("GCP organization id").getAttribute("aria-invalid")).toBe(
+        "true",
+      );
+      expect(connect).not.toHaveBeenCalled();
+    });
+
+    it("lists the missing roles after connecting and has no axe violations", async () => {
+      const connect = vi.fn().mockResolvedValue({
+        scanStarted: true,
+        attention: null,
+        roleGaps: [
+          { role: "Cloud SQL Viewer", required: true },
+          { role: "BigQuery access to the billing export", required: false },
+        ],
+      });
+      const { container } = render(<App source={sourceWith({ connect })} />);
+      chooseGcp();
+      fireEvent.change(screen.getByLabelText("GCP organization id"), { target: { value: ORG } });
+      fireEvent.change(screen.getByLabelText("GCP project id"), { target: { value: PROJECT } });
+      fireEvent.click(screen.getByRole("button", { name: "Connect project" }));
+      expect(await screen.findByText(/Cloud SQL Viewer \(required\)/)).toBeTruthy();
+      expect(screen.getByText(/billing export \(optional\)/)).toBeTruthy();
+      await expectAxeClean(container);
+    });
+
+    it("says roles could not be checked rather than claiming none are missing", async () => {
+      const connect = vi
+        .fn()
+        .mockResolvedValue({ scanStarted: true, attention: null, roleGaps: null });
+      render(<App source={sourceWith({ connect })} />);
+      chooseGcp();
+      fireEvent.change(screen.getByLabelText("GCP organization id"), { target: { value: ORG } });
+      fireEvent.change(screen.getByLabelText("GCP project id"), { target: { value: PROJECT } });
+      fireEvent.click(screen.getByRole("button", { name: "Connect project" }));
+      expect(await screen.findByText(/Roles could not be checked/)).toBeTruthy();
+      expect(screen.queryByText(/All required roles are in place/)).toBeNull();
+    });
+  });
+
+  it("checks the roles of a new connection through the API and reports gaps", async () => {
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).endsWith("/roles")
+        ? new Response('{"missingRoles":[{"role":"Compute Viewer","required":true}]}', {
+            status: 200,
+          })
+        : new Response('{"id":"c1","scanStarted":true}', {
+            status: init?.method === "PUT" ? 201 : 200,
+          }),
+    );
+    const result = await apiSource({ baseUrl: "http://x", orgId: "o", fetch }).connect({
+      tenantId: "1",
+      subscriptionId: "p",
+      cloud: "gcp",
+    });
+    expect(fetch.mock.calls[1]?.[0]).toBe("http://x/v1/orgs/o/connections/c1/roles");
+    expect(result.roleGaps).toEqual([{ role: "Compute Viewer", required: true }]);
   });
 });

@@ -4,11 +4,12 @@ import { useSource } from "./data/context";
 import type { IssueRow, IssueStatus } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { formatMoney, Time } from "./format";
+import { ExportButton } from "./ExportButton";
 import { LastScan } from "./LastScan";
 import { inventoryHref, scanHref } from "./links";
 import { ScreenState } from "./ScreenState";
 import { plural } from "./plural";
-import { TERMS, coverageStateLabel, shortName } from "./terms";
+import { CLOUD_LABEL, TERMS, coverageStateLabel, shortName } from "./terms";
 
 const STATUS_TONE: Record<IssueStatus, Tone> = {
   open: "warn",
@@ -157,6 +158,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
             <thead>
               <tr>
                 <th scope="col">Resource</th>
+                <th scope="col">Cloud</th>
                 <th scope="col">Check</th>
                 <th scope="col">Status</th>
                 <th scope="col">Coverage</th>
@@ -171,6 +173,7 @@ function IssuesBody({ issues, hash }: { issues: IssueRow[]; hash: string }) {
                       {shortName(issue.resourceId)}
                     </a>
                   </th>
+                  <td>{CLOUD_LABEL[issue.cloud]}</td>
                   <td>{issue.checkId}</td>
                   <td>
                     <Chip tone={STATUS_TONE[issue.status]}>
@@ -245,6 +248,7 @@ export function Issues({ hash = currentHash() }: { hash?: string }) {
         was {TERMS.assessed}.
       </p>
       <LastScan />
+      <ExportButton kind="issues" label="Export issues" />
       <ScreenState
         label="issues"
         resource={issues}

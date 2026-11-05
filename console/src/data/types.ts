@@ -24,6 +24,7 @@ export type IssueStatus = "open" | "closed" | "not_confirmed";
 
 export type IssueRow = {
   id: string;
+  cloud: Cloud;
   checkId: string;
   resourceId: string;
   subscription: string;
@@ -122,16 +123,177 @@ export type OrgSettings = {
   scanRetryLimit: number;
 };
 
-export type ConnectInput = { tenantId: string; subscriptionId: string };
+export type ConnectInput = { tenantId: string; subscriptionId: string; cloud?: Cloud };
 
-export type ConnectResult = { scanStarted: boolean; attention: string | null };
+export type RoleGap = { role: string; required: boolean };
+
+export type ConnectResult = {
+  scanStarted: boolean;
+  attention: string | null;
+  /** Roles the connection lacks; null when they could not be checked. Absent in demo mode. */
+  roleGaps?: RoleGap[] | null;
+};
+
+export type SpendFigure = {
+  serviceName: string;
+  costAmount: string;
+  provisional: boolean;
+  periodStart: string;
+  periodEnd: string;
+};
+
+export type ReservationUse = {
+  reservationId: string;
+  skuName: string;
+  utilisationPercent: number;
+  expiryDate: string;
+};
+
+export type SavingsPlanUse = {
+  savingsPlanId: string;
+  committedAmount: string;
+  usedAmount: string;
+  utilisationPercent: number;
+  expiryDate: string;
+  currency: string;
+};
+
+export type SpendChange = {
+  serviceName: string;
+  currentMonthCost: string;
+  previousMonthCost: string;
+  deltaAmount: string;
+  deltaPercent: string;
+};
+
+export type WasteItem = {
+  cloud: Cloud;
+  checkId: string;
+  resourceId: string;
+  subscriptionId: string;
+  evidence: Record<string, string | number | boolean | null>;
+  savings: { min: string; max: string; currency: string };
+  /** Hash link to the stored issue; the backend builds it from the issue identity. */
+  issueHref: string;
+};
+
+/** Read model of GET /v1/orgs/:orgId/cost-waste. */
+export type CostWasteView = {
+  readable: boolean;
+  reason: string | null;
+  spend: {
+    currency: string;
+    periodStart: string;
+    periodEnd: string;
+    provisionalDate: string | null;
+    services: SpendFigure[];
+    monthOnMonth: SpendChange[];
+  } | null;
+  floorBurst:
+    { date: string; actual: string; floor: string; burst: string; currency: string }[] | null;
+  commitments: {
+    reservations: ReservationUse[];
+    savingsPlans: SavingsPlanUse[];
+    noneFound: { reservations: boolean; savingsPlans: boolean };
+    harvestStatus?: "unverified";
+  } | null;
+  waste: WasteItem[];
+  history: {
+    days: number | null;
+    firstDay: string | null;
+    daysNeeded: number | null;
+    closer: string | null;
+  };
+  totals: {
+    min: string;
+    max: string;
+    currency: string;
+    assessedCount: number;
+    unassessedScopes: number;
+  };
+};
+
+export type HeadlineStatus = "ok" | "not_assessed" | "not_supported";
+
+export type HeadlineValue =
+  | { amount: string | null; currency: string }
+  | { min: string; max: string; currency: string }
+  | { unprotected: number; production: number; undetermined: number }
+  | { count: number }
+  | { byCloud: Record<string, HeadlineValue>; mixedCurrencies: boolean };
+
+export type HeadlineFigure = {
+  id: "monthlyCost" | "waste" | "backup" | "lifecycle" | "unseen";
+  label: string;
+  href: string;
+  status: HeadlineStatus;
+  value: HeadlineValue | null;
+};
+
+/** Read model of GET /v1/orgs/:orgId/headline. */
+export type Headline = { sentence: string; figures: HeadlineFigure[] };
+
+export type ContractState = "active" | "warning" | "grace" | "paused" | "retaining" | "ended";
+
+/** Read model of GET /v1/orgs/:orgId/contract. Farside holds no card data. */
+export type BillingView = {
+  contract: {
+    plan: string;
+    startDate: string;
+    endDate: string | null;
+    state: ContractState;
+    amountDue: string;
+    currency: string;
+    unpaidAt: string | null;
+    stateChangedAt: string;
+  };
+  canScan: boolean;
+  invoices: never[];
+  retainUntil: string | null;
+};
+
+export type GrantToRemove = { kind: string; name: string; optional?: boolean };
+
+/** Read model of GET /v1/orgs/:orgId/deletion and the POST /offboard result. */
+export type DeletionView = {
+  orgId: string;
+  requestedBy: string;
+  deletedAt: string;
+  rowsPurged: Record<string, number>;
+  connectionsRemoved: number;
+  scansStopped: number;
+  scheduleCancelled: boolean;
+  accountClosureAt: string | null;
+  trigger: "customer" | "retention";
+  grantsToRemove: GrantToRemove[];
+};
+
+export type ExportKind = "issues" | "inventory" | "cost";
+
+export type ExportFile = { filename: string; content: string };
 
 export type DataSource = {
   readonly mode: "demo" | "api";
   readonly orgId: string;
+  /** The single cloud every read is limited to; absent when showing all clouds. */
+  readonly cloud?: Cloud;
+  /** Absent when the source cannot produce a farside-export/1 file (demo mode). */
+  exportFile?(
+    kind: ExportKind,
+    signal?: AbortSignal,
+    options?: { allClouds?: boolean },
+  ): Promise<ExportFile>;
   overview(signal?: AbortSignal): Promise<EstateOverview>;
   inventory(signal?: AbortSignal): Promise<InventoryRow[]>;
   issues(signal?: AbortSignal): Promise<IssueRow[]>;
+  costWaste(signal?: AbortSignal): Promise<CostWasteView>;
+  headline(signal?: AbortSignal): Promise<Headline>;
+  /** Rejects with a not-found DataError when the org has no contract yet. */
+  billing(signal?: AbortSignal): Promise<BillingView>;
+  /** Null until the org has been offboarded. */
+  deletion(signal?: AbortSignal): Promise<DeletionView | null>;
+  /** Requires the customer to confirm and to have been offered the export. */
+  offboard(signal?: AbortSignal): Promise<DeletionView>;
   scans(signal?: AbortSignal): Promise<ScanRow[]>;
   scan(id: string, signal?: AbortSignal): Promise<ScanRow>;
   blindSpots(signal?: AbortSignal): Promise<BlindSpotsView>;

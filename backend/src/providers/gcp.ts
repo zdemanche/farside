@@ -23,8 +23,15 @@ export const gcpProvider: CloudProvider = {
   cloud: "gcp",
   launchCheckIds: GCP_LAUNCH_CHECK_IDS,
   harvestAssessedCheckIds: GCP_HARVEST_ASSESSED_CHECK_IDS,
-  requiredRoles: [],
-  optionalRoles: [],
+  // From docs/gcp/launch-checks.json. Not yet verified against a live project (#192).
+  requiredRoles: [
+    "Cloud Asset Viewer",
+    "Compute Viewer",
+    "Recommender Viewer",
+    "Cloud SQL Viewer",
+    "Certificate Manager Viewer",
+  ],
+  optionalRoles: ["BigQuery access to the billing export"],
   scopeOf: projectOf,
   harvester: (clock) => {
     const manifest = docGcpGroundTruth as GcpGroundTruthManifest;
