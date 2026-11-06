@@ -203,4 +203,21 @@ describe("export routes", () => {
     expect(refused.statusCode).toBe(403);
     expect(JSON.stringify(refused.json())).not.toContain("disk-unattached");
   });
+
+  it("filters the cost export by cloud: Azure keeps its rows, GCP gets none", async () => {
+    const azure = await app.inject({
+      method: "GET",
+      url: "/v1/orgs/org-a/export/cost?cloud=azure",
+      headers: ORG,
+    });
+    const gcp = await app.inject({
+      method: "GET",
+      url: "/v1/orgs/org-a/export/cost?cloud=gcp",
+      headers: ORG,
+    });
+    expect(azure.json().rows.length).toBeGreaterThan(0);
+    expect(gcp.statusCode).toBe(200);
+    expect(validateExport(gcp.json())).toEqual([]);
+    expect(gcp.json().rows).toEqual([]);
+  });
 });

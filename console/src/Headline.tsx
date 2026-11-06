@@ -2,6 +2,7 @@ import { useSource } from "./data/context";
 import type { HeadlineFigure, HeadlineValue } from "./data/types";
 import { useResource } from "./data/use-resource";
 import { formatAmount } from "./format";
+import { isAppHref } from "./links";
 import { plural } from "./plural";
 import { CLOUD_LABEL, TERMS } from "./terms";
 
@@ -41,7 +42,8 @@ function Figure({ figure }: { figure: HeadlineFigure }) {
         : TERMS.notAssessed;
   return (
     <li className="stat">
-      <a href={figure.href}>{figure.label}</a> <span>{text}</span>
+      {isAppHref(figure.href) ? <a href={figure.href}>{figure.label}</a> : figure.label}{" "}
+      <span>{text}</span>
     </li>
   );
 }

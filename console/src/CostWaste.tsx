@@ -6,6 +6,7 @@ import { useResource } from "./data/use-resource";
 import { formatAmount, formatMoney } from "./format";
 import { ExportButton } from "./ExportButton";
 import { LastScan } from "./LastScan";
+import { isAppHref } from "./links";
 import { ScreenState } from "./ScreenState";
 import { plural } from "./plural";
 import { CLOUD_LABEL, TERMS, shortName } from "./terms";
@@ -200,12 +201,16 @@ function Waste({ view }: { view: CostWasteView }) {
                   <td>{formatEvidence(item.evidence)}</td>
                   <td>{range(item.savings.min, item.savings.max, item.savings.currency)}</td>
                   <td>
-                    <a
-                      href={item.issueHref}
-                      aria-label={`View issue for ${shortName(item.resourceId)}`}
-                    >
-                      View issue
-                    </a>
+                    {isAppHref(item.issueHref) ? (
+                      <a
+                        href={item.issueHref}
+                        aria-label={`View issue for ${shortName(item.resourceId)}`}
+                      >
+                        View issue
+                      </a>
+                    ) : (
+                      "No link"
+                    )}
                   </td>
                 </tr>
               ))}

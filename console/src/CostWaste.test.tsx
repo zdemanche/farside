@@ -51,6 +51,22 @@ describe("Cost and waste screen", () => {
     expect(screen.queryByText(/was not found/)).toBeNull();
   });
 
+  it("does not link a waste row whose issue link leaves the app", async () => {
+    const base = await demoSource().costWaste();
+    renderScreen(
+      <CostWaste />,
+      sourceWith({
+        costWaste: async () => ({
+          ...base,
+          waste: base.waste.map((item) => ({ ...item, issueHref: "javascript:alert(1)" })),
+        }),
+      }),
+    );
+    expect(await screen.findByRole("row", { name: /disk-unattached/ })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /View issue/ })).toBeNull();
+    expect(document.querySelector("a[href^='javascript']")).toBeNull();
+  });
+
   it("marks unverified commitments and shows savings plan use", async () => {
     const base = await demoSource().costWaste();
     renderScreen(
