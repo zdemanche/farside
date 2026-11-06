@@ -52,6 +52,24 @@ describe("Headline", () => {
     expect(link.parentElement?.textContent).toMatch(/not supported$/);
   });
 
+  it("does not link a figure whose href leaves the app", async () => {
+    const base = await demoSource().headline();
+    renderScreen(
+      <Headline />,
+      sourceWith({
+        headline: async () => ({
+          ...base,
+          figures: base.figures.map((figure) =>
+            figure.id === "waste" ? { ...figure, href: "https://evil.example/x" } : figure,
+          ),
+        }),
+      }),
+    );
+    expect(await screen.findByText("Nameable waste")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Nameable waste" })).toBeNull();
+    expect(document.querySelector("a[href^='http']")).toBeNull();
+  });
+
   it("shows per-cloud values instead of one summed figure", async () => {
     const base = await demoSource().headline();
     renderScreen(

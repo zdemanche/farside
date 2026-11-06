@@ -65,15 +65,17 @@ export const exportRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/export/cost",
     { schema },
     async (request, reply) => {
+      // Stored cost is read from Azure billing only, so another cloud has none to export.
+      const cloud = cloudOf(request.query);
+      const cost =
+        cloud && cloud !== "azure"
+          ? null
+          : asMutable<CostSnapshot | null>((await ctx.store.read(request.params.orgId, "cost")).cost);
       attachment(reply, "cost");
       return sendClean(
         reply,
         200,
-        exportCost(
-          request.params.orgId,
-          asMutable<CostSnapshot | null>((await ctx.store.read(request.params.orgId, "cost")).cost),
-          ctx.clientTime(request.query.asOf),
-        ),
+        exportCost(request.params.orgId, cost, ctx.clientTime(request.query.asOf)),
       );
     },
   );
