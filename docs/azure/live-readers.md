@@ -13,6 +13,10 @@
 Rules the clients keep:
 
 - The token comes from an injected function and is sent only to `https://management.azure.com`. A `nextLink` pointing elsewhere is refused.
+- Redirects are refused (`redirect: "error"`), every call has a 30 s timeout, and HTTP 429 or 503 is retried up to 3 times, waiting as `Retry-After` asks (capped at 5 s).
+- Resource paths must match a plain `/subscriptions/{id}/...` pattern, and a metric resource must belong to the requested subscription.
+- HTTP 403 is a missing role. HTTP 401 is a rejected token and is reported as that, never as a missing role.
+- A cost value that is missing or not a finite number fails the read, so it is never recorded as 0.00 or NaN.
 - A refused read becomes the missing-role path (or an unreadable budget scope), never an empty result.
 - A metric with no data points is "unavailable", not zero traffic, so an unreported gateway is never called idle.
 - They are not wired into the scan path yet. `harvestMetrics` and the live harvesters are only called from tests today.

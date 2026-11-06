@@ -209,7 +209,7 @@ function Waste({ view }: { view: CostWasteView }) {
                         View issue
                       </a>
                     ) : (
-                      "No link"
+                      TERMS.noLink
                     )}
                   </td>
                 </tr>
