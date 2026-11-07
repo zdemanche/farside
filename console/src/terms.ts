@@ -6,6 +6,7 @@ export const TERMS = {
   assessed: "assessed",
   notAssessed: "not assessed",
   undetermined: "undetermined",
+  noLink: "No link",
 } as const;
 
 export function coverageStateLabel(state: string): string {
