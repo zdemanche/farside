@@ -1,5 +1,6 @@
 import { buildApp } from "./app.js";
 import { systemClock } from "./clock.js";
+import { identityConfigFromEnv } from "./identity.js";
 import { pino } from "pino";
 import { auditRetention, loggerFromEnv, pinoOptions } from "./observability.js";
 import { storeFromEnv } from "./store-from-env.js";
@@ -14,6 +15,7 @@ const app = buildApp(store, {
   clock: systemClock,
   logger: loggerFromEnv(),
   operatorToken: process.env.FARSIDE_OPERATOR_TOKEN || undefined,
+  identity: identityConfigFromEnv(process.env),
 });
 
 setInterval(() => {

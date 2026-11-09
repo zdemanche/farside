@@ -10,6 +10,7 @@ import type { CoverageEntry } from "./coverage.js";
 import type { ResourceFacts } from "./facts.js";
 import type { StoredIssue } from "./issues.js";
 import type { DeletionRecord } from "./offboard.js";
+import type { ClaimOptions, ClaimResult, OrgClaim } from "./org-claim.js";
 import type { DeepReadonly } from "./readonly.js";
 import type { ScanJob } from "./scans.js";
 import type { ScheduleState } from "./scheduler.js";
@@ -128,4 +129,8 @@ export interface OrgRepository {
   getJob(orgId: string, jobId: string): Promise<ScanJob | undefined>;
   patchJob(orgId: string, jobId: string, patch: Partial<ScanJob>): Promise<ScanJob>;
   runningScan(orgId: string, subscriptionId: string): Promise<ScanJob | undefined>;
+
+  orgClaim(orgId: string): Promise<OrgClaim | null>;
+  /** First caller claims (owner), later callers join (member); repeating is idempotent. */
+  claimOrg(orgId: string, actorId: string, options?: ClaimOptions): Promise<ClaimResult>;
 }

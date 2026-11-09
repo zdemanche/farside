@@ -1,5 +1,6 @@
 import { buildApp } from "./app.js";
 import { systemClock } from "./clock.js";
+import { identityConfigFromEnv } from "./identity.js";
 import { pino } from "pino";
 import { loggerFromEnv, pinoOptions } from "./observability.js";
 import { storeFromEnv } from "./store-from-env.js";
@@ -57,6 +58,7 @@ async function start() {
   const app = buildApp(await storeFromEnv(process.env, systemClock, pino(pinoOptions(loggerFromEnv()) || {})), {
     operatorToken: await resolveOperatorToken(),
     logger: loggerFromEnv(),
+    identity: identityConfigFromEnv(process.env),
   });
   await app.ready();
   return app;

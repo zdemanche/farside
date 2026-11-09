@@ -305,3 +305,14 @@ export type DataSource = {
   saveSettings(settings: OrgSettings, signal?: AbortSignal): Promise<OrgSettings>;
   connect(input: ConnectInput, signal?: AbortSignal): Promise<ConnectResult>;
 };
+
+/** GET /v1/orgs/:orgId/claim: whether the org is claimed and the caller's role in it. */
+export type ClaimView = {
+  orgId: string;
+  claimed: boolean;
+  claimedAt: string | null;
+  role: "owner" | "member" | null;
+  member: boolean;
+  owner: boolean;
+  memberCount: number;
+};

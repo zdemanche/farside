@@ -10,7 +10,9 @@ import { guardHarvester } from "./demo.js";
 import type { AppContext, RoutePlugin } from "./http/context.js";
 import { registerHttp } from "./http/hooks.js";
 import { pinoOptions, type LoggerOptions } from "./observability.js";
+import { createAuthenticator, type IdentityOptions } from "./identity.js";
 import { alertRoutes } from "./routes/alerts.js";
+import { claimRoutes } from "./routes/claim.js";
 import { commitmentRoutes } from "./routes/commitments.js";
 import { connectionRoutes } from "./routes/connections.js";
 import { contractRoutes } from "./routes/contract.js";
@@ -43,6 +45,7 @@ const ROUTE_PLUGINS: RoutePlugin[] = [
   settingsRoutes,
   contractRoutes,
   offboardRoutes,
+  claimRoutes,
 ];
 
 export function buildApp(
@@ -59,6 +62,8 @@ export function buildApp(
     scanTimeoutMs?: number;
     mailer?: DigestMailer;
     roleLister?: RoleLister;
+    /** Bearer-token identity (#48). Omit to keep the x-farside-org / x-farside-actor header session. */
+    identity?: IdentityOptions | undefined;
   } = {},
 ) {
   const clock = options.clock ?? store.clock;
@@ -98,6 +103,9 @@ export function buildApp(
     operatorToken: options.operatorToken,
     mailer: options.mailer,
     roleLister: options.roleLister ?? defaultRoleLister(),
+    identity: options.identity
+      ? { config: options.identity, authenticate: createAuthenticator(options.identity) }
+      : undefined,
     clients,
   };
 

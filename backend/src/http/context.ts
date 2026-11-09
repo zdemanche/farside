@@ -4,6 +4,7 @@ import type { BudgetClient } from "../budgets.js";
 import type { Clock } from "../clock.js";
 import type { CommitmentClient } from "../commitments.js";
 import type { CostQueryClient } from "../cost.js";
+import type { Authenticator, IdentityConfig } from "../identity.js";
 import type { ScanRunner } from "../scans.js";
 import type { ScanScheduler } from "../scheduler.js";
 import type { OrgRepository } from "../repository.js";
@@ -20,6 +21,8 @@ declare module "fastify" {
     rejectSecrets?: boolean;
     invalidTitle?: string;
     demo?: (store: OrgRepository, orgId: string) => Promise<DemoReply>;
+    /** Org claim routes: open to a verified user of the org before they are a member. */
+    claim?: boolean;
   }
 }
 
@@ -34,6 +37,8 @@ export type AppContext = {
   operatorToken: string | undefined;
   mailer?: DigestMailer | undefined;
   roleLister: RoleLister;
+  /** Set when FARSIDE_IDENTITY_ISSUER is configured: bearer tokens replace the header session. */
+  identity?: { config: IdentityConfig; authenticate: Authenticator } | undefined;
   clients: {
     cost?: CostQueryClient | undefined;
     commitment?: CommitmentClient | undefined;

@@ -4,6 +4,10 @@ import type { FastifyRequest } from "fastify";
 export type Session = {
   orgId: string;
   actorId: string;
+  /** Roles from the configured role claim; empty for the header stand-in. */
+  roles?: readonly string[];
+  /** How the session was established: the header stand-in, or a verified bearer token. */
+  via?: "header" | "token";
 };
 
 export const ORG_ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$";
@@ -13,7 +17,8 @@ export const ORG_HEADER = "x-farside-org";
 export const ACTOR_HEADER = "x-farside-actor";
 export const OPERATOR_HEADER = "x-farside-operator";
 
-// TODO: E2-S1-T2 Moonaan Identity tokens replace these headers.
+// Header stand-in for local development and tests. When FARSIDE_IDENTITY_ISSUER is set,
+// verified bearer tokens replace it (see identity.ts) and these headers are refused.
 export function sessionFromHeaders(request: FastifyRequest): Session | null {
   const orgHeader = request.headers[ORG_HEADER];
   const orgId = Array.isArray(orgHeader) ? orgHeader[0] : orgHeader;

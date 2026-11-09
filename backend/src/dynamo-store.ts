@@ -36,6 +36,7 @@ import {
   sweepRetention,
   type Draft,
 } from "./org-ops.js";
+import { nextClaim, type ClaimOptions, type ClaimResult, type OrgClaim } from "./org-claim.js";
 import { DEFAULT_CLOUD } from "./providers/index.js";
 import { presentRoles, probeRoles } from "./role-probe.js";
 import {
@@ -83,6 +84,7 @@ const SK = {
   alerts: "ALERTS",
   schedule: "SCHEDULE",
   seeded: "SEEDED",
+  claim: "CLAIM",
 } as const;
 const PREFIX = { connection: "CONN#", inventory: "INV#", cost: "COST#", commitment: "COMMIT#", scan: "SCAN#" } as const;
 
@@ -1004,6 +1006,38 @@ export class DynamoStore implements OrgRepository {
         throw error;
       }
     }
+  }
+
+  async orgClaim(orgId: string): Promise<OrgClaim | null> {
+    await this.#assertLive(orgId);
+    return (await this.#getDoc<OrgClaim>(orgId, SK.claim))?.value ?? null;
+  }
+
+  async claimOrg(orgId: string, actorId: string, options: ClaimOptions = {}): Promise<ClaimResult> {
+    await this.#touch(orgId);
+    for (let attempt = 0; attempt < SEQ_ATTEMPTS; attempt += 1) {
+      const current = await this.#getDoc<OrgClaim>(orgId, SK.claim);
+      const { result, write } = nextClaim(current?.value ?? null, {
+        orgId,
+        actorId,
+        now: this.clock(),
+        mayOwn: options.mayOwn !== false,
+      });
+      if (!write || !result.claim) {
+        return result;
+      }
+      assertNoSecrets(result.claim);
+      try {
+        await this.#putDoc(orgId, SK.claim, result.claim, { expected: current?.version ?? 0 });
+        return result;
+      } catch (error) {
+        if (!(error instanceof ConditionalCheckFailedException)) {
+          throw error;
+        }
+        await backoff(attempt);
+      }
+    }
+    throw new Error(`claim for ${orgId} conflicted after ${SEQ_ATTEMPTS} attempts`);
   }
 
   async offboard(
