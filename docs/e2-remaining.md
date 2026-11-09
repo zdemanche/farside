@@ -52,4 +52,4 @@ The job runner can start as `actor: system` without a user request. Token exchan
 
 ### Week-8 session (#80, #81)
 
-The Estate / Blind spots script is written (`docs/demo-script.md`). The prospect sitting, willingness-to-pay notes, and the continue-or-stop record stay leftover.
+The Estate / Blind spots script is written (`docs/demo-script.md`). Session kit (agenda, feedback capture, willingness-to-pay questions) is `docs/week8/prospect-session-kit.md`; the decision template is `docs/week8/continue-or-stop.md`. The prospect sitting itself, its notes, and a filed continue-or-stop decision stay leftover: they need the D4 prospect and a person in the room.
