@@ -293,6 +293,26 @@ Org `demo` (`VITE_FARSIDE_DEMO=1` on the console) is a synthetic estate. Do not 
 
 Steps 2–6 and 8 belong to iac-hub, the operator, base, Identity and Launch. The runner never performs them: live mode stops at the first one unless the operator lists it in `--confirmed` after doing it by hand. Exit 1 on a blocked or failed step. Result is `pass` only when every step passed or was confirmed in live mode. A dry-run record is not the cold rehearsal; #176 closes on a live record from a test tenant.
 
+## Appendix: retire the dedicated account at offboarding (#182)
+
+Last step of D8, after the deletion API. Not part of sale-to-first-scan.
+
+1. Customer (or retention) offboards: POST `/v1/orgs/{orgId}/offboard`. Save GET `/v1/orgs/{orgId}/deletion` as `deletion.json`.
+2. Dry run: `node scripts/offboarding/retire-account.mjs --customer <slug> --account-id <id> --receipt deletion.json [--org <orgId>]`.
+3. From the Organizations management account: add `--apply --confirm <id> --out docs/retirements/<date>-<slug>.json`.
+
+Guards: account id must be the one `infra/accounts.json` registers to the slug (never product-dev); receipt must be for that org, dated in the past, with `rowsPurged`, a `customer`/`retention` trigger and `accountClosureAt: null`; `--confirm` must repeat the id; the caller must not be the account itself. No AWS credentials: skip, exit 0. Already `SUSPENDED`/`PENDING_CLOSURE`: no call, exit 0. Uses `aws organizations close-account` (90-day suspension, then AWS closes it).
+
+#### Check
+
+- Record has `status: closed` and `accountClosureAt`.
+- `aws organizations describe-account` shows `SUSPENDED` or `PENDING_CLOSURE`.
+
+#### Rollback
+
+- Closed in error: reopen through AWS Support within the 90-day window. Data was already deleted by step 1.
+- After the record is saved, remove the slug from `infra/accounts.json` and `infra/customers.json` in one PR so no deploy targets it.
+
 ## Appendix: injected failure walkthrough {#injected-failure}
 
 Walk this on any org. It is the #177 check: one injected failure, then rollback, then a clean retry.
