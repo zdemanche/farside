@@ -30,6 +30,9 @@ export type ScanHarvestClients = {
   budgetClient?: BudgetClient;
 };
 
+/** Per-scan clients, for live clients whose token depends on the connection's tenant. */
+export type HarvestClientSource = (input: { orgId: string; subscriptionId: string }) => Promise<ScanHarvestClients>;
+
 export type PostHarvestContext = {
   orgId: string;
   subscriptionId: string;

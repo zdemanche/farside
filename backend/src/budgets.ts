@@ -175,9 +175,37 @@ export function applyBudgetCoverage(
   return applyCoverageResults(existing, harvested);
 }
 
+/**
+ * Without `subscriptionIds` every budget finding is replaced (an org-wide list). With them,
+ * only those subscriptions are, so a one-subscription scan keeps the others' findings.
+ */
 export function mergeBudgetFindings(
   existing: readonly Finding[],
   next: readonly Finding[],
+  subscriptionIds?: readonly string[],
 ): Finding[] {
-  return [...existing.filter((finding) => finding.checkId !== NO_BUDGETS), ...next];
+  const scope = subscriptionIds ? new Set(subscriptionIds.map((id) => id.toLowerCase())) : null;
+  return [
+    ...existing.filter(
+      (finding) =>
+        finding.checkId !== NO_BUDGETS ||
+        (scope !== null && !scope.has(finding.scope.subscriptionOrProject.toLowerCase())),
+    ),
+    ...next,
+  ];
+}
+
+/** Keeps rows for subscriptions the new snapshot did not list. */
+export function mergeBudgetSnapshot(existing: BudgetSnapshot | null, next: BudgetSnapshot): BudgetSnapshot {
+  if (!existing) {
+    return next;
+  }
+  const listed = new Set(next.subscriptions.map((row) => row.subscriptionId.toLowerCase()));
+  return {
+    ...next,
+    subscriptions: [
+      ...existing.subscriptions.filter((row) => !listed.has(row.subscriptionId.toLowerCase())),
+      ...next.subscriptions,
+    ],
+  };
 }

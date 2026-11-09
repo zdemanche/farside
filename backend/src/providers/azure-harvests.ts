@@ -1,5 +1,7 @@
 import { abortable } from "../abortable.js";
-import { applyBudgetCoverage, harvestBudgets, mergeBudgetFindings } from "../budgets.js";
+import { applyBudgetCoverage, harvestBudgets, mergeBudgetFindings, mergeBudgetSnapshot } from "../budgets.js";
+import { asMutable } from "../readonly.js";
+import type { BudgetSnapshot } from "../budgets.js";
 import { applyCommitmentCoverage, harvestCommitments, mergeCommitmentFindings } from "../commitments.js";
 import { applyCostCoverage, harvestCost } from "../cost.js";
 import { applyCoverageResult, recordCoverageScope, type CoverageEntry } from "../coverage.js";
@@ -46,7 +48,8 @@ async function persistAzureHarvests(
     );
   }
   if (collected.budgets) {
-    await store.putBudgets(orgId, collected.budgets.snapshot);
+    const { budgets } = await store.read(orgId, "budgets");
+    await store.putBudgets(orgId, mergeBudgetSnapshot(asMutable<BudgetSnapshot | null>(budgets), collected.budgets.snapshot));
   }
 }
 
@@ -67,7 +70,11 @@ function applyAzureHarvests(
   }
   if (collected.budgets) {
     coverage = applyBudgetCoverage(coverage, collected.budgets.coverage);
-    findings = mergeBudgetFindings(findings, collected.budgets.findings);
+    findings = mergeBudgetFindings(
+      findings,
+      collected.budgets.findings,
+      collected.budgets.snapshot.subscriptions.map((row) => row.subscriptionId),
+    );
   }
   return { findings, coverage: fillUnrunLaunchCoverage(coverage, subscriptionId) };
 }

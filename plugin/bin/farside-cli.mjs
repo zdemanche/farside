@@ -874,8 +874,27 @@ async function harvestBudgets(input) {
 function applyBudgetCoverage(existing, harvested) {
   return applyCoverageResults(existing, harvested);
 }
-function mergeBudgetFindings(existing, next) {
-  return [...existing.filter((finding) => finding.checkId !== NO_BUDGETS), ...next];
+function mergeBudgetFindings(existing, next, subscriptionIds) {
+  const scope4 = subscriptionIds ? new Set(subscriptionIds.map((id) => id.toLowerCase())) : null;
+  return [
+    ...existing.filter(
+      (finding) => finding.checkId !== NO_BUDGETS || scope4 !== null && !scope4.has(finding.scope.subscriptionOrProject.toLowerCase())
+    ),
+    ...next
+  ];
+}
+function mergeBudgetSnapshot(existing, next) {
+  if (!existing) {
+    return next;
+  }
+  const listed = new Set(next.subscriptions.map((row) => row.subscriptionId.toLowerCase()));
+  return {
+    ...next,
+    subscriptions: [
+      ...existing.subscriptions.filter((row) => !listed.has(row.subscriptionId.toLowerCase())),
+      ...next.subscriptions
+    ]
+  };
 }
 
 // backend/src/clock.ts
@@ -3523,6 +3542,9 @@ function abortable(signal, work, timeoutMs) {
   });
 }
 
+// backend/src/readonly.ts
+var asMutable = (value) => value;
+
 // backend/src/providers/launch-ids.ts
 var AZURE_LAUNCH_CHECK_IDS = [
   "azure-inventory-all-resources",
@@ -3599,7 +3621,8 @@ async function persistAzureHarvests({ orgId, subscriptionId, store }, collected)
     );
   }
   if (collected.budgets) {
-    await store.putBudgets(orgId, collected.budgets.snapshot);
+    const { budgets } = await store.read(orgId, "budgets");
+    await store.putBudgets(orgId, mergeBudgetSnapshot(asMutable(budgets), collected.budgets.snapshot));
   }
 }
 function applyAzureHarvests({ subscriptionId }, collected, outputs) {
@@ -3615,7 +3638,11 @@ function applyAzureHarvests({ subscriptionId }, collected, outputs) {
   }
   if (collected.budgets) {
     coverage = applyBudgetCoverage(coverage, collected.budgets.coverage);
-    findings = mergeBudgetFindings(findings, collected.budgets.findings);
+    findings = mergeBudgetFindings(
+      findings,
+      collected.budgets.findings,
+      collected.budgets.snapshot.subscriptions.map((row) => row.subscriptionId)
+    );
   }
   return { findings, coverage: fillUnrunLaunchCoverage(coverage, subscriptionId) };
 }
@@ -4882,9 +4909,6 @@ var DeletedOrgError = class extends Error {
   }
 };
 
-// backend/src/readonly.ts
-var asMutable = (value) => value;
-
 // backend/src/repository.ts
 var MAX_SCANS_PER_ORG = 200;
 var SUBSCRIPTION_DISCONNECTED = "subscription disconnected";
@@ -5524,13 +5548,14 @@ var ScanRunner = class {
       });
       const replaceIds = new Set(registeredCheckIds(result.inventory.cloud));
       const provider = providerFor(result.inventory.cloud);
+      const clients = typeof this.harvestClients === "function" ? await this.harvestClients({ orgId, subscriptionId: current.subscriptionId }) : this.harvestClients;
       const postHarvest = provider.collectHarvests ? await provider.collectHarvests({
         orgId,
         subscriptionId: current.subscriptionId,
         signal,
         remainingMs,
         clock: this.clock,
-        clients: this.harvestClients,
+        clients,
         store: this.store
       }) : NO_POST_HARVEST;
       if (!postHarvest || signal.aborted) {

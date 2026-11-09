@@ -14,4 +14,11 @@ export {
   registerProvider,
   registeredCheckIds,
 } from "./registry.js";
-export type { CloudProvider, HarvestResult, Harvester, PostHarvest, ScanHarvestClients } from "./types.js";
+export type {
+  CloudProvider,
+  HarvestClientSource,
+  HarvestResult,
+  Harvester,
+  PostHarvest,
+  ScanHarvestClients,
+} from "./types.js";

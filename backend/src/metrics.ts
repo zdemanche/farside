@@ -81,7 +81,7 @@ export function unconfiguredMetricsClient(): MetricsClient {
   };
 }
 
-function missingRoleCoverage(subscriptionId: string): CoverageEntry[] {
+export function missingRoleCoverage(subscriptionId: string): CoverageEntry[] {
   return METRIC_CHECK_IDS.map((checkId) =>
     recordCoverageScope({
       subscriptionOrProject: subscriptionId,

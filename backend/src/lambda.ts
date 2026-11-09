@@ -1,4 +1,6 @@
 import { buildApp } from "./app.js";
+import { azureLiveFromEnv } from "./azure-live-harvest.js";
+import { unconfiguredHarvester } from "./scans.js";
 import { systemClock } from "./clock.js";
 import { pino } from "pino";
 import { loggerFromEnv, pinoOptions } from "./observability.js";
@@ -54,9 +56,12 @@ export async function resolveOperatorToken(
 }
 
 async function start() {
-  const app = buildApp(await storeFromEnv(process.env, systemClock, pino(pinoOptions(loggerFromEnv()) || {})), {
+  const store = await storeFromEnv(process.env, systemClock, pino(pinoOptions(loggerFromEnv()) || {}));
+  const live = azureLiveFromEnv(process.env, { store, fallback: unconfiguredHarvester(), clock: systemClock });
+  const app = buildApp(store, {
     operatorToken: await resolveOperatorToken(),
     logger: loggerFromEnv(),
+    ...(live ? { harvester: live.harvester, harvestClients: live.harvestClients, roleLister: live.roleLister } : {}),
   });
   await app.ready();
   return app;

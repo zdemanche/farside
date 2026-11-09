@@ -7,7 +7,13 @@ import { applyCoverageResults, type CoverageEntry, type CoverageState } from "./
 import type { ResourceFacts } from "./facts.js";
 import { applyScanToIssues } from "./issues.js";
 import { DEFAULT_CLOUD, providerFor, registeredCheckIds } from "./providers/index.js";
-import type { HarvestResult, Harvester, PostHarvest, ScanHarvestClients } from "./providers/types.js";
+import type {
+  HarvestClientSource,
+  HarvestResult,
+  Harvester,
+  PostHarvest,
+  ScanHarvestClients,
+} from "./providers/types.js";
 import { fixtureHarvester } from "./providers/fixture-harvester.js";
 import { PROVIDER_NOT_CONFIGURED, ProviderNotConfiguredError, rejectUnconfigured } from "./providers/unconfigured.js";
 import { scopeOf } from "./scope.js";
@@ -137,7 +143,7 @@ export function findScanView(jobs: readonly DeepReadonly<ScanJob>[], scanId: str
   return job && job.status !== "cancelled" ? toScanView(job, job.id === currentScanId(jobs)) : undefined;
 }
 
-export type { HarvestResult, Harvester, ScanHarvestClients };
+export type { HarvestClientSource, HarvestResult, Harvester, ScanHarvestClients };
 
 export { fixtureHarvester };
 
@@ -266,7 +272,7 @@ export class ScanRunner {
   constructor(
     private readonly store: OrgRepository,
     private readonly harvester: Harvester,
-    private readonly harvestClients: ScanHarvestClients = {},
+    private readonly harvestClients: ScanHarvestClients | HarvestClientSource = {},
     private readonly clock: Clock = systemClock,
     private readonly log: LogSink = silentLog,
     readonly scanTimeoutMs: number = DEFAULT_SCAN_TIMEOUT_MS,
@@ -473,6 +479,10 @@ export class ScanRunner {
       });
       const replaceIds = new Set(registeredCheckIds(result.inventory.cloud));
       const provider = providerFor(result.inventory.cloud);
+      const clients =
+        typeof this.harvestClients === "function"
+          ? await this.harvestClients({ orgId, subscriptionId: current.subscriptionId })
+          : this.harvestClients;
       const postHarvest = provider.collectHarvests
         ? await provider.collectHarvests({
             orgId,
@@ -480,7 +490,7 @@ export class ScanRunner {
             signal,
             remainingMs,
             clock: this.clock,
-            clients: this.harvestClients,
+            clients,
             store: this.store,
           })
         : NO_POST_HARVEST;
