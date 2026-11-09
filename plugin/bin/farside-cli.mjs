@@ -1,7 +1,7 @@
 import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);
 
 // backend/src/cli.ts
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync as existsSync2, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import { join as join2 } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -5951,8 +5951,42 @@ var WORKSPACE_FILES = {
   inventory: "inventory.json",
   coverage: "coverage.json",
   issues: "issues.json",
-  cost: "cost.json"
+  cost: "cost.json",
+  state: "state.json"
 };
+function emptyState() {
+  return { version: 1, scans: [], inventories: {}, costs: {} };
+}
+function readOptional(dir, name) {
+  return existsSync2(join2(dir, name)) ? readWorkspaceFile(dir, name) : null;
+}
+function readWorkspaceState(dir) {
+  const saved = readOptional(dir, WORKSPACE_FILES.state);
+  if (saved) {
+    return { ...emptyState(), ...saved };
+  }
+  const state = emptyState();
+  const inventory = readOptional(dir, WORKSPACE_FILES.inventory);
+  if (inventory) {
+    state.inventories[inventory.cloud] = inventory;
+    state.scans.push({ id: "scan-1", cloud: inventory.cloud, scope: "", status: "succeeded", finishedAt: null });
+  }
+  return state;
+}
+async function restoreWorkspace(store, dir, state) {
+  for (let index = 0; index < state.scans.length; index += 1) {
+    await store.nextSequence(CLI_ORG_ID, "scan");
+  }
+  for (const inventory of Object.values(state.inventories)) {
+    await store.putInventory(CLI_ORG_ID, inventory);
+  }
+  for (const [subscriptionId, cost] of Object.entries(state.costs)) {
+    await store.putCost(CLI_ORG_ID, cost, subscriptionId);
+  }
+  await store.putFindings(CLI_ORG_ID, readOptional(dir, WORKSPACE_FILES.findings) ?? []);
+  await store.putCoverage(CLI_ORG_ID, readOptional(dir, WORKSPACE_FILES.coverage) ?? []);
+  await store.putIssues(CLI_ORG_ID, readOptional(dir, WORKSPACE_FILES.issues) ?? []);
+}
 function defaultWorkspaceDir(home = homedir2()) {
   return join2(home, DEFAULT_WORKSPACE_DIRNAME);
 }
@@ -6098,6 +6132,8 @@ async function runScan(flags, io) {
     }
   }
   const store = new MemoryStore(clock);
+  const state = readWorkspaceState(dir);
+  await restoreWorkspace(store, dir, state);
   const harvester = flags.fixture ? providerFor(flags.cloud).harvester(clock) : unconfiguredHarvester();
   const runner = new ScanRunner(
     store,
@@ -6126,10 +6162,21 @@ async function runScan(flags, io) {
     "inventory",
     "coverage",
     "issues",
-    "cost"
+    "cost",
+    "costs"
   );
   const inventory = org.inventories[flags.cloud] ?? org.inventory;
+  const nextState = {
+    version: 1,
+    scans: [
+      ...state.scans,
+      { id: job.id, cloud: flags.cloud, scope: flags.scope, status: job.status, finishedAt: job.finishedAt ?? null }
+    ],
+    inventories: asMutable(org.inventories),
+    costs: asMutable(org.costs)
+  };
   mkdirSync(dir, { recursive: true });
+  writeWorkspaceFile(dir, WORKSPACE_FILES.state, nextState);
   writeWorkspaceFile(dir, WORKSPACE_FILES.findings, asMutable(org.findings));
   writeWorkspaceFile(dir, WORKSPACE_FILES.inventory, asMutable(inventory));
   writeWorkspaceFile(dir, WORKSPACE_FILES.coverage, asMutable(org.coverage));
@@ -6162,10 +6209,16 @@ function writeExportFiles(dir, exportedAt) {
   const issues = readWorkspaceFile(dir, WORKSPACE_FILES.issues);
   const inventory = readWorkspaceFile(dir, WORKSPACE_FILES.inventory);
   const cost = readWorkspaceFile(dir, WORKSPACE_FILES.cost);
-  assertNoSecrets({ issues, inventory, cost });
+  const saved = Object.values(readWorkspaceState(dir).inventories);
+  const inventories = saved.length > 0 ? saved : inventory ? [inventory] : [];
+  assertNoSecrets({ issues, inventories, cost });
+  const inventoryEnvelope = exportInventory(CLI_ORG_ID, null, exportedAt);
+  inventoryEnvelope.rows = inventories.flatMap(
+    (item) => exportInventory(CLI_ORG_ID, item, exportedAt).rows
+  );
   const envelopes = [
     exportIssues(CLI_ORG_ID, issues, exportedAt),
-    exportInventory(CLI_ORG_ID, inventory, exportedAt),
+    inventoryEnvelope,
     exportCost(CLI_ORG_ID, cost, exportedAt)
   ];
   mkdirSync(dir, { recursive: true });
@@ -6276,5 +6329,6 @@ export {
   ROLE_LISTING_CLOSER,
   USAGE,
   defaultWorkspaceDir,
+  readWorkspaceState,
   runCli
 };

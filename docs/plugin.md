@@ -34,7 +34,7 @@ After changing anything the CLI imports, run `npm run plugin:bundle` and commit 
 
 ## First scan
 
-Workspace files default to `~/farside-engagements` (outside the git repo, like Atlas engagements). Override with `--workspace`.
+Workspace files default to `~/farside-engagements` (outside the git repo, like Atlas engagements). Override with `--workspace`. `state.json` keeps scan history, per-cloud inventory and cost, so scanning a second cloud into the same workspace keeps the first cloud's findings and issues, and scan ids keep counting (`scan-1`, `scan-2`, ...). A rescan of the same cloud and scope replaces only that scope's rows.
 
 1. `/farside:connect --cloud azure` (or `gcp`) — probes local credentials and names missing roles.
 2. `/farside:scan --cloud azure --scope <subscription-id> --fixture` — runs the bundled CLI against the synthetic estate. Drop `--fixture` only when live harvest exists (#59 / #197).

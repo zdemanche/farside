@@ -12,6 +12,7 @@ import {
   EXIT_USAGE,
   ROLE_LISTING_CLOSER,
   defaultWorkspaceDir,
+  readWorkspaceState,
   runCli,
   type ConnectReport,
 } from "./cli.js";
@@ -125,6 +126,74 @@ describe("farside CLI", () => {
     expect(findings.some((finding) => finding.checkId === "gcp-waste-unattached-disks" && finding.result === "fail")).toBe(
       true,
     );
+  });
+
+  it("keeps each cloud's findings and gives each scan its own id in one workspace", async () => {
+    const dir = workspace();
+    const io = capture();
+    const opts = { ...io, clock: fixedClock };
+    expect(
+      await runCli(["scan", "--cloud", "azure", "--scope", "main", "--workspace", dir, "--fixture"], opts),
+    ).toBe(EXIT_OK);
+    const first = JSON.parse(io.text(io.stdout.chunks)) as { scanId: string };
+    io.stdout.chunks.length = 0;
+    expect(
+      await runCli(["scan", "--cloud", "gcp", "--scope", "farside-test", "--workspace", dir, "--fixture"], opts),
+    ).toBe(EXIT_OK);
+    const second = JSON.parse(io.text(io.stdout.chunks)) as { scanId: string };
+    expect(first.scanId).toBe("scan-1");
+    expect(second.scanId).toBe("scan-2");
+    const findings = JSON.parse(readFileSync(join(dir, "findings.json"), "utf8")) as Finding[];
+    expect(findings.some((finding) => finding.checkId === "azure-waste-unattached-disks" && finding.result === "fail")).toBe(
+      true,
+    );
+    expect(findings.some((finding) => finding.checkId === "gcp-waste-unattached-disks" && finding.result === "fail")).toBe(
+      true,
+    );
+    const issues = JSON.parse(readFileSync(join(dir, "issues.json"), "utf8")) as Array<{ cloud: string; status: string }>;
+    expect(new Set(issues.filter((issue) => issue.status === "open").map((issue) => issue.cloud))).toEqual(
+      new Set(["azure", "gcp"]),
+    );
+    const coverage = JSON.parse(readFileSync(join(dir, "coverage.json"), "utf8")) as Array<{ checkId: string }>;
+    expect(coverage.some((entry) => entry.checkId.startsWith("azure-"))).toBe(true);
+    expect(coverage.some((entry) => entry.checkId.startsWith("gcp-"))).toBe(true);
+    const state = readWorkspaceState(dir);
+    expect(state.scans.map((scan) => [scan.id, scan.cloud])).toEqual([
+      ["scan-1", "azure"],
+      ["scan-2", "gcp"],
+    ]);
+    io.stdout.chunks.length = 0;
+    expect(await runCli(["export", "--workspace", dir], opts)).toBe(EXIT_OK);
+    const exported = JSON.parse(readFileSync(join(dir, exportFilename("inventory")), "utf8")) as {
+      rows: Array<{ cloud: string }>;
+    };
+    expect(new Set(exported.rows.map((row) => row.cloud))).toEqual(new Set(["azure", "gcp"]));
+    expect(validateExport(exported)).toEqual([]);
+    io.stdout.chunks.length = 0;
+    expect(
+      await runCli(["scan", "--cloud", "azure", "--scope", "main", "--workspace", dir, "--fixture"], opts),
+    ).toBe(EXIT_OK);
+    expect((JSON.parse(io.text(io.stdout.chunks)) as { scanId: string }).scanId).toBe("scan-3");
+    const rescanned = JSON.parse(readFileSync(join(dir, "findings.json"), "utf8")) as Finding[];
+    expect(rescanned.length).toBe(findings.length);
+  });
+
+  it("continues scan ids from a workspace written before state.json", async () => {
+    const dir = workspace();
+    const io = capture();
+    const opts = { ...io, clock: fixedClock };
+    expect(
+      await runCli(["scan", "--cloud", "azure", "--scope", "main", "--workspace", dir, "--fixture"], opts),
+    ).toBe(EXIT_OK);
+    rmSync(join(dir, "state.json"));
+    io.stdout.chunks.length = 0;
+    expect(
+      await runCli(["scan", "--cloud", "gcp", "--scope", "farside-test", "--workspace", dir, "--fixture"], opts),
+    ).toBe(EXIT_OK);
+    expect((JSON.parse(io.text(io.stdout.chunks)) as { scanId: string }).scanId).toBe("scan-2");
+    const findings = JSON.parse(readFileSync(join(dir, "findings.json"), "utf8")) as Finding[];
+    expect(findings.some((finding) => finding.scope.cloud === "azure")).toBe(true);
+    expect(findings.some((finding) => finding.scope.cloud === "gcp")).toBe(true);
   });
 
   it("prints workspace findings and writes farside-export/1 files", async () => {
