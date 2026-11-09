@@ -1,5 +1,6 @@
 import { useOverview, useSource } from "./data/context";
 import { useResource } from "./data/use-resource";
+import { CLOUD_LABEL } from "./terms";
 import { Time } from "./format";
 import { LastScan } from "./LastScan";
 import { inventoryHref } from "./links";
@@ -48,6 +49,7 @@ export function Lifecycle() {
                   <tr>
                     <th scope="col">Date</th>
                     <th scope="col">Item</th>
+                    <th scope="col">Cloud</th>
                     <th scope="col">Kind</th>
                     <th scope="col">Source</th>
                   </tr>
@@ -61,6 +63,7 @@ export function Lifecycle() {
                       <th scope="row">
                         <a href={inventoryHref(row.resourceId)}>{row.title}</a>
                       </th>
+                      <td>{CLOUD_LABEL[row.cloud]}</td>
                       <td>{row.kind}</td>
                       <td>
                         {row.source.href ? (

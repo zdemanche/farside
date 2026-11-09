@@ -54,6 +54,7 @@ describe("lifecycleFrom", () => {
     expect(view.rows).toEqual([
       {
         id: "gcp-lifecycle-sql-gke-support:orders-db",
+        cloud: "gcp",
         resourceId: "orders-db",
         date: "2026-11-14",
         kind: "support",
@@ -131,5 +132,32 @@ describe("lifecycleFrom", () => {
       href: "https://learn.microsoft.com/example",
     });
     expect(bare?.source).toEqual({ vendor: "Microsoft Azure" });
+  });
+});
+
+describe("cloud on derived rows", () => {
+  it("labels recovery and lifecycle rows with the finding's cloud across both clouds", () => {
+    const gcp = (base: Finding): Finding => ({ ...base, scope: { ...base.scope, cloud: "gcp" } });
+    const recovery = recoveryFrom([
+      finding(BACKUP, "fail", { vmId: "a", protected: false }),
+      gcp(finding("gcp-resilience-sql-ha-or-backup", "fail", { instanceId: "sql-zonal" })),
+    ]);
+    expect(recovery.rows.map((row) => row.cloud)).toEqual(["azure", "gcp"]);
+    const lifecycle = lifecycleFrom(
+      [
+        finding("azure-lifecycle-expiring-app-service-certs", "fail", {
+          certificateName: "a",
+          expirationDate: "2026-12-01",
+        }),
+        gcp(
+          finding("gcp-lifecycle-expiring-certs", "fail", {
+            certificateName: "b",
+            expireTime: "2026-12-02T00:00:00Z",
+          }),
+        ),
+      ],
+      "2026-11-09T00:00:00Z",
+    );
+    expect(lifecycle.rows.map((row) => row.cloud)).toEqual(["azure", "gcp"]);
   });
 });

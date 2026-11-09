@@ -15,6 +15,7 @@ const NEVER_SCANNED = {
 const ROWS: LifecycleRow[] = [
   {
     id: "a",
+    cloud: "azure",
     resourceId: "vm-a",
     date: "2026-12-01",
     kind: "sku",
@@ -23,6 +24,7 @@ const ROWS: LifecycleRow[] = [
   },
   {
     id: "b",
+    cloud: "gcp",
     resourceId: "cert-b",
     date: "2027-06-30",
     kind: "certificate",
@@ -48,8 +50,8 @@ describe("Lifecycle screen", () => {
     const { container } = renderScreen(<Lifecycle />, withRows(ROWS, 1));
     const table = await screen.findByRole("table", { name: "Lifecycle items by date" });
     const [first, second] = within(table).getAllByRole("row").slice(1);
-    expect(first?.textContent).toBe("1 Dec 2026Standard_A1skuMicrosoft Azure");
-    expect(second?.textContent).toBe("30 Jun 2027cert-bcertificateGoogle Cloud");
+    expect(first?.textContent).toBe("1 Dec 2026Standard_A1AzureskuMicrosoft Azure");
+    expect(second?.textContent).toBe("30 Jun 2027cert-bGCPcertificateGoogle Cloud");
     expect(first?.querySelector("time")?.getAttribute("datetime")).toBe("2026-12-01");
     await expectAxeClean(container);
   });

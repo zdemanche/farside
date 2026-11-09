@@ -4,11 +4,14 @@ Farside ships a Claude Code plugin from `plugin/` in this repo. Same product ver
 
 ## Install
 
-Until the org transfer (D5) and marketplace listing (#362) land, load the plugin from a checkout:
+This repo is a Claude Code marketplace (`.claude-plugin/marketplace.json`, one entry: `farside` at `./plugin`). Install from a checkout or from GitHub:
 
-```bash
-claude --plugin-dir <repo>/plugin
 ```
+/plugin marketplace add <repo-path-or-zdemanche/farside>
+/plugin install farside@farside
+```
+
+Or load without installing: `claude --plugin-dir <repo>/plugin`.
 
 After D5, install from the Moonaan marketplace:
 
@@ -16,7 +19,12 @@ After D5, install from the Moonaan marketplace:
 /plugin install farside@moonaan-marketplace
 ```
 
-That marketplace entry is leftover: it is a PR to `Moonaan/moonaan-marketplace` ([#362](https://github.com/zdemanche/farside/issues/362)) and has not been made. Do not treat it as available yet.
+That marketplace entry is leftover: it is a PR to `Moonaan/moonaan-marketplace` ([#362](https://github.com/zdemanche/farside/issues/362)) and has not been made. Do not treat it as available yet. The entry to add there is the `plugins[0]` object in `.claude-plugin/marketplace.json`, with `source` pointing at the moved repo.
+
+## Release automation
+
+- release-please bumps `version` in `plugin/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` with the product version. `npm run lint:plugin` fails if either drifts.
+- `.github/workflows/plugin-maintain.yml` runs on every push to `main`: it rebuilds the bundled CLI and opens a `chore/plugin-cli-bundle` PR if the bytes changed. Set the optional `PLUGIN_MAINTAIN_TOKEN` secret so that PR starts CI.
 
 ## The bundled CLI
 

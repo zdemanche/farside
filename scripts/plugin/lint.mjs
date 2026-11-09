@@ -8,6 +8,7 @@ const DEFAULT_MANIFEST = join(ROOT, "plugin/.claude-plugin/plugin.json");
 const DEFAULT_PACKAGE = join(ROOT, "package.json");
 const DEFAULT_SKILL = join(ROOT, "plugin/skills/findings-method/SKILL.md");
 const DEFAULT_COMMANDS = join(ROOT, "plugin/commands");
+const DEFAULT_MARKETPLACE = join(ROOT, ".claude-plugin/marketplace.json");
 const COMMAND_NAMES = ["connect", "scan", "findings", "report"];
 const DEFAULT_WORKSPACE_PHRASE = "farside-engagements";
 
@@ -104,6 +105,37 @@ export function lintFindingsMethodSkill(markdown) {
   return errors;
 }
 
+/** The repo-hosted marketplace must list exactly the farside plugin at ./plugin, on the product version. */
+export function lintMarketplace(marketplace, productVersion) {
+  if (!marketplace || typeof marketplace !== "object" || !Array.isArray(marketplace.plugins)) {
+    return ["marketplace.json must have a plugins array"];
+  }
+  const errors = [];
+  const entries = marketplace.plugins.filter((entry) => entry?.name === PLUGIN_NAME);
+  if (entries.length !== 1 || marketplace.plugins.length !== 1) {
+    return ["marketplace.json must list exactly one farside plugin"];
+  }
+  const [entry] = entries;
+  if (entry.source !== "./plugin") {
+    errors.push("marketplace farside source must be ./plugin");
+  }
+  if (entry.version !== productVersion) {
+    errors.push(`marketplace farside version must match the product version '${productVersion}'`);
+  }
+  if (entry.author?.name !== PLUGIN_AUTHOR) {
+    errors.push(`marketplace farside author must be ${PLUGIN_AUTHOR}`);
+  }
+  return errors;
+}
+
+export function lintMarketplaceFile(marketplacePath = DEFAULT_MARKETPLACE, productVersion) {
+  try {
+    return lintMarketplace(JSON.parse(readFileSync(marketplacePath, "utf8")), productVersion);
+  } catch (error) {
+    return [`marketplace.json is not valid JSON: ${error instanceof Error ? error.message : error}`];
+  }
+}
+
 export function lintPluginManifestFile(
   manifestPath = DEFAULT_MANIFEST,
   packagePath = DEFAULT_PACKAGE,
@@ -131,6 +163,7 @@ export function lintPluginManifestFile(
     ...lintPluginManifest(manifest, product.version),
     ...lintFindingsMethodSkill(skill),
     ...lintPluginCommands(),
+    ...lintMarketplaceFile(DEFAULT_MARKETPLACE, product.version),
   ];
 }
 

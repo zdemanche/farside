@@ -1,0 +1,55 @@
+# Keeps the committed plugin CLI bundle in step with main. release-please
+# already bumps the plugin version (plugin.json and marketplace.json);
+# this rebuilds plugin/bin/farside-cli.mjs when a merge (for example a
+# dependency bump) changes what the CLI builds to, and opens a PR.
+# A PR opened with GITHUB_TOKEN does not start CI; set the optional
+# PLUGIN_MAINTAIN_TOKEN secret (contents + pull-requests write) so it does.
+name: Plugin maintain
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: plugin-maintain
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  rebuild-cli:
+    name: rebuild plugin CLI
+    runs-on: ubuntu-latest
+    env:
+      BRANCH: chore/plugin-cli-bundle
+      GH_TOKEN: ${{ secrets.PLUGIN_MAINTAIN_TOKEN || github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.PLUGIN_MAINTAIN_TOKEN || github.token }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run plugin:bundle
+      - name: Open a PR when the bundle changed
+        run: |
+          if git diff --quiet -- plugin/bin/farside-cli.mjs; then
+            echo "plugin CLI bundle is current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add plugin/bin/farside-cli.mjs
+          git commit -m "chore(plugin): rebuild the bundled CLI"
+          git push --force origin "$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --head "$BRANCH" --base main \
+              --title "chore(plugin): rebuild the bundled CLI" \
+              --body "Automated by .github/workflows/plugin-maintain.yml: \`npm run plugin:bundle\` changed plugin/bin/farside-cli.mjs on main."
+          fi

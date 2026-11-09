@@ -2,6 +2,7 @@ import { Chip, coverageTone } from "./Chip";
 import { useOverview, useSource } from "./data/context";
 import type { RecoveryView } from "./data/types";
 import { useResource } from "./data/use-resource";
+import { CLOUD_LABEL } from "./terms";
 import { LastScan } from "./LastScan";
 import { inventoryHref } from "./links";
 import { ScreenState, gapsMessage } from "./ScreenState";
@@ -59,6 +60,7 @@ export function Recovery() {
                 <thead>
                   <tr>
                     <th scope="col">System</th>
+                    <th scope="col">Cloud</th>
                     <th scope="col">Check</th>
                     <th scope="col">Evidence</th>
                     <th scope="col">Coverage</th>
@@ -72,6 +74,7 @@ export function Recovery() {
                           {shortName(row.system)}
                         </a>
                       </th>
+                      <td>{CLOUD_LABEL[row.cloud]}</td>
                       <td>{row.checkId}</td>
                       <td>{row.evidence}</td>
                       <td>

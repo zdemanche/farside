@@ -85,6 +85,7 @@ export type BlindSpotsView = {
 
 export type RecoveryRow = {
   id: string;
+  cloud: Cloud;
   system: string;
   checkId: string;
   evidence: string;
@@ -100,6 +101,7 @@ export type RecoveryView = {
 
 export type LifecycleRow = {
   id: string;
+  cloud: Cloud;
   resourceId: string;
   date: string;
   kind: string;

@@ -322,7 +322,7 @@ Entire GCP epic needs D7 (#7) and a live project. Collectors also (d) AIF.
 | `E6-S6-T2` | #214 | Implement committed-use discount check | (c) live Azure / GCP / test tenant | Committed-use discount check live, or mark unverified. |
 | `E6-S6-T3` | #215 | Run floor, burst and alerts on GCP data | (a) this change | Replay fixture. Live BigQuery harvest is #213. |
 | `E6-S7` | #216 | GCP in the console and every GCP check run live | (c) live Azure / GCP / test tenant | Two-cloud console plus every GCP check live. Scheduler unattended is (c). |
-| `E6-S7-T1` | #217 | Add cloud as a dimension across screens and APIs | (a) this change | API `?cloud=` filter and labels. Screens leftover #243. |
+| `E6-S7-T1` | #217 | Add cloud as a dimension across screens and APIs | (a) this change | API `?cloud=` filter, console Cloud selector and per-screen Cloud column; done. |
 | `E6-S7-T2` | #218 | Extend the headline to two clouds | (a) this change | Per-cloud headline figures. No cross-currency sums. |
 | `E6-S7-T3` | #219 | Run all GCP checks live and diff against the manifest | (c) live Azure / GCP / test tenant | Run all GCP checks live and diff the manifest. |
 | `E6-S7-T4` | #220 | Fix defects and update the support matrix | (a) doable in code now | Fix defects and regenerate the support matrix; rerun is (c). |

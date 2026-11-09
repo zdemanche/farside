@@ -66,6 +66,7 @@ export function recoveryFrom(findings: Finding[]): RecoveryView {
       const system = resourceIdOf(finding.evidence.fields, finding.scope.id);
       return {
         id: `${finding.checkId}:${system}`,
+        cloud: finding.scope.cloud,
         system,
         checkId: finding.checkId,
         evidence: formatEvidence(finding.evidence.fields),
@@ -106,6 +107,7 @@ export function lifecycleFrom(findings: Finding[], asOf: string): LifecycleView 
       return [
         {
           id: `${finding.checkId}:${resourceId}`,
+          cloud: finding.scope.cloud,
           resourceId,
           date: dated.slice(0, 10),
           kind: lifecycleKind(finding.checkId),
