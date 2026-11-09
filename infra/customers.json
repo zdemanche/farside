@@ -1,0 +1,4 @@
+{
+  "moonaan-dev": { "environment": "dev", "region": "us-east-2", "logRetentionDays": 14 },
+  "example-customer": { "environment": "prod", "region": "us-east-2", "logRetentionDays": 30 }
+}
