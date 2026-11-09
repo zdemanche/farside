@@ -1,0 +1,17 @@
+{
+  "location": "eastus",
+  "resourceGroups": { "main": "farside-test-seed", "empty-no-budget": "farside-test-empty" },
+  "subscriptions": {
+    "main": { "subscriptionId": "", "displayName": "farside-test-main" },
+    "empty-no-budget": { "subscriptionId": "", "displayName": "farside-test-empty" }
+  },
+  "create": {
+    "enabled": false,
+    "billingScope": "/providers/Microsoft.Billing/billingAccounts/<account>/billingProfiles/<profile>/invoiceSections/<section>",
+    "workload": "DevTest"
+  },
+  "budget": { "amount": 200, "thresholdPercent": 80, "contactEmails": [] },
+  "appRegistrationTenantId": "",
+  "vm": { "adminUsername": "farside", "sshPublicKey": "" },
+  "sql": { "adminLogin": "", "adminObjectId": "", "tenantId": "" }
+}

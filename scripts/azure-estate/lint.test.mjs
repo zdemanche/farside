@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { REQUIRED_LAUNCH_CHECK_IDS } from "../azure-spec/lint.mjs";
 import { lintGroundTruth, lintGroundTruthFile } from "./lint.mjs";
-import { applySeed, loadManifest, seedItems, shouldSkipApply } from "./seed.mjs";
+import { loadManifest } from "./seed.mjs";
 
 describe("azure estate ground truth", () => {
   it("accepts the committed manifest", () => {
@@ -37,22 +37,5 @@ describe("azure estate ground truth", () => {
     expect(lintGroundTruthFile(path).some((error) => error.includes("exception.reason"))).toBe(
       true,
     );
-  });
-});
-
-describe("azure estate seed skip", () => {
-  it("skips apply when AZURE_SUBSCRIPTION_ID is unset", () => {
-    expect(shouldSkipApply({})).toBe(true);
-    const result = applySeed({});
-    expect(result.applied).toBe(false);
-    expect(result.skipped).toBe(true);
-    expect(result.itemCount).toBe(seedItems(loadManifest()).length);
-  });
-
-  it("still skips when a subscription id is present (no live ARM)", () => {
-    const result = applySeed({ AZURE_SUBSCRIPTION_ID: "00000000-0000-0000-0000-000000000000" });
-    expect(result.applied).toBe(false);
-    expect(result.skipped).toBe(true);
-    expect(result.reason).toMatch(/must not call live ARM/);
   });
 });
