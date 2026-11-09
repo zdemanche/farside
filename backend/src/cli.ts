@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -9,6 +9,7 @@ import { fixtureCommitmentClient } from "./commitments.js";
 import { fixtureCostClient, type CostSnapshot } from "./cost.js";
 import {
   EXPORT_FORMAT,
+  type ExportInventoryRow,
   exportCost,
   exportFilename,
   exportInventory,
@@ -58,7 +59,57 @@ const WORKSPACE_FILES = {
   coverage: "coverage.json",
   issues: "issues.json",
   cost: "cost.json",
+  state: "state.json",
 } as const;
+
+/**
+ * Cross-scan workspace state. A scan restores it into a fresh store, so a scan of a
+ * second cloud keeps the first cloud's findings and scan ids keep counting.
+ */
+export type WorkspaceState = {
+  version: 1;
+  scans: Array<{ id: string; cloud: Cloud; scope: string; status: string; finishedAt: string | null }>;
+  inventories: Partial<Record<Cloud, Inventory>>;
+  costs: Record<string, CostSnapshot>;
+};
+
+function emptyState(): WorkspaceState {
+  return { version: 1, scans: [], inventories: {}, costs: {} };
+}
+
+function readOptional<T>(dir: string, name: string): T | null {
+  return existsSync(join(dir, name)) ? readWorkspaceFile<T>(dir, name) : null;
+}
+
+/** Reads state.json, or rebuilds it from a workspace written before state.json existed (one scan, scan-1). */
+export function readWorkspaceState(dir: string): WorkspaceState {
+  const saved = readOptional<WorkspaceState>(dir, WORKSPACE_FILES.state);
+  if (saved) {
+    return { ...emptyState(), ...saved };
+  }
+  const state = emptyState();
+  const inventory = readOptional<Inventory | null>(dir, WORKSPACE_FILES.inventory);
+  if (inventory) {
+    state.inventories[inventory.cloud] = inventory;
+    state.scans.push({ id: "scan-1", cloud: inventory.cloud, scope: "", status: "succeeded", finishedAt: null });
+  }
+  return state;
+}
+
+async function restoreWorkspace(store: MemoryStore, dir: string, state: WorkspaceState): Promise<void> {
+  for (let index = 0; index < state.scans.length; index += 1) {
+    await store.nextSequence(CLI_ORG_ID, "scan");
+  }
+  for (const inventory of Object.values(state.inventories)) {
+    await store.putInventory(CLI_ORG_ID, inventory);
+  }
+  for (const [subscriptionId, cost] of Object.entries(state.costs)) {
+    await store.putCost(CLI_ORG_ID, cost, subscriptionId);
+  }
+  await store.putFindings(CLI_ORG_ID, readOptional<Finding[]>(dir, WORKSPACE_FILES.findings) ?? []);
+  await store.putCoverage(CLI_ORG_ID, readOptional<CoverageEntry[]>(dir, WORKSPACE_FILES.coverage) ?? []);
+  await store.putIssues(CLI_ORG_ID, readOptional<StoredIssue[]>(dir, WORKSPACE_FILES.issues) ?? []);
+}
 
 export function defaultWorkspaceDir(home = homedir()): string {
   return join(home, DEFAULT_WORKSPACE_DIRNAME);
@@ -243,6 +294,8 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
     }
   }
   const store = new MemoryStore(clock);
+  const state = readWorkspaceState(dir);
+  await restoreWorkspace(store, dir, state);
   const harvester = flags.fixture ? providerFor(flags.cloud).harvester(clock) : unconfiguredHarvester();
   const runner = new ScanRunner(
     store,
@@ -274,9 +327,20 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
     "coverage",
     "issues",
     "cost",
+    "costs",
   );
   const inventory = org.inventories[flags.cloud] ?? org.inventory;
+  const nextState: WorkspaceState = {
+    version: 1,
+    scans: [
+      ...state.scans,
+      { id: job.id, cloud: flags.cloud, scope: flags.scope, status: job.status, finishedAt: job.finishedAt ?? null },
+    ],
+    inventories: asMutable<WorkspaceState["inventories"]>(org.inventories),
+    costs: asMutable<WorkspaceState["costs"]>(org.costs),
+  };
   mkdirSync(dir, { recursive: true });
+  writeWorkspaceFile(dir, WORKSPACE_FILES.state, nextState);
   writeWorkspaceFile(dir, WORKSPACE_FILES.findings, asMutable(org.findings));
   writeWorkspaceFile(dir, WORKSPACE_FILES.inventory, asMutable(inventory));
   writeWorkspaceFile(dir, WORKSPACE_FILES.coverage, asMutable(org.coverage));
@@ -311,10 +375,16 @@ function writeExportFiles(dir: string, exportedAt: string) {
   const issues = readWorkspaceFile<StoredIssue[]>(dir, WORKSPACE_FILES.issues);
   const inventory = readWorkspaceFile<Inventory | null>(dir, WORKSPACE_FILES.inventory);
   const cost = readWorkspaceFile<CostSnapshot | null>(dir, WORKSPACE_FILES.cost);
-  assertNoSecrets({ issues, inventory, cost });
+  const saved = Object.values(readWorkspaceState(dir).inventories);
+  const inventories = saved.length > 0 ? saved : inventory ? [inventory] : [];
+  assertNoSecrets({ issues, inventories, cost });
+  const inventoryEnvelope = exportInventory(CLI_ORG_ID, null, exportedAt);
+  inventoryEnvelope.rows = inventories.flatMap(
+    (item) => exportInventory(CLI_ORG_ID, item, exportedAt).rows as ExportInventoryRow[],
+  );
   const envelopes = [
     exportIssues(CLI_ORG_ID, issues, exportedAt),
-    exportInventory(CLI_ORG_ID, inventory, exportedAt),
+    inventoryEnvelope,
     exportCost(CLI_ORG_ID, cost, exportedAt),
   ];
   mkdirSync(dir, { recursive: true });

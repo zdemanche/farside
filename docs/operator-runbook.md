@@ -144,6 +144,8 @@ Hub order, `workflow_dispatch` only (never `push` to `main`):
 2. `infra-pulumi_up.yaml` — `organization/farside/{customerName}` in the dedicated account. Inputs: `customerName`, `accountId`, `run_identifier`. Optional: `initialAdmins`, `firstOwnerEmail`, `adoptingProducts`.
 3. `ui-deploy.yml` — console.
 
+**Without iac-hub:** `deploy-customer.yml` (`workflow_dispatch`, inputs `customerName`, `accountId`, `preview` default true) does all three in one job. Stack config comes from `infra/customers.json` (environment, region, log retention) plus `infra/accounts.json` on `main`, via `infra/src/customer-cli.ts`, which writes `Pulumi.<customer>.yaml` with `farside:address` = `farside.<customer>.moonaan.com`. The operator token is generated once as a stack secret. Missing `AWS_ROLE_ARN` or a Pulumi secrets provider (`PULUMI_CONFIG_PASSPHRASE` secret or `PULUMI_SECRETS_PROVIDER` variable) skips with a warning. Add the customer to both JSON files in one PR first.
+
 `materializeDevStack` and `deployStack` call `assertDedicatedAccount` before any resource is declared; current workflows **skip** apply rather than create in the wrong account. `infra/src/program.ts` declares the stack: an API Lambda and a scheduled-tick Lambda (Node 22, arm64) from `backend/dist/lambda.mjs` and `scheduled.mjs`, a Function URL with `AWS_IAM` auth, a private console bucket served by CloudFront (S3 origin with origin access control only), 30-day log groups, an SSM SecureString for the operator token, and an EventBridge Scheduler schedule (`rate(15 minutes)`) that invokes the tick Lambda under a role allowed to invoke only that function. Stack config: `farside:customerName`, `farside:accountId`, `farside:environment`, `farside:logRetentionDays` (optional) and the secret `farside:operatorToken` (`pulumi config set --secret farside:operatorToken`). The token is stored as an SSM SecureString; the Lambda env carries only `FARSIDE_OPERATOR_TOKEN_PARAM`, the role may `ssm:GetParameter` that one parameter and `kms:Decrypt` on the `aws/ssm` key, and the handler reads it once per cold start and fails closed if it cannot. `FARSIDE_OPERATOR_TOKEN` is for local `npm run dev` only. The stack also creates an on-demand DynamoDB table (`farside-<customer>-store`, point-in-time recovery, deletion protection outside `dev`); both Lambdas get `FARSIDE_STORE=dynamo`, `FARSIDE_TABLE_NAME` and `FARSIDE_BLOB_BUCKET` (a private bucket for documents over 300 KB) and may read and write only that table, its `gsi1` index and the `ORG#` prefix of that bucket, so connections, findings and contracts survive cold starts and the tick sees what the API wrote (layout in `docs/storage.md`). Locally `npm run dev` keeps the in-memory store unless `FARSIDE_STORE=dynamo` is set. `backend` must be built first (`npm run build -w @farside/backend`).
 
 **The API is not publicly routable yet.** CloudFront serves the console only; there is no `/v1/*` or `/health` behavior. The Function URL stays `AWS_IAM`, so only IAM principals that SigV4-sign can call it (operators with `lambda:InvokeFunctionUrl`). Routing the console to the API through an OAC-signing CloudFront behavior would make `x-farside-org` the only gate, which is not authentication. `assertAuthenticatedEdge` fails the plan if any distribution behavior sends API paths to the Function URL without a viewer authenticator (edge function, WAF or signed cookies). Once Identity (#48) exists, add an Identity-verifying edge function, set `viewerAuthenticator` in the plan, then add the `/v1/*` behavior (TODO: #48). Until then check the deploy with a signed request to the Function URL, for example `awscurl --service lambda <apiUrl>health`.
@@ -279,6 +281,37 @@ FARSIDE_OPERATOR_TOKEN=<token> npm run dev -w @farside/backend
 4. Optional: PUT the contract with `unpaidAt` 21 days in the past (operator token), then POST `/scans` with the org session and expect 409.
 
 Org `demo` (`VITE_FARSIDE_DEMO=1` on the console) is a synthetic estate. Do not use it as a sale rehearsal.
+
+## Appendix: rehearsal runner (#176)
+
+`node scripts/operator-runbook/rehearse.mjs` walks steps 1–10 in order, checks each step's in-repo preconditions (slug, registered account, `customers.json` entry, stage workflows, connect tenant not the app-registration tenant, no card digits) and writes `docs/rehearsals/<date>-<customer>-<mode>.json`.
+
+| Mode | Flags | Calls |
+|---|---|---|
+| Dry run (default) | `--customer`, `--account`, `--org`, `--tenant`, `--subscription`, `--out-dir`, `--no-write` | None. Record says no live call was made. |
+| Live | `--live` + `FARSIDE_API_URL`, `FARSIDE_OPERATOR_TOKEN` (optional `FARSIDE_CONSOLE_URL`) | PUT contract, GET console, PUT connection, poll scans. Missing env: `live-skipped`, exit 0. |
+
+Steps 2–6 and 8 belong to iac-hub, the operator, base, Identity and Launch. The runner never performs them: live mode stops at the first one unless the operator lists it in `--confirmed` after doing it by hand. Exit 1 on a blocked or failed step. Result is `pass` only when every step passed or was confirmed in live mode. A dry-run record is not the cold rehearsal; #176 closes on a live record from a test tenant.
+
+## Appendix: retire the dedicated account at offboarding (#182)
+
+Last step of D8, after the deletion API. Not part of sale-to-first-scan.
+
+1. Customer (or retention) offboards: POST `/v1/orgs/{orgId}/offboard`. Save GET `/v1/orgs/{orgId}/deletion` as `deletion.json`.
+2. Dry run: `node scripts/offboarding/retire-account.mjs --customer <slug> --account-id <id> --receipt deletion.json [--org <orgId>]`.
+3. From the Organizations management account: add `--apply --confirm <id> --out docs/retirements/<date>-<slug>.json`.
+
+Guards: account id must be the one `infra/accounts.json` registers to the slug (never product-dev); receipt must be for that org, dated in the past, with `rowsPurged`, a `customer`/`retention` trigger and `accountClosureAt: null`; `--confirm` must repeat the id; the caller must not be the account itself. No AWS credentials: skip, exit 0. Already `SUSPENDED`/`PENDING_CLOSURE`: no call, exit 0. Uses `aws organizations close-account` (90-day suspension, then AWS closes it).
+
+#### Check
+
+- Record has `status: closed` and `accountClosureAt`.
+- `aws organizations describe-account` shows `SUSPENDED` or `PENDING_CLOSURE`.
+
+#### Rollback
+
+- Closed in error: reopen through AWS Support within the 90-day window. Data was already deleted by step 1.
+- After the record is saved, remove the slug from `infra/accounts.json` and `infra/customers.json` in one PR so no deploy targets it.
 
 ## Appendix: injected failure walkthrough {#injected-failure}
 

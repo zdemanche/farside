@@ -57,3 +57,25 @@ it("loads src/program.ts the way the Pulumi nodejs runtime does and declares the
   expect(types).toContain("aws:s3/bucket:Bucket");
   expect(types).toContain("aws:scheduler/schedule:Schedule");
 });
+
+it("refuses a stack whose farside:address does not match the customer slug", () => {
+  writeFileSync(entry, ENTRY);
+  expect(() =>
+    execFileSync("node", ["--import", "tsx", entry], {
+      cwd: INFRA,
+      encoding: "utf8",
+      stdio: "pipe",
+      env: {
+        ...process.env,
+        PULUMI_CONFIG: JSON.stringify({
+          "farside:customerName": "moonaan-dev",
+          "farside:accountId": "000000000000",
+          "farside:environment": "dev",
+          "farside:address": "farside.someone-else.moonaan.com",
+          "farside:operatorToken": "operator-token-value",
+        }),
+        PULUMI_CONFIG_SECRET_KEYS: JSON.stringify(["farside:operatorToken"]),
+      },
+    }),
+  ).toThrow(/does not match/);
+});

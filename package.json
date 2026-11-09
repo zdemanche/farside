@@ -27,7 +27,7 @@
     "format": "prettier --write \"console/**/*.{ts,tsx,css,html,json}\"",
     "format:check": "prettier --check \"console/**/*.{ts,tsx,css,html,json}\"",
     "typecheck": "npm run typecheck --workspaces --if-present && tsc -p scripts/azure-live/tsconfig.json",
-    "test": "npm run test:azure-spec && npm run test:reuse-review && npm run test:azure-estate && npm run test:operator-runbook && npm run test:gcp-spec && npm run test:gcp-estate && npm run test:plugin && npm run test:support-matrix && npm run test:identity-rehearsal && npm run test:azure-live && npm run test --workspaces --if-present",
+    "test": "npm run test:azure-spec && npm run test:reuse-review && npm run test:azure-estate && npm run test:operator-runbook && npm run test:gcp-spec && npm run test:gcp-estate && npm run test:plugin && npm run test:support-matrix && npm run test:identity-rehearsal && npm run test:azure-live && npm run test:soak && npm run test:offboarding && npm run test --workspaces --if-present",
     "test:azure-spec": "vitest run --config scripts/azure-spec/vitest.config.ts",
     "test:reuse-review": "vitest run --config scripts/reuse-review/vitest.config.ts",
     "test:azure-estate": "vitest run --config scripts/azure-estate/vitest.config.ts",
@@ -43,6 +43,9 @@
     "azure-live:checks": "tsx scripts/azure-live/run-checks.ts",
     "azure-live:cost": "tsx scripts/azure-live/cost-portal.ts",
     "azure-live:matrix": "node scripts/support-matrix/generate.mjs --write --write-spec",
+    "test:soak": "vitest run --config scripts/soak/vitest.config.ts",
+    "test:offboarding": "vitest run --config scripts/offboarding/vitest.config.ts",
+    "soak": "node --import tsx scripts/soak/soak.mjs",
     "build": "npm run build --workspaces --if-present"
   },
   "devDependencies": {
