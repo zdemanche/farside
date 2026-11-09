@@ -5626,6 +5626,44 @@ function probeRoles(cloud, granted) {
   };
 }
 
+// backend/src/org-claim.ts
+var MAX_ORG_MEMBERS = 1e3;
+var MemberLimitError = class extends Error {
+  constructor(orgId) {
+    super(`org ${orgId} already has ${MAX_ORG_MEMBERS} members`);
+    this.name = "MemberLimitError";
+  }
+};
+function roleOf(claim, actorId) {
+  return claim?.members.find((member) => member.actorId === actorId)?.role ?? null;
+}
+function nextClaim(current, input) {
+  if (!current) {
+    if (!input.mayOwn) {
+      return { result: { outcome: "refused", claim: null, role: null }, write: false };
+    }
+    const claim2 = {
+      orgId: input.orgId,
+      ownerId: input.actorId,
+      claimedAt: input.now,
+      members: [{ actorId: input.actorId, role: "owner", joinedAt: input.now }]
+    };
+    return { result: { outcome: "claimed", claim: claim2, role: "owner" }, write: true };
+  }
+  const existing = roleOf(current, input.actorId);
+  if (existing) {
+    return { result: { outcome: "existing", claim: current, role: existing }, write: false };
+  }
+  if (current.members.length >= MAX_ORG_MEMBERS) {
+    throw new MemberLimitError(input.orgId);
+  }
+  const claim = {
+    ...current,
+    members: [...current.members, { actorId: input.actorId, role: "member", joinedAt: input.now }]
+  };
+  return { result: { outcome: "joined", claim, role: "member" }, write: true };
+}
+
 // backend/src/store.ts
 var MemoryStore = class {
   constructor(clock = systemClock) {
@@ -5636,6 +5674,7 @@ var MemoryStore = class {
   #deletions = /* @__PURE__ */ new Map();
   #running = new RunningScans();
   #seeded = /* @__PURE__ */ new Set();
+  #claims = /* @__PURE__ */ new Map();
   org(orgId) {
     if (this.#deletions.has(orgId)) {
       throw new DeletedOrgError(orgId);
@@ -5695,6 +5734,7 @@ var MemoryStore = class {
     });
     assertNoSecrets(record);
     this.#orgs.delete(orgId);
+    this.#claims.delete(orgId);
     this.#deletions.set(orgId, record);
     return record;
   }
@@ -5885,6 +5925,25 @@ var MemoryStore = class {
   async markSeeded(orgId) {
     this.org(orgId);
     this.#seeded.add(orgId);
+  }
+  async orgClaim(orgId) {
+    this.org(orgId);
+    const claim = this.#claims.get(orgId);
+    return claim ? structuredClone(claim) : null;
+  }
+  async claimOrg(orgId, actorId, options = {}) {
+    this.org(orgId);
+    const { result, write } = nextClaim(this.#claims.get(orgId) ?? null, {
+      orgId,
+      actorId,
+      now: this.clock(),
+      mayOwn: options.mayOwn !== false
+    });
+    if (write && result.claim) {
+      assertNoSecrets(result.claim);
+      this.#claims.set(orgId, structuredClone(result.claim));
+    }
+    return result.claim ? { ...result, claim: structuredClone(result.claim) } : result;
   }
   async isConnected(orgId, subscriptionId) {
     const target = subscriptionId.toLowerCase();
