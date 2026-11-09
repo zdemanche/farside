@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "farside",
+  "owner": {
+    "name": "Moonaan, LLC"
+  },
+  "metadata": {
+    "description": "Farside plugin, served from this repo until the Moonaan marketplace entry lands."
+  },
+  "plugins": [
+    {
+      "name": "farside",
+      "source": "./plugin",
+      "description": "Azure and GCP infrastructure scanning, issues, and cost. Same checks as the Farside product, run locally.",
+      "version": "0.3.0",
+      "author": {
+        "name": "Moonaan, LLC"
+      },
+      "category": "infrastructure"
+    }
+  ]
+}

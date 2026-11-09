@@ -19,7 +19,7 @@ The GCP control spec lists every launch check from the proposal table as unverif
 | E6-S5-T3 | #211 | Alert analysis reports `historyDays` and stays undetermined until 14 completed days exist, including an empty first export day. Empty-first-day UI is leftover (#210 / #243). |
 | E6-S6-T2 | #214 | `gcp-cost-committed-use` fails low-utilisation CUD fixtures with an unused-spend range, passes well-used rows, and says none found instead of zero use. Status stays unverified. Live BigQuery harvest is leftover (#213). |
 | E6-S6-T3 | #215 | `docs/gcp/alert-replay.json` drives the same floor/burst/relative alerts with `projectId` mapped to the shared daily-cost row. Live BigQuery harvest is leftover (#213). |
-| E6-S7-T1 | #217 | List APIs accept `?cloud=azure` or `?cloud=gcp` and keep per-cloud inventory. Console labels/filters and the two-cloud e2e stay leftover. |
+| E6-S7-T1 | #217 | List APIs accept `?cloud=azure` or `?cloud=gcp` and keep per-cloud inventory. Console has a Cloud selector; Inventory, Issues, Cost and waste, Lifecycle and Recovery show a Cloud column and re-read for the chosen cloud. `CloudFilter.test.tsx` covers both clouds. |
 | E6-S7-T2 | #218 | Headline emits per-cloud figures. Mixed-currency money is `byCloud` and is never summed. |
 | E6-S2-T2 | #197 | Injected Cloud Asset client pages `pageToken` across every launch asset type from the ground-truth fixture. Throttle → `throttling`, other errors → `failed_call`. Default scan path stays the fixture harvester. Live Cloud Asset on a project leftover. |
 | E6-S6-T1 | #213 | Injected BigQuery export client pages fixture spend rows and stores service/project aggregates. Harvest stays `unverified`. Live export and console comparison leftover. |

@@ -7,6 +7,8 @@ import {
   PLUGIN_LICENSE,
   PLUGIN_NAME,
   lintFindingsMethodSkill,
+  lintMarketplace,
+  lintMarketplaceFile,
   lintPluginCommands,
   lintPluginManifest,
   lintPluginManifestFile,
@@ -70,5 +72,46 @@ describe("plugin manifest lint", () => {
 
   it("accepts connect, scan, findings and report command wrappers", () => {
     expect(lintPluginCommands()).toEqual([]);
+  });
+});
+
+describe("marketplace lint", () => {
+  const entry = (overrides = {}) => ({
+    name: PLUGIN_NAME,
+    source: "./plugin",
+    version: "1.2.3",
+    author: { name: PLUGIN_AUTHOR },
+    ...overrides,
+  });
+
+  it("accepts the committed marketplace.json against the product version", async () => {
+    const { readFileSync } = await import("node:fs");
+    const version = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url))).version;
+    expect(lintMarketplaceFile(undefined, version)).toEqual([]);
+  });
+
+  it("accepts one farside entry at ./plugin on the product version", () => {
+    expect(lintMarketplace({ plugins: [entry()] }, "1.2.3")).toEqual([]);
+  });
+
+  it("fails when the version drifts from the product", () => {
+    expect(lintMarketplace({ plugins: [entry({ version: "1.2.2" })] }, "1.2.3")).toEqual([
+      "marketplace farside version must match the product version '1.2.3'",
+    ]);
+  });
+
+  it("fails when the source is not the in-repo plugin", () => {
+    expect(lintMarketplace({ plugins: [entry({ source: "./other" })] }, "1.2.3")).toEqual([
+      "marketplace farside source must be ./plugin",
+    ]);
+  });
+
+  it("fails when farside is missing or listed twice", () => {
+    expect(lintMarketplace({ plugins: [] }, "1.2.3")).toEqual([
+      "marketplace.json must list exactly one farside plugin",
+    ]);
+    expect(lintMarketplace({ plugins: [entry(), entry()] }, "1.2.3")).toEqual([
+      "marketplace.json must list exactly one farside plugin",
+    ]);
   });
 });
