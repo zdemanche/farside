@@ -1,6 +1,6 @@
 # E2 remaining work
 
-In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory mapping, no-owner totals, and standard-OIDC sign-in with the org claim are in this tree. Hooking sign-in to a live Moonaan Identity tenant, live federated Azure connect, and live harvest are leftovers.
+In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory mapping, no-owner totals, and standard-OIDC sign-in with the org claim are in this tree. Federated Azure exchange and live harvest are built against a fake Azure (`docs/azure/live-readers.md`). What is left is live: hooking sign-in to a Moonaan Identity tenant and running connect and harvest against a real tenant.
 
 ## Done here
 
@@ -49,19 +49,19 @@ Not built: provider logout (Sign out is local), token refresh (after `exp`, scre
 
 ### Live federated connect (#52, #53)
 
-Connect does not call Azure. Role gaps (#55) and a revoked-grant re-probe (#56) use an injected lister. Token exchange against the test subscription stays leftover.
+Built: `federatedTokenProvider` exchanges the runtime's OIDC token (`client_assertion`, no secret) for an ARM token in the customer tenant, cached per tenant. With `FARSIDE_AZURE_LIVE=1`, Connect lists roles live (`liveRoleLister`) for #55/#56. Tested against mocked fetch only. Left: `npm run azure-live:access` on the test tenant writes the #41/#42 record.
 
 ### Live harvest (#58, #63)
 
-Inventory is mapped from the ground-truth fixture. Resource Graph paging (#59) and hierarchy discovery (#60) run against that fixture. A live ARG diff waits on Azure.
+Built: live Resource Graph, hierarchy, backup and metrics reads feed the scan when `FARSIDE_AZURE_LIVE=1`; default stays fixture/unconfigured. `npm run azure-live:checks` writes the inventory diff (#63) against `ground-truth.json`. Left: that run on the test subscription.
 
 ### Live coverage proof
 
 Blind spots is fixture-backed. A missing-role or failed-call row from a live scan waits on E1-S7 / E2-S6.
 
-### Unattended federated scan (#76)
+### Unattended federated scan (#73, #76)
 
-The job runner can start as `actor: system` without a user request. Token exchange against a live subscription is still leftover.
+Built: `scheduled.ts` uses the same live wiring, so a scheduler tick starts an `actor: system` scan that exchanges its own token; tested end to end on the fake. Left: one scheduled scan on the test subscription.
 
 ### Week-8 session (#80, #81)
 

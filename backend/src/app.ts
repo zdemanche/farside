@@ -6,7 +6,7 @@ import type { BudgetClient } from "./budgets.js";
 import type { Clock } from "./clock.js";
 import type { CommitmentClient } from "./commitments.js";
 import type { CostQueryClient } from "./cost.js";
-import { guardHarvester } from "./demo.js";
+import { guardClientSource, guardHarvester } from "./demo.js";
 import type { AppContext, RoutePlugin } from "./http/context.js";
 import { registerHttp } from "./http/hooks.js";
 import { pinoOptions, type LoggerOptions } from "./observability.js";
@@ -25,7 +25,7 @@ import { inventoryRoutes } from "./routes/inventory.js";
 import { offboardRoutes } from "./routes/offboard.js";
 import { scanRoutes } from "./routes/scans.js";
 import { settingsRoutes } from "./routes/settings.js";
-import { ScanRunner, unconfiguredHarvester, type Harvester } from "./scans.js";
+import { ScanRunner, unconfiguredHarvester, type HarvestClientSource, type Harvester } from "./scans.js";
 import type { OrgRepository } from "./repository.js";
 import { ScanScheduler } from "./scheduler.js";
 
@@ -52,6 +52,8 @@ export function buildApp(
   store: OrgRepository,
   options: {
     harvester?: Harvester;
+    /** Per-scan clients (live Azure). Wins over the static clients for scans only. */
+    harvestClients?: HarvestClientSource;
     costClient?: CostQueryClient;
     commitmentClient?: CommitmentClient;
     budgetClient?: BudgetClient;
@@ -82,11 +84,13 @@ export function buildApp(
   const runner = new ScanRunner(
     store,
     guardHarvester(options.harvester ?? unconfiguredHarvester()),
-    {
-      ...(clients.cost ? { costClient: clients.cost } : {}),
-      ...(clients.commitment ? { commitmentClient: clients.commitment } : {}),
-      ...(clients.budget ? { budgetClient: clients.budget } : {}),
-    },
+    options.harvestClients
+      ? guardClientSource(options.harvestClients)
+      : {
+          ...(clients.cost ? { costClient: clients.cost } : {}),
+          ...(clients.commitment ? { commitmentClient: clients.commitment } : {}),
+          ...(clients.budget ? { budgetClient: clients.budget } : {}),
+        },
     clock,
     app.log,
     options.scanTimeoutMs,

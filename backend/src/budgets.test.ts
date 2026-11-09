@@ -7,6 +7,8 @@ import {
   checkNoBudgets,
   fixtureBudgetClient,
   harvestBudgets,
+  mergeBudgetFindings,
+  mergeBudgetSnapshot,
   unreadBudgetClient,
 } from "./budgets.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
@@ -109,5 +111,33 @@ describe("budget routes", () => {
       status: "open",
       scopeId: "empty-no-budget:azure-cost-subscriptions-without-budgets",
     });
+  });
+});
+
+describe("budget merge for one-subscription scans", () => {
+  const row = (subscriptionId: string, budgetCount: number) => ({
+    subscriptionId,
+    budgetCount,
+    budgetNames: budgetCount ? ["guard"] : [],
+    readable: true,
+  });
+
+  it("replaces only the scanned subscription's finding and snapshot row", () => {
+    const first = checkNoBudgets([row("a", 1), row("b", 0)], "2026-11-01T00:00:00.000Z");
+    const next = checkNoBudgets([row("b", 1)], "2026-11-02T00:00:00.000Z");
+    const merged = mergeBudgetFindings(first, next, ["b"]);
+    expect(merged.map((finding) => [finding.scope.subscriptionOrProject, finding.result])).toEqual([
+      ["a", "pass"],
+      ["b", "pass"],
+    ]);
+    expect(mergeBudgetFindings(first, next).map((finding) => finding.scope.subscriptionOrProject)).toEqual(["b"]);
+    const snapshot = mergeBudgetSnapshot(
+      { lastConfirmed: "x", subscriptions: [row("a", 1), row("b", 0)] },
+      { lastConfirmed: "y", subscriptions: [row("b", 1)] },
+    );
+    expect(snapshot.subscriptions.map((item) => [item.subscriptionId, item.budgetCount])).toEqual([
+      ["a", 1],
+      ["b", 1],
+    ]);
   });
 });

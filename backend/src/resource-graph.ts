@@ -24,17 +24,67 @@ export const LAUNCH_RESOURCE_TYPES = [
 
 export type LaunchResourceType = (typeof LAUNCH_RESOURCE_TYPES)[number];
 
+const BASE_COLUMNS = ["id", "type", "name", "location", "subscriptionId", "tags"] as const;
+
+/**
+ * Columns are aliased to the fact names the checks read, so a live Resource Graph row and a
+ * fixture row have the same shape. Values that need the clock (ages, days left) are derived
+ * after the read (`normaliseLiveRow` in azure-live-graph.ts). Unverified until a live run.
+ */
 export const TYPE_PROJECTION: Record<LaunchResourceType, readonly string[]> = {
-  "Microsoft.Compute/disks": ["id", "type", "name", "location", "subscriptionId", "tags", "properties.diskState", "properties.managedBy"],
-  "Microsoft.Network/publicIPAddresses": ["id", "type", "name", "location", "subscriptionId", "tags", "properties.ipConfiguration"],
-  "Microsoft.Compute/snapshots": ["id", "type", "name", "location", "subscriptionId", "tags", "properties.timeCreated"],
-  "Microsoft.Compute/virtualMachines": ["id", "type", "name", "location", "subscriptionId", "tags", "properties.hardwareProfile.vmSize", "properties.extended.instanceView.powerState"],
-  "Microsoft.Web/serverfarms": ["id", "type", "name", "location", "subscriptionId", "tags", "properties.numberOfSites", "sku.name"],
-  "Microsoft.Network/loadBalancers": ["id", "type", "name", "location", "subscriptionId", "tags", "properties.backendAddressPools"],
-  "Microsoft.Network/natGateways": ["id", "type", "name", "location", "subscriptionId", "tags", "properties.subnets"],
-  "Microsoft.Sql/servers/databases": ["id", "type", "name", "location", "subscriptionId", "tags", "properties.zoneRedundant", "properties.requestedBackupStorageRedundancy"],
-  "Microsoft.Web/certificates": ["id", "type", "name", "location", "subscriptionId", "tags", "properties.expirationDate"],
-  "Microsoft.Network/applicationGateways": ["id", "type", "name", "location", "subscriptionId", "tags", "properties.sslCertificates"],
+  "Microsoft.Compute/disks": [
+    ...BASE_COLUMNS,
+    "diskState = tostring(properties.diskState)",
+    "sizeGb = toint(properties.diskSizeGB)",
+    "skuName = tostring(sku.name)",
+    "attachedTo = tostring(managedBy)",
+  ],
+  "Microsoft.Network/publicIPAddresses": [
+    ...BASE_COLUMNS,
+    "associatedTo = coalesce(tostring(properties.ipConfiguration.id), tostring(properties.natGateway.id))",
+    "skuName = tostring(sku.name)",
+  ],
+  "Microsoft.Compute/snapshots": [
+    ...BASE_COLUMNS,
+    "timeCreated = tostring(properties.timeCreated)",
+    "sizeGb = toint(properties.diskSizeGB)",
+  ],
+  "Microsoft.Compute/virtualMachines": [
+    ...BASE_COLUMNS,
+    "vmSize = tostring(properties.hardwareProfile.vmSize)",
+    "powerState = tostring(properties.extended.instanceView.powerState.code)",
+  ],
+  "Microsoft.Web/serverfarms": [
+    ...BASE_COLUMNS,
+    "numberOfSites = toint(properties.numberOfSites)",
+    "skuName = tostring(sku.name)",
+    "kind",
+  ],
+  "Microsoft.Network/loadBalancers": [
+    ...BASE_COLUMNS,
+    "backendPools = tostring(properties.backendAddressPools)",
+    "skuName = tostring(sku.name)",
+  ],
+  "Microsoft.Network/natGateways": [
+    ...BASE_COLUMNS,
+    "attachedSubnetCount = coalesce(array_length(properties.subnets), 0)",
+    "skuName = tostring(sku.name)",
+  ],
+  "Microsoft.Sql/servers/databases": [
+    ...BASE_COLUMNS,
+    "zoneRedundant = tobool(properties.zoneRedundant)",
+    "backupRedundancy = tostring(properties.currentBackupStorageRedundancy)",
+    "skuName = tostring(sku.name)",
+  ],
+  "Microsoft.Web/certificates": [
+    ...BASE_COLUMNS,
+    "expirationDate = tostring(properties.expirationDate)",
+    "hostName = tostring(properties.hostNames[0])",
+  ],
+  "Microsoft.Network/applicationGateways": [
+    ...BASE_COLUMNS,
+    "certificateName = tostring(properties.sslCertificates[0].name)",
+  ],
 };
 
 export const TYPE_CHECK_IDS: Record<LaunchResourceType, readonly string[]> = {

@@ -39,14 +39,18 @@ In-repo check engine, leftover waste checks, idle plan/LB/NAT checks, Recovery g
 
 ## Leftovers
 
-### Live scan to console (#95)
+### Live scan to console (#91, #95)
 
-A recorded full scan of the test subscription into the deployed console. The fixture Issues list is not that proof.
+Built: with `FARSIDE_AZURE_LIVE=1` the scan writes live findings to the same store the console reads. Left: a recorded full scan of the test subscription into the deployed console. The fixture Issues list is not that proof.
 
 ### Live metrics harvest
 
-Fixture ByteCount totals cover idle LB/NAT (#89). A Monitoring Reader series on the test subscription stays leftover.
+Built: the live harvest reads ByteCount per LB/NAT; no data or no Monitoring Reader stays `undetermined`. Left: a Monitoring Reader series on the test subscription.
 
 ### Later E3 stories
 
-Busy-gateway negative on the live test estate (#96). Live Backup Reader against vault items (#102). Live near-expiry cert proof (#106). Live accuracy of every Azure check (#121–#125). The fixture Scans screen is not a live run.
+Busy-gateway negative on the live test estate (#96). Live Backup Reader against vault items (#102). Live near-expiry cert proof (#106). The fixture Scans screen is not a live run.
+
+### Live accuracy (#121–#125)
+
+Built: `npm run azure-live:checks` runs every non-cost check through the production scan path and writes `docs/azure/live-runs/<date>-checks-noncost.json` with a pass/fail diff against `ground-truth.json` (#122, #123) and defects (#124). `npm run azure-live:matrix` rewrites the spec and support matrix from those records (#125). On the fake estate the diff found one defect, fixed here: a one-subscription scan dropped other subscriptions' budget findings. Known gap it will flag: gateway cert expiry is not in ARM. Left: the run on the test subscription.

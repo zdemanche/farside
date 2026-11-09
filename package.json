@@ -13,7 +13,7 @@
     "infra"
   ],
   "scripts": {
-    "lint": "npm run lint --workspaces --if-present && npm run lint:azure-spec && npm run lint:reuse-review && npm run lint:azure-estate && npm run lint:operator-runbook && npm run lint:gcp-spec && npm run lint:gcp-estate && npm run lint:plugin && npm run lint:support-matrix",
+    "lint": "npm run lint --workspaces --if-present && npm run lint:azure-spec && npm run lint:reuse-review && npm run lint:azure-estate && npm run lint:operator-runbook && npm run lint:gcp-spec && npm run lint:gcp-estate && npm run lint:plugin && npm run lint:support-matrix && npm run lint:azure-live",
     "lint:azure-spec": "node scripts/azure-spec/lint.mjs",
     "lint:reuse-review": "node scripts/reuse-review/lint.mjs",
     "lint:azure-estate": "node scripts/azure-estate/lint.mjs",
@@ -23,10 +23,11 @@
     "lint:plugin": "node scripts/plugin/lint.mjs && node scripts/plugin/bundle-cli.mjs",
     "plugin:bundle": "node scripts/plugin/bundle-cli.mjs --write",
     "lint:support-matrix": "node scripts/support-matrix/generate.mjs",
+    "lint:azure-live": "eslint scripts/azure-live",
     "format": "prettier --write \"console/**/*.{ts,tsx,css,html,json}\"",
     "format:check": "prettier --check \"console/**/*.{ts,tsx,css,html,json}\"",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test:azure-spec && npm run test:reuse-review && npm run test:azure-estate && npm run test:operator-runbook && npm run test:gcp-spec && npm run test:gcp-estate && npm run test:plugin && npm run test:support-matrix && npm run test:identity-rehearsal && npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p scripts/azure-live/tsconfig.json",
+    "test": "npm run test:azure-spec && npm run test:reuse-review && npm run test:azure-estate && npm run test:operator-runbook && npm run test:gcp-spec && npm run test:gcp-estate && npm run test:plugin && npm run test:support-matrix && npm run test:identity-rehearsal && npm run test:azure-live && npm run test --workspaces --if-present",
     "test:azure-spec": "vitest run --config scripts/azure-spec/vitest.config.ts",
     "test:reuse-review": "vitest run --config scripts/reuse-review/vitest.config.ts",
     "test:azure-estate": "vitest run --config scripts/azure-estate/vitest.config.ts",
@@ -37,6 +38,11 @@
     "test:support-matrix": "vitest run --config scripts/support-matrix/vitest.config.ts",
     "test:identity-rehearsal": "vitest run --config scripts/identity-rehearsal/vitest.config.ts",
     "identity:rehearse": "node scripts/identity-rehearsal/run.mjs",
+    "test:azure-live": "vitest run --config scripts/azure-live/vitest.config.ts",
+    "azure-live:access": "tsx scripts/azure-live/verify-access.ts",
+    "azure-live:checks": "tsx scripts/azure-live/run-checks.ts",
+    "azure-live:cost": "tsx scripts/azure-live/cost-portal.ts",
+    "azure-live:matrix": "node scripts/support-matrix/generate.mjs --write --write-spec",
     "build": "npm run build --workspaces --if-present"
   },
   "devDependencies": {

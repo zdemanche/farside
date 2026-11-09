@@ -29,7 +29,7 @@ In-repo Cost Management harvest against a multi-page fake, billing scope and cur
 
 ### Portal totals and agreement types (#131)
 
-The matrix lists PAYG, MCA, EA, and CSP as untested (#157). The fake pages are not billed months from a live subscription. Compare harvest totals to the Cost Management portal when a test estate exists.
+Built: `npm run azure-live:cost` writes live harvest totals with blank portal values and the untested agreement types; `--compare <file>` records spend-by-service and month-on-month pass within 0.5%. Live cost and budget clients now ride every live scan (#127). Left: the run and the portal figures on the test subscription.
 
 ### Missing Cost Management Reader live proof
 
@@ -41,7 +41,11 @@ Harvest stores fixture utilization and states unverified (#133). A dated live ru
 
 ### Live budget harvest
 
-Harvest stores fixture definitions as aggregates and states unverified (#137). A live Cost Management budgets list stays leftover.
+Built: with `FARSIDE_AZURE_LIVE=1` each scan lists budgets live for its subscription; other subscriptions' budget findings are kept. Left: a live Cost Management budgets list.
+
+### Live cost check accuracy (#154–#156)
+
+Built: `npm run azure-live:checks` writes `<date>-checks-cost.json`, diffing the budget check against `ground-truth.json`; spend and month-on-month come from the portal comparison; reservation and savings-plan stay skipped (#133). Defects found on the fake are fixed (#156). Left: the run on the test subscription.
 
 ### Cost and waste page (#147)
 

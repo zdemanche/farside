@@ -55,6 +55,7 @@ The per-item table below #9 is the earlier snapshot with class notes updated for
 38. **Audit #260** — merged (#307). Scan merge so harvest findings/coverage survive; inventory CheckFns; harvests on scheduled scan.
 39. **Audit #267** — this change: budget and commitment harvests open scoped issues.
 40. **E3+ remaining** — live Azure accuracy (#121–#125). Portal cost match is #131. Live commitments harvest is #133. Live budget harvest is #137.
+41. **Azure live paths** — this change: federated exchange (#53), live harvest wiring incl. scheduler (#58, #73, #76), runners for #41/#42, #122/#123, #154/#155, #63, #131 and matrix regeneration (#125). Built on a fake Azure; every live run is still leftover.
 
 Do **not** claim a live Azure result, a reachable `/health` in a dedicated account, or an iac-hub `PRODUCTS` merge that has not happened.
 
