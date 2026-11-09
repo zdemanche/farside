@@ -6,7 +6,7 @@ import type { CostSnapshot } from "./cost.js";
 import { recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import { applyScanToIssues, type StoredIssue } from "./issues.js";
 import { diskMonthlySavings } from "./savings.js";
-import type { Harvester, ScanJob } from "./scans.js";
+import type { HarvestClientSource, Harvester, ScanJob } from "./scans.js";
 import type { OrgRepository } from "./repository.js";
 
 export const DEMO_ORG_ID = "demo";
@@ -39,6 +39,11 @@ export function guardHarvester(harvester: Harvester): Harvester {
   return {
     harvest: (input) => guardProviderClient(input.orgId, harvester).harvest(input),
   };
+}
+
+/** The demo org never reaches a live per-scan client. */
+export function guardClientSource(source: HarvestClientSource): HarvestClientSource {
+  return async (input) => (isDemoOrg(input.orgId) ? {} : source(input));
 }
 
 export function isDemoOrg(orgId: string): boolean {

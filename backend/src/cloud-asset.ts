@@ -215,7 +215,7 @@ export async function readAllCloudAssetPages(
   throw new Error("Cloud Asset list exceeded page limit");
 }
 
-function inventoryFromAssets(
+export function inventoryFromAssets(
   assets: readonly CloudAsset[],
   ownerLabelKey: string,
   observedAt: string,
@@ -232,7 +232,7 @@ function inventoryFromAssets(
   return inventory;
 }
 
-function factsFromAssets(assets: readonly CloudAsset[]): ResourceFacts[] {
+export function factsFromAssets(assets: readonly CloudAsset[]): ResourceFacts[] {
   return factsFromGcpManifest({
     ownerLabelKey: "owner",
     items: assets.map(assetToItem),

@@ -45,7 +45,7 @@ If time: `#issues` for the unattached disk, then back to Estate. Stop before cos
 ## Close
 
 - Ask willingness-to-pay against a price **above** the dedicated-account floor (`docs/pricing-floor.md`).
-- Record the answer in the prospect notes (#80). Do not start Phase 2 stories until #81 is filed.
+- Record the answer in the prospect notes (#80) using `docs/week8/prospect-session-kit.md`. Do not start Phase 2 stories until #81 is filed from `docs/week8/continue-or-stop.md`.
 
 ## Leftover
 

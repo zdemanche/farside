@@ -9,7 +9,7 @@
 | Ryan Morris agreement | _not a personal comment_ — E1-S1-T4 (#14) is satisfied by owner direction |
 | Kevin agreement | _not a personal comment_ — same |
 | D1 closed | yes, by recording the recommendation |
-| Tickets changed | none in dashmeta or AIF — lists only until E1-S1-T5 (#15) |
+| Tickets changed | none in dashmeta or AIF — lists only until E1-S1-T5 (#15). Paste-ready text: `docs/boundary-dashmeta-amendment.md` |
 
 This document covers E1-S1-T1 (#11), T2 (#12), T3 (#13) and T4 (#14). T5 (amend dashmeta Jira and move AIF tickets) is still live work in those projects.
 

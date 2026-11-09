@@ -19,3 +19,5 @@ Roles and API names come from the proposal table. They have not been run live. C
 | gcp-lifecycle-expiring-certs | lifecycle | Expiring certificates | Certificate Manager Viewer | no | unverified | not-supported | — |
 
 Source of rows: [`launch-checks.json`](launch-checks.json). The lint in `scripts/gcp-spec/lint.mjs` fails if a proposal GCP check is missing, if a required field is missing, if a cost check omits the billing-export dependency, or if a matrix row disagrees with the spec on id, group, title, role, billing export, status, support, or live run.
+
+Run records: `scripts/support-matrix/generate.mjs` reads `live-runs/*.json` written by `npm run gcp:live -w backend`. None exist yet.

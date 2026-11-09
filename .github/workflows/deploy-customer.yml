@@ -1,0 +1,142 @@
+# Deploy Farside into one customer's dedicated AWS account, without iac-hub.
+# workflow_dispatch only. Skips with a warning when AWS / Pulumi credentials are
+# absent, so it never fails for want of an account. Stack config comes from
+# infra/customers.json + infra/accounts.json on main (infra/src/customer-cli.ts).
+name: deploy-customer
+
+on:
+  workflow_dispatch:
+    inputs:
+      customerName:
+        description: Tenant slug (address farside.<slug>.moonaan.com)
+        required: true
+        type: string
+      accountId:
+        description: 12-digit dedicated AWS account id registered to the slug
+        required: true
+        type: string
+      preview:
+        description: Run pulumi preview instead of up
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: deploy-customer-${{ inputs.customerName }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  require-main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the main ref
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::This workflow only runs from refs/heads/main; dispatched from $REF."
+            echo "Refused: dispatched from $REF; only refs/heads/main may run this workflow." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+  deploy:
+    needs: require-main
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: customer
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Fetch main
+        run: git fetch --depth=1 origin main
+      - name: Check deploy credentials
+        id: creds
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          PULUMI_SECRETS_PROVIDER: ${{ vars.PULUMI_SECRETS_PROVIDER }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ROLE_ARN:-}" ] || { [ -z "${PULUMI_CONFIG_PASSPHRASE:-}" ] && [ -z "${PULUMI_SECRETS_PROVIDER:-}" ]; }; then
+            echo "::warning::Customer deploy skipped: AWS_ROLE_ARN and a Pulumi secrets provider (PULUMI_CONFIG_PASSPHRASE or vars.PULUMI_SECRETS_PROVIDER) are not configured."
+            echo "Skipped: no AWS role or Pulumi secrets provider in the customer environment. Nothing was deployed. See docs/e1-s3-remaining.md." >> "$GITHUB_STEP_SUMMARY"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Build stack config from main
+        id: stack
+        working-directory: infra
+        env:
+          CUSTOMER_NAME: ${{ inputs.customerName }}
+          ACCOUNT_ID: ${{ inputs.accountId }}
+        run: |
+          set -euo pipefail
+          if ! [[ "${ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]]; then
+            echo "::error::accountId must be a 12-digit AWS account id."
+            exit 1
+          fi
+          git show origin/main:infra/accounts.json > "$RUNNER_TEMP/accounts.json"
+          git show origin/main:infra/customers.json > "$RUNNER_TEMP/customers.json"
+          STACK=$(npx tsx src/customer-cli.ts --customer "$CUSTOMER_NAME" --account "$ACCOUNT_ID" \
+            --registry "$RUNNER_TEMP/accounts.json" --customers "$RUNNER_TEMP/customers.json" --write)
+          echo "name=$(jq -r .stackName <<<"$STACK")" >> "$GITHUB_OUTPUT"
+          echo "region=$(jq -r .region <<<"$STACK")" >> "$GITHUB_OUTPUT"
+          echo "address=$(jq -r .address <<<"$STACK")" >> "$GITHUB_OUTPUT"
+          echo "Stack $(jq -r .stackName <<<"$STACK") for $(jq -r .address <<<"$STACK")" >> "$GITHUB_STEP_SUMMARY"
+      - name: Build backend bundles
+        if: steps.creds.outputs.enabled == 'true'
+        run: npm run build -w @farside/backend
+      - name: Build console
+        if: steps.creds.outputs.enabled == 'true'
+        run: npm run build -w @farside/console
+      - uses: aws-actions/configure-aws-credentials@v5
+        if: steps.creds.outputs.enabled == 'true'
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.stack.outputs.region }}
+      - uses: pulumi/actions@v6
+        if: steps.creds.outputs.enabled == 'true'
+      - name: Pulumi ${{ inputs.preview && 'preview' || 'up' }}
+        if: steps.creds.outputs.enabled == 'true'
+        working-directory: infra
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          PULUMI_SECRETS_PROVIDER: ${{ vars.PULUMI_SECRETS_PROVIDER }}
+          STACK: ${{ steps.stack.outputs.name }}
+          PREVIEW: ${{ inputs.preview }}
+        run: |
+          set -euo pipefail
+          if ! pulumi stack select "$STACK" 2>/dev/null; then
+            pulumi stack init "$STACK" ${PULUMI_SECRETS_PROVIDER:+--secrets-provider "$PULUMI_SECRETS_PROVIDER"}
+          fi
+          if ! pulumi config get farside:operatorToken >/dev/null 2>&1; then
+            openssl rand -hex 32 | pulumi config set --secret farside:operatorToken
+          fi
+          if [ "$PREVIEW" = "true" ]; then
+            pulumi preview --diff
+          else
+            pulumi up --yes
+          fi
+      - name: Sync console
+        if: steps.creds.outputs.enabled == 'true' && !inputs.preview
+        working-directory: infra
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          STACK: ${{ steps.stack.outputs.name }}
+        run: |
+          set -euo pipefail
+          BUCKET=$(pulumi stack output consoleBucket --stack "$STACK")
+          aws s3 sync ../console/dist "s3://$BUCKET" --delete
+          echo "Deployed $STACK. Console: $(pulumi stack output consoleUrl --stack "$STACK")" >> "$GITHUB_STEP_SUMMARY"

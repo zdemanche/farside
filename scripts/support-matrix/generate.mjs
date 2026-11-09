@@ -7,6 +7,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
 // Farside-local run record: docs/<cloud>/run-records/*.json, one object per file:
 // { "checkId": "...", "liveRunAt": "YYYY-MM-DD", "result": "pass" | "fail" }
+// Live runner record (scripts/azure-live): docs/<cloud>/live-runs/*.json with
+// { "liveRunAt": "YYYY-MM-DD", "checks": [{ "checkId": "...", "result": "pass" | "fail" }] }.
+// Records without a `checks` list (access, inventory, cost totals) are evidence only.
 export const CLOUDS = {
   azure: { dir: "docs/azure", billingColumn: false },
   gcp: { dir: "docs/gcp", billingColumn: true },
@@ -14,15 +17,62 @@ export const CLOUDS = {
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-export function loadRecords(dir) {
-  const folder = join(dir, "run-records");
+function readJsonFiles(folder) {
   if (!existsSync(folder)) {
     return [];
   }
   return readdirSync(folder)
     .filter((name) => name.endsWith(".json"))
     .sort()
-    .map((name) => ({ file: name, ...JSON.parse(readFileSync(join(folder, name), "utf8")) }));
+    .map((name) => ({ name, body: JSON.parse(readFileSync(join(folder, name), "utf8")) }));
+}
+
+// Live-run record: docs/<cloud>/live-runs/*.json, one run per file:
+// { "liveRunAt": "YYYY-MM-DD", "checks": [{ "checkId": "...", "result": "pass" | "fail" | "not-run" }] }
+// Only pass/fail entries count; files without a checks array (role runs) are ignored.
+export function liveRunRecords(name, body) {
+  if (!Array.isArray(body.checks)) {
+    return [];
+  }
+  return body.checks
+    .filter((check) => check.result !== "not-run")
+    .map((check) => ({
+      file: `live-runs/${name}`,
+      checkId: check.checkId,
+      liveRunAt: body.liveRunAt,
+      result: check.result,
+    }));
+}
+
+export const flattenLiveRun = liveRunRecords;
+
+export function loadRecords(dir) {
+  return [
+    ...readJsonFiles(join(dir, "run-records")).map(({ name, body }) => ({ file: name, ...body })),
+    ...readJsonFiles(join(dir, "live-runs")).flatMap(({ name, body }) => liveRunRecords(name, body)),
+  ];
+}
+
+/**
+ * Sets status/support/liveRunAt in launch-checks.json from run records (#43, #125), editing
+ * only those three values so the rest of the hand-formatted file is untouched.
+ */
+export function writeSpecStatus(text, checks) {
+  let next = text;
+  for (const check of checks) {
+    const start = next.indexOf(`"id": "${check.id}"`);
+    if (start === -1) {
+      throw new Error(`spec has no check '${check.id}'`);
+    }
+    const end = next.indexOf(`"liveRunAt":`, start);
+    const tail = next.slice(end).replace(/^"liveRunAt": (null|"[^"]*")/, `"liveRunAt": ${JSON.stringify(check.liveRunAt)}`);
+    const block = next
+      .slice(start, end)
+      .replace(/"status": "[^"]*"/, `"status": "${check.status}"`)
+      .replace(/"support": "[^"]*"/, `"support": "${check.support}"`);
+    next = next.slice(0, start) + block + tail;
+  }
+  return next;
 }
 
 /** A check is verified only by a dated passing record; the latest passing record wins. */
@@ -131,14 +181,25 @@ export function regenerate(markdown, checks, cloud) {
   return [...lines.slice(0, first), ...rows, ...lines.slice(last)].join("\n");
 }
 
-export function run({ write = false, root = ROOT } = {}) {
+export function run({ write = false, writeSpec = false, root = ROOT } = {}) {
   const errors = [];
   for (const [cloud, { dir }] of Object.entries(CLOUDS)) {
     const specPath = join(root, dir, "launch-checks.json");
     const matrixPath = join(root, dir, "support-matrix.md");
-    const spec = JSON.parse(readFileSync(specPath, "utf8"));
+    const specText = readFileSync(specPath, "utf8");
+    const spec = JSON.parse(specText);
     const { checks, errors: problems } = derive(spec, loadRecords(join(root, dir)));
-    errors.push(...problems.map((message) => `${cloud}: ${message}`));
+    if (writeSpec) {
+      const nextSpec = writeSpecStatus(specText, checks);
+      if (nextSpec !== specText) {
+        writeFileSync(specPath, nextSpec);
+      }
+      errors.push(
+        ...problems.filter((message) => !message.startsWith("spec '")).map((message) => `${cloud}: ${message}`),
+      );
+    } else {
+      errors.push(...problems.map((message) => `${cloud}: ${message}`));
+    }
     const current = readFileSync(matrixPath, "utf8");
     const next = regenerate(current, checks, cloud);
     if (next !== current) {
@@ -158,7 +219,7 @@ function isMain() {
 }
 
 if (isMain()) {
-  const errors = run({ write: process.argv.includes("--write") });
+  const errors = run({ write: process.argv.includes("--write"), writeSpec: process.argv.includes("--write-spec") });
   if (errors.length > 0) {
     for (const error of errors) {
       console.error(error);

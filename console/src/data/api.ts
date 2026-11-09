@@ -4,6 +4,7 @@ import { formatEvidence, toMoney, lifecycleFrom, recoveryFrom } from "./derive";
 import type {
   BillingView,
   BlindSpot,
+  ClaimView,
   ConnectInput,
   ConnectResult,
   CostWasteView,
@@ -43,7 +44,81 @@ type ApiOptions = {
   /** Limit every read to one cloud; omit for all clouds. */
   cloud?: Cloud;
   fetch?: typeof fetch;
+  /** Bearer token from sign-in. When set it replaces the x-farside-org header stand-in. */
+  token?: string;
 };
+
+function authHeaders(orgId: string, token: string | undefined): Record<string, string> {
+  return token ? { authorization: `Bearer ${token}` } : { [ORG_HEADER]: orgId };
+}
+
+function orgRoot(baseUrl: string, orgId: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}/v1/orgs/${encodeURIComponent(orgId)}`;
+}
+
+async function sendJson<T>(
+  call: typeof fetch,
+  url: string,
+  init: {
+    method: "GET" | "PUT" | "POST";
+    headers: Record<string, string>;
+    signal?: AbortSignal;
+    body?: unknown;
+  },
+): Promise<T> {
+  let response: Response;
+  try {
+    response = await call(url, {
+      method: init.method,
+      ...(init.signal ? { signal: init.signal } : {}),
+      headers: {
+        accept: "application/json",
+        ...init.headers,
+        ...(init.body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+    });
+  } catch (error) {
+    if (init.signal?.aborted) {
+      throw error;
+    }
+    throw toDataError(error);
+  }
+  if (!response.ok) {
+    const problem: { title?: string; error?: string } | null = await response
+      .json()
+      .catch(() => null);
+    throw errorFromStatus(response.status, problem?.title ?? response.statusText, problem?.error);
+  }
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new DataError(
+      "failed",
+      response.status,
+      "The Farside API returned an unreadable response",
+    );
+  }
+}
+
+const defaultFetch = (input: RequestInfo | URL, init?: RequestInit) => fetch(input, init);
+
+/** The org claim API (#46): read the caller's membership, then claim or join the org. */
+export function claimApi({ baseUrl, orgId, token, fetch: fetchImpl }: Omit<ApiOptions, "cloud">) {
+  const url = `${orgRoot(baseUrl, orgId)}/claim`;
+  const call = fetchImpl ?? defaultFetch;
+  const headers = authHeaders(orgId, token);
+  return {
+    status: (signal?: AbortSignal) =>
+      sendJson<ClaimView>(call, url, { method: "GET", headers, ...(signal ? { signal } : {}) }),
+    claim: (signal?: AbortSignal) =>
+      sendJson<ClaimView & { outcome: "claimed" | "joined" | "existing" }>(call, url, {
+        method: "POST",
+        headers,
+        ...(signal ? { signal } : {}),
+      }),
+  };
+}
 
 function issueRow(issue: StoredIssue): IssueRow {
   return {
@@ -63,49 +138,30 @@ function issueRow(issue: StoredIssue): IssueRow {
   };
 }
 
-export function apiSource({ baseUrl, orgId, cloud, fetch: fetchImpl }: ApiOptions): DataSource {
-  const root = `${baseUrl.replace(/\/+$/, "")}/v1/orgs/${encodeURIComponent(orgId)}`;
+export function apiSource({
+  baseUrl,
+  orgId,
+  cloud,
+  fetch: fetchImpl,
+  token,
+}: ApiOptions): DataSource {
+  const root = orgRoot(baseUrl, orgId);
   const query = cloud ? `?cloud=${encodeURIComponent(cloud)}` : "";
-  const call = fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
+  const call = fetchImpl ?? defaultFetch;
+  const headers = authHeaders(orgId, token);
 
-  async function request<T>(
+  const request = <T>(
     method: "GET" | "PUT" | "POST",
     path: string,
     signal?: AbortSignal,
     body?: unknown,
-  ): Promise<T> {
-    let response: Response;
-    try {
-      response = await call(`${root}${path}${method === "GET" ? query : ""}`, {
-        method,
-        ...(signal ? { signal } : {}),
-        headers: {
-          accept: "application/json",
-          [ORG_HEADER]: orgId,
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      });
-    } catch (error) {
-      if (signal?.aborted) {
-        throw error;
-      }
-      throw toDataError(error);
-    }
-    if (!response.ok) {
-      const problem: { title?: string } | null = await response.json().catch(() => null);
-      throw errorFromStatus(response.status, problem?.title ?? response.statusText);
-    }
-    try {
-      return (await response.json()) as T;
-    } catch {
-      throw new DataError(
-        "failed",
-        response.status,
-        "The Farside API returned an unreadable response",
-      );
-    }
-  }
+  ): Promise<T> =>
+    sendJson<T>(call, `${root}${path}${method === "GET" ? query : ""}`, {
+      method,
+      headers,
+      ...(signal ? { signal } : {}),
+      ...(body === undefined ? {} : { body }),
+    });
 
   const get = <T>(path: string, signal?: AbortSignal) => request<T>("GET", path, signal);
   const findings = async (signal?: AbortSignal) =>
@@ -121,7 +177,7 @@ export function apiSource({ baseUrl, orgId, cloud, fetch: fetchImpl }: ApiOption
         response = await call(`${root}/export/${kind}${options?.allClouds ? "" : query}`, {
           method: "GET",
           ...(signal ? { signal } : {}),
-          headers: { accept: "application/json", [ORG_HEADER]: orgId },
+          headers: { accept: "application/json", ...headers },
         });
       } catch (error) {
         if (signal?.aborted) {

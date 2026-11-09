@@ -1,7 +1,7 @@
 import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);
 
 // backend/src/cli.ts
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync as existsSync2, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import { join as join2 } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -874,8 +874,27 @@ async function harvestBudgets(input) {
 function applyBudgetCoverage(existing, harvested) {
   return applyCoverageResults(existing, harvested);
 }
-function mergeBudgetFindings(existing, next) {
-  return [...existing.filter((finding) => finding.checkId !== NO_BUDGETS), ...next];
+function mergeBudgetFindings(existing, next, subscriptionIds) {
+  const scope4 = subscriptionIds ? new Set(subscriptionIds.map((id) => id.toLowerCase())) : null;
+  return [
+    ...existing.filter(
+      (finding) => finding.checkId !== NO_BUDGETS || scope4 !== null && !scope4.has(finding.scope.subscriptionOrProject.toLowerCase())
+    ),
+    ...next
+  ];
+}
+function mergeBudgetSnapshot(existing, next) {
+  if (!existing) {
+    return next;
+  }
+  const listed = new Set(next.subscriptions.map((row) => row.subscriptionId.toLowerCase()));
+  return {
+    ...next,
+    subscriptions: [
+      ...existing.subscriptions.filter((row) => !listed.has(row.subscriptionId.toLowerCase())),
+      ...next.subscriptions
+    ]
+  };
 }
 
 // backend/src/clock.ts
@@ -3523,6 +3542,9 @@ function abortable(signal, work, timeoutMs) {
   });
 }
 
+// backend/src/readonly.ts
+var asMutable = (value) => value;
+
 // backend/src/providers/launch-ids.ts
 var AZURE_LAUNCH_CHECK_IDS = [
   "azure-inventory-all-resources",
@@ -3599,7 +3621,8 @@ async function persistAzureHarvests({ orgId, subscriptionId, store }, collected)
     );
   }
   if (collected.budgets) {
-    await store.putBudgets(orgId, collected.budgets.snapshot);
+    const { budgets } = await store.read(orgId, "budgets");
+    await store.putBudgets(orgId, mergeBudgetSnapshot(asMutable(budgets), collected.budgets.snapshot));
   }
 }
 function applyAzureHarvests({ subscriptionId }, collected, outputs) {
@@ -3615,7 +3638,11 @@ function applyAzureHarvests({ subscriptionId }, collected, outputs) {
   }
   if (collected.budgets) {
     coverage = applyBudgetCoverage(coverage, collected.budgets.coverage);
-    findings = mergeBudgetFindings(findings, collected.budgets.findings);
+    findings = mergeBudgetFindings(
+      findings,
+      collected.budgets.findings,
+      collected.budgets.snapshot.subscriptions.map((row) => row.subscriptionId)
+    );
   }
   return { findings, coverage: fillUnrunLaunchCoverage(coverage, subscriptionId) };
 }
@@ -4882,9 +4909,6 @@ var DeletedOrgError = class extends Error {
   }
 };
 
-// backend/src/readonly.ts
-var asMutable = (value) => value;
-
 // backend/src/repository.ts
 var MAX_SCANS_PER_ORG = 200;
 var SUBSCRIPTION_DISCONNECTED = "subscription disconnected";
@@ -5524,13 +5548,14 @@ var ScanRunner = class {
       });
       const replaceIds = new Set(registeredCheckIds(result.inventory.cloud));
       const provider = providerFor(result.inventory.cloud);
+      const clients = typeof this.harvestClients === "function" ? await this.harvestClients({ orgId, subscriptionId: current.subscriptionId }) : this.harvestClients;
       const postHarvest = provider.collectHarvests ? await provider.collectHarvests({
         orgId,
         subscriptionId: current.subscriptionId,
         signal,
         remainingMs,
         clock: this.clock,
-        clients: this.harvestClients,
+        clients,
         store: this.store
       }) : NO_POST_HARVEST;
       if (!postHarvest || signal.aborted) {
@@ -5626,6 +5651,44 @@ function probeRoles(cloud, granted) {
   };
 }
 
+// backend/src/org-claim.ts
+var MAX_ORG_MEMBERS = 1e3;
+var MemberLimitError = class extends Error {
+  constructor(orgId) {
+    super(`org ${orgId} already has ${MAX_ORG_MEMBERS} members`);
+    this.name = "MemberLimitError";
+  }
+};
+function roleOf(claim, actorId) {
+  return claim?.members.find((member) => member.actorId === actorId)?.role ?? null;
+}
+function nextClaim(current, input) {
+  if (!current) {
+    if (!input.mayOwn) {
+      return { result: { outcome: "refused", claim: null, role: null }, write: false };
+    }
+    const claim2 = {
+      orgId: input.orgId,
+      ownerId: input.actorId,
+      claimedAt: input.now,
+      members: [{ actorId: input.actorId, role: "owner", joinedAt: input.now }]
+    };
+    return { result: { outcome: "claimed", claim: claim2, role: "owner" }, write: true };
+  }
+  const existing = roleOf(current, input.actorId);
+  if (existing) {
+    return { result: { outcome: "existing", claim: current, role: existing }, write: false };
+  }
+  if (current.members.length >= MAX_ORG_MEMBERS) {
+    throw new MemberLimitError(input.orgId);
+  }
+  const claim = {
+    ...current,
+    members: [...current.members, { actorId: input.actorId, role: "member", joinedAt: input.now }]
+  };
+  return { result: { outcome: "joined", claim, role: "member" }, write: true };
+}
+
 // backend/src/store.ts
 var MemoryStore = class {
   constructor(clock = systemClock) {
@@ -5636,6 +5699,7 @@ var MemoryStore = class {
   #deletions = /* @__PURE__ */ new Map();
   #running = new RunningScans();
   #seeded = /* @__PURE__ */ new Set();
+  #claims = /* @__PURE__ */ new Map();
   org(orgId) {
     if (this.#deletions.has(orgId)) {
       throw new DeletedOrgError(orgId);
@@ -5695,6 +5759,7 @@ var MemoryStore = class {
     });
     assertNoSecrets(record);
     this.#orgs.delete(orgId);
+    this.#claims.delete(orgId);
     this.#deletions.set(orgId, record);
     return record;
   }
@@ -5886,6 +5951,25 @@ var MemoryStore = class {
     this.org(orgId);
     this.#seeded.add(orgId);
   }
+  async orgClaim(orgId) {
+    this.org(orgId);
+    const claim = this.#claims.get(orgId);
+    return claim ? structuredClone(claim) : null;
+  }
+  async claimOrg(orgId, actorId, options = {}) {
+    this.org(orgId);
+    const { result, write } = nextClaim(this.#claims.get(orgId) ?? null, {
+      orgId,
+      actorId,
+      now: this.clock(),
+      mayOwn: options.mayOwn !== false
+    });
+    if (write && result.claim) {
+      assertNoSecrets(result.claim);
+      this.#claims.set(orgId, structuredClone(result.claim));
+    }
+    return result.claim ? { ...result, claim: structuredClone(result.claim) } : result;
+  }
   async isConnected(orgId, subscriptionId) {
     const target = subscriptionId.toLowerCase();
     return this.org(orgId).connections.some((item) => item.subscriptionId.toLowerCase() === target);
@@ -5951,8 +6035,42 @@ var WORKSPACE_FILES = {
   inventory: "inventory.json",
   coverage: "coverage.json",
   issues: "issues.json",
-  cost: "cost.json"
+  cost: "cost.json",
+  state: "state.json"
 };
+function emptyState() {
+  return { version: 1, scans: [], inventories: {}, costs: {} };
+}
+function readOptional(dir, name) {
+  return existsSync2(join2(dir, name)) ? readWorkspaceFile(dir, name) : null;
+}
+function readWorkspaceState(dir) {
+  const saved = readOptional(dir, WORKSPACE_FILES.state);
+  if (saved) {
+    return { ...emptyState(), ...saved };
+  }
+  const state = emptyState();
+  const inventory = readOptional(dir, WORKSPACE_FILES.inventory);
+  if (inventory) {
+    state.inventories[inventory.cloud] = inventory;
+    state.scans.push({ id: "scan-1", cloud: inventory.cloud, scope: "", status: "succeeded", finishedAt: null });
+  }
+  return state;
+}
+async function restoreWorkspace(store, dir, state) {
+  for (let index = 0; index < state.scans.length; index += 1) {
+    await store.nextSequence(CLI_ORG_ID, "scan");
+  }
+  for (const inventory of Object.values(state.inventories)) {
+    await store.putInventory(CLI_ORG_ID, inventory);
+  }
+  for (const [subscriptionId, cost] of Object.entries(state.costs)) {
+    await store.putCost(CLI_ORG_ID, cost, subscriptionId);
+  }
+  await store.putFindings(CLI_ORG_ID, readOptional(dir, WORKSPACE_FILES.findings) ?? []);
+  await store.putCoverage(CLI_ORG_ID, readOptional(dir, WORKSPACE_FILES.coverage) ?? []);
+  await store.putIssues(CLI_ORG_ID, readOptional(dir, WORKSPACE_FILES.issues) ?? []);
+}
 function defaultWorkspaceDir(home = homedir2()) {
   return join2(home, DEFAULT_WORKSPACE_DIRNAME);
 }
@@ -6098,6 +6216,8 @@ async function runScan(flags, io) {
     }
   }
   const store = new MemoryStore(clock);
+  const state = readWorkspaceState(dir);
+  await restoreWorkspace(store, dir, state);
   const harvester = flags.fixture ? providerFor(flags.cloud).harvester(clock) : unconfiguredHarvester();
   const runner = new ScanRunner(
     store,
@@ -6126,10 +6246,21 @@ async function runScan(flags, io) {
     "inventory",
     "coverage",
     "issues",
-    "cost"
+    "cost",
+    "costs"
   );
   const inventory = org.inventories[flags.cloud] ?? org.inventory;
+  const nextState = {
+    version: 1,
+    scans: [
+      ...state.scans,
+      { id: job.id, cloud: flags.cloud, scope: flags.scope, status: job.status, finishedAt: job.finishedAt ?? null }
+    ],
+    inventories: asMutable(org.inventories),
+    costs: asMutable(org.costs)
+  };
   mkdirSync(dir, { recursive: true });
+  writeWorkspaceFile(dir, WORKSPACE_FILES.state, nextState);
   writeWorkspaceFile(dir, WORKSPACE_FILES.findings, asMutable(org.findings));
   writeWorkspaceFile(dir, WORKSPACE_FILES.inventory, asMutable(inventory));
   writeWorkspaceFile(dir, WORKSPACE_FILES.coverage, asMutable(org.coverage));
@@ -6162,10 +6293,16 @@ function writeExportFiles(dir, exportedAt) {
   const issues = readWorkspaceFile(dir, WORKSPACE_FILES.issues);
   const inventory = readWorkspaceFile(dir, WORKSPACE_FILES.inventory);
   const cost = readWorkspaceFile(dir, WORKSPACE_FILES.cost);
-  assertNoSecrets({ issues, inventory, cost });
+  const saved = Object.values(readWorkspaceState(dir).inventories);
+  const inventories = saved.length > 0 ? saved : inventory ? [inventory] : [];
+  assertNoSecrets({ issues, inventories, cost });
+  const inventoryEnvelope = exportInventory(CLI_ORG_ID, null, exportedAt);
+  inventoryEnvelope.rows = inventories.flatMap(
+    (item) => exportInventory(CLI_ORG_ID, item, exportedAt).rows
+  );
   const envelopes = [
     exportIssues(CLI_ORG_ID, issues, exportedAt),
-    exportInventory(CLI_ORG_ID, inventory, exportedAt),
+    inventoryEnvelope,
     exportCost(CLI_ORG_ID, cost, exportedAt)
   ];
   mkdirSync(dir, { recursive: true });
@@ -6276,5 +6413,6 @@ export {
   ROLE_LISTING_CLOSER,
   USAGE,
   defaultWorkspaceDir,
+  readWorkspaceState,
   runCli
 };

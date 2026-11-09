@@ -57,7 +57,7 @@ export class MetricUnavailableError extends Error {
   }
 }
 
-const SUBSCRIPTION_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
+export const SUBSCRIPTION_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
 // Only plain resource-path segments: no encoded dots, slashes, backslashes or whitespace.
 const ARM_PATH = /^\/subscriptions\/[A-Za-z0-9][A-Za-z0-9-]{0,63}(\/[A-Za-z0-9._()-]+)*$/;
 
@@ -65,7 +65,7 @@ function isArmUrl(url: string): boolean {
   return url.startsWith(`${ARM_ORIGIN}/`);
 }
 
-function safeArmPath(path: string): string {
+export function safeArmPath(path: string): string {
   if (!ARM_PATH.test(path) || path.split("/").some((part) => part === "." || part === "..")) {
     throw new Error("not an Azure resource path");
   }
@@ -86,7 +86,8 @@ function retryWait(response: Response, attempt: number): number {
   return Math.min(seconds, MAX_RETRY_WAIT_MS);
 }
 
-async function armJson(
+/** One ARM call with the shared token, retry, timeout and status rules. */
+export async function armJson(
   options: ArmOptions,
   method: "GET" | "POST",
   url: string,

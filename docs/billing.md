@@ -33,7 +33,7 @@ Screen shape only, when #171 / #243 lands: plan name, status, amount due, suspen
 - Contract store: `PUT /v1/orgs/:orgId/contract` (plan, start, state, amount due).
 - Scan gate: scheduler and `POST /scans` use `canScan`.
 - Ladder above, with failed-payment → paid reset to `active`.
-- Offboard already deletes org data (#179). `accountClosureAt` stays null until #182.
+- Offboard already deletes org data (#179). `scripts/offboarding/retire-account.mjs` closes the dedicated account after that (guarded, dry run by default; runbook appendix). `accountClosureAt` in the store stays null; the retirement record carries the date. No account has been retired.
 
 ## Leftover
 

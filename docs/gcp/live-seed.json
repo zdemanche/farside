@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "manifest": "docs/gcp/ground-truth.json",
+  "note": "Live seed and live-run rules for ground-truth.json. Read by scripts/gcp-estate/seed.mjs and backend/src/gcp-live-run.ts. Nothing here has been applied to a live project.",
+  "budget": { "displayName": "farside-test-guard", "amount": 50, "currency": "USD", "thresholds": [0.5, 0.9, 1.0] },
+  "billingExportDataset": "billing_export",
+  "unseedable": {
+    "gke-stale": "GKE no longer creates 1.24 clusters. Fixture-only case; dropped from the live diff."
+  },
+  "delayed": {
+    "snap-aged": "Must be older than snapshotRetentionDays at the live run. Seed in phase 'base', then wait.",
+    "image-stale": "Must be older than snapshotRetentionDays at the live run. Seed in phase 'base', then wait.",
+    "cert-expiring": "Seed in phase 'fresh' so it is inside the warning window at the live run.",
+    "rec-vm-parked": "Recommender emits it after days of idle metrics on vm-parked.",
+    "rec-disk-idle": "Recommender emits it after days of idle metrics on disk-parked."
+  },
+  "extraResources": [
+    {
+      "id": "vm-parked",
+      "type": "compute.googleapis.com/Instance",
+      "region": "us-central1-a",
+      "labels": { "owner": "farside-test" },
+      "reason": "Idle VM so Recommender can emit rec-vm-parked."
+    }
+  ],
+  "ignoreNamePrefixes": ["gke-", "gk3-"]
+}

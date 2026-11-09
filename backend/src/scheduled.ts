@@ -1,6 +1,8 @@
 import { pino } from "pino";
 import { systemClock, type Clock } from "./clock.js";
-import { guardHarvester, isDemoOrg } from "./demo.js";
+import { azureLiveFromEnv } from "./azure-live-harvest.js";
+import type { FetchLike } from "./azure-live.js";
+import { guardClientSource, guardHarvester, isDemoOrg } from "./demo.js";
 import { audit, auditRetention, loggerFromEnv, pinoOptions, type LogSink } from "./observability.js";
 import { ScanRunner, unconfiguredHarvester } from "./scans.js";
 import { ScanScheduler, type ScheduleTick } from "./scheduler.js";
@@ -93,9 +95,27 @@ export async function runScheduledTick(deps: TickDeps): Promise<TickSummary> {
 
 const log = pino(pinoOptions(loggerFromEnv()) || {});
 
+/** The unattended runner (actor: system). Live Azure only when switched on in the environment. */
+export function scheduledRunner(
+  store: OrgRepository,
+  options: { env?: NodeJS.Dict<string>; clock?: Clock; log?: LogSink; fetch?: FetchLike } = {},
+): ScanRunner {
+  const clock = options.clock ?? systemClock;
+  const sink = options.log ?? log;
+  const live = azureLiveFromEnv(options.env ?? process.env, {
+    store,
+    fallback: unconfiguredHarvester(),
+    clock,
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+  });
+  return live
+    ? new ScanRunner(store, guardHarvester(live.harvester), guardClientSource(live.harvestClients), clock, sink)
+    : new ScanRunner(store, guardHarvester(unconfiguredHarvester()), {}, clock, sink);
+}
+
 async function createDeps(): Promise<TickDeps> {
   const store = await storeFromEnv(process.env, systemClock, log);
-  const runner = new ScanRunner(store, guardHarvester(unconfiguredHarvester()), {}, systemClock, log);
+  const runner = scheduledRunner(store);
   return { store, scheduler: new ScanScheduler(store, runner, systemClock, log), clock: systemClock, log };
 }
 

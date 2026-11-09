@@ -37,6 +37,7 @@ import {
   type ScanMergeDraft,
   type Sequence,
 } from "./repository.js";
+import { nextClaim, type ClaimOptions, type ClaimResult, type OrgClaim } from "./org-claim.js";
 import type { ScanJob } from "./scans.js";
 import type { ScheduleState } from "./scheduler.js";
 import { assertNoSecrets, markVerified, markVerifiedAll } from "./secrets.js";
@@ -50,6 +51,7 @@ export class MemoryStore implements OrgRepository {
   #deletions = new Map<string, DeletionRecord>();
   #running = new RunningScans();
   #seeded = new Set<string>();
+  #claims = new Map<string, OrgClaim>();
 
   constructor(readonly clock: Clock = systemClock) {}
 
@@ -127,6 +129,7 @@ export class MemoryStore implements OrgRepository {
     });
     assertNoSecrets(record);
     this.#orgs.delete(orgId);
+    this.#claims.delete(orgId);
     this.#deletions.set(orgId, record);
     return record;
   }
@@ -352,6 +355,27 @@ export class MemoryStore implements OrgRepository {
   async markSeeded(orgId: string): Promise<void> {
     this.org(orgId);
     this.#seeded.add(orgId);
+  }
+
+  async orgClaim(orgId: string): Promise<OrgClaim | null> {
+    this.org(orgId);
+    const claim = this.#claims.get(orgId);
+    return claim ? structuredClone(claim) : null;
+  }
+
+  async claimOrg(orgId: string, actorId: string, options: ClaimOptions = {}): Promise<ClaimResult> {
+    this.org(orgId);
+    const { result, write } = nextClaim(this.#claims.get(orgId) ?? null, {
+      orgId,
+      actorId,
+      now: this.clock(),
+      mayOwn: options.mayOwn !== false,
+    });
+    if (write && result.claim) {
+      assertNoSecrets(result.claim);
+      this.#claims.set(orgId, structuredClone(result.claim));
+    }
+    return result.claim ? { ...result, claim: structuredClone(result.claim) } : result;
   }
 
   async isConnected(orgId: string, subscriptionId: string): Promise<boolean> {

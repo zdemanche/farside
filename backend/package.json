@@ -12,7 +12,9 @@
     "lint": "eslint .",
     "test": "vitest run --exclude src/performance.test.ts && vitest run src/performance.test.ts",
     "start": "node dist/index.js",
-    "farside": "tsx src/cli.ts"
+    "farside": "tsx src/cli.ts",
+    "gcp:live": "tsx src/gcp-live-run.ts",
+    "gcp:roles": "tsx src/gcp-role-verify.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1163.0",

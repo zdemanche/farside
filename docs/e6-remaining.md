@@ -1,6 +1,6 @@
 # E6 remaining work
 
-The GCP control spec lists every launch check from the proposal table as unverified / not-supported. A live project (D7), federated connect, Cloud Asset harvest, and Recommender proof stay leftover.
+The GCP control spec lists every launch check from the proposal table as unverified / not-supported. The live code paths are built and tested against mocked `fetch` only. **No live run has happened.** What remains is running them on a funded project (D7).
 
 ## Done here
 
@@ -24,9 +24,22 @@ The GCP control spec lists every launch check from the proposal table as unverif
 | E6-S2-T2 | #197 | Injected Cloud Asset client pages `pageToken` across every launch asset type from the ground-truth fixture. Throttle → `throttling`, other errors → `failed_call`. Default scan path stays the fixture harvester. Live Cloud Asset on a project leftover. |
 | E6-S6-T1 | #213 | Injected BigQuery export client pages fixture spend rows and stores service/project aggregates. Harvest stays `unverified`. Live export and console comparison leftover. |
 | E6-S7-T4 | #220 | GCP support-matrix table is linted against `launch-checks.json` (id, group, title, role, billing export, status, support, live run). Live rerun leftover. |
+| E6-S1-T2 | #190 / #188 | `gcp-federation.ts`: OIDC token file (`FARSIDE_GCP_SUBJECT_TOKEN_FILE` or `AWS_WEB_IDENTITY_TOKEN_FILE`) → `sts.googleapis.com` → `iamcredentials` `generateAccessToken` for the customer service account. Read-only scope, in-memory cache until 5 min before expiry, no stored secret, errors carry step + status only. AWS-signed (`aws4_request`) subject tokens not built. |
+| E6-S2-T2 / E6-S7 | #195 / #216 | `gcp-live.ts`: fetch clients for Cloud Asset (`pageToken`, RESOURCE content), Cloud SQL, GKE, Certificate Manager, Recommender, BigQuery export query and export-state detector. `gcp-live-harvester.ts`: live harvester, used only when `FARSIDE_GCP_LIVE=1` plus project, pool, provider, service account and token file are set. Default path stays the fixture harvester; CI sets nothing. |
+| E6-S1-T4 | #192 | `gcp-role-verify.ts` (`npm run gcp:roles -w backend`): `testIamPermissions` per spec role, dated record `docs/gcp/live-runs/<date>-<project>-roles.json`. Also a `RoleLister` for the connect probe. |
+| E6-S1-T1 / T6 / E6-S2-T1 | #189 / #194 / #196 | `scripts/gcp-estate/seed.mjs`: gcloud/bq/openssl plan from `ground-truth.json` + `live-seed.json`, budget guard, export dataset, phases `base` / `fresh`, teardown. Dry run by default; `--apply` needs credentials, `FARSIDE_GCP_SEED_PROJECT` and `FARSIDE_GCP_BILLING_ACCOUNT`. No credentials → `skipped: no GCP credentials`, exit 0. |
+| E6-S7-T3 | #219 | `gcp-live-run.ts` (`npm run gcp:live -w backend`): harvests live, runs every GCP check, diffs against expected results from the manifest, writes `docs/gcp/live-runs/<date>-<project>-checks.json` with `liveRunAt`, marks passing checks verified in `launch-checks.json` and regenerates the matrix. `scripts/support-matrix/generate.mjs` reads `live-runs/`. |
 
 ## Leftovers
 
-### Live GCP project, Identity, AIF collectors
+### Live run (D7)
 
-A funded project (#189), federated credentials (#190), Connect screen (#191 / #243), live role proof (#192), and billing export enablement (#194) need D7. An injected Cloud Asset client pages launch types against the fixture (#197). A live Cloud Asset list stays leftover. Do not copy AIF client names. Fixture BigQuery pages store unverified service/project aggregates (#213); a live export and console comparison stay leftover. The GCP matrix is linted against the spec (#220); a live rerun stays leftover.
+Only the live run remains. In order: fund the project and pool (#189); `seed.mjs --apply --phase=base`; switch on the BigQuery export in the console, which has no API (#194); wait past `snapshotRetentionDays` and for Recommender idle days; `--phase=fresh`; `gcp:roles` (#192); `gcp:live` (#219); compare BigQuery spend with the console by hand (#213); `--teardown`. Connect screen UI stays #191 / #243. Do not copy AIF client names.
+
+Known before any live run:
+
+- Recommender returns a point cost, not a range. Live idle findings stay undetermined until the savings rule is decided, so that check will diff as fail.
+- GKE reads need `container.clusters.list`, which no spec role grants. The role record lists it as unnamed.
+- `gke-stale` (GKE 1.24) cannot be created; `sql-stale` (MYSQL_5_6) may be refused. Both are flagged in `live-seed.json`.
+- Committed-use: no live reader and the seed buys no commitment. Spend-by-service needs a console comparison. Both record `not-run`.
+- Internal reserved addresses would be judged like external ones.
