@@ -282,6 +282,17 @@ FARSIDE_OPERATOR_TOKEN=<token> npm run dev -w @farside/backend
 
 Org `demo` (`VITE_FARSIDE_DEMO=1` on the console) is a synthetic estate. Do not use it as a sale rehearsal.
 
+## Appendix: rehearsal runner (#176)
+
+`node scripts/operator-runbook/rehearse.mjs` walks steps 1–10 in order, checks each step's in-repo preconditions (slug, registered account, `customers.json` entry, stage workflows, connect tenant not the app-registration tenant, no card digits) and writes `docs/rehearsals/<date>-<customer>-<mode>.json`.
+
+| Mode | Flags | Calls |
+|---|---|---|
+| Dry run (default) | `--customer`, `--account`, `--org`, `--tenant`, `--subscription`, `--out-dir`, `--no-write` | None. Record says no live call was made. |
+| Live | `--live` + `FARSIDE_API_URL`, `FARSIDE_OPERATOR_TOKEN` (optional `FARSIDE_CONSOLE_URL`) | PUT contract, GET console, PUT connection, poll scans. Missing env: `live-skipped`, exit 0. |
+
+Steps 2–6 and 8 belong to iac-hub, the operator, base, Identity and Launch. The runner never performs them: live mode stops at the first one unless the operator lists it in `--confirmed` after doing it by hand. Exit 1 on a blocked or failed step. Result is `pass` only when every step passed or was confirmed in live mode. A dry-run record is not the cold rehearsal; #176 closes on a live record from a test tenant.
+
 ## Appendix: injected failure walkthrough {#injected-failure}
 
 Walk this on any org. It is the #177 check: one injected failure, then rollback, then a clean retry.
