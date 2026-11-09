@@ -1,6 +1,6 @@
 # E2 remaining work
 
-In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory mapping, and no-owner totals are in this tree. Moonaan Identity, live federated Azure connect, and live harvest are leftovers.
+In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory mapping, no-owner totals, and standard-OIDC sign-in with the org claim are in this tree. Hooking sign-in to a live Moonaan Identity tenant, live federated Azure connect, and live harvest are leftovers.
 
 ## Done here
 
@@ -27,12 +27,25 @@ In-repo org scoping, a no-secrets guard, the guided Connect screen, inventory ma
 | E2-S2-T3 | #55 | Connect probes roles through an injected `RoleLister` and stores each missing role plus the checks it blocks. Tests remove Cost Management Reader / Backup Reader. Live ARM role list leftover. |
 | E2-S3-T2 | #60 | Injected hierarchy client lists the fixture root/test management groups and both ground-truth subscriptions. Live ARM listing leftover. |
 | E2-S2-T4 | #56 | Re-probe `POST .../connections/:id/roles` marks a revoked grant `healthy: false`. DELETE removes the connection. Live revoke on the test subscription leftover. |
+| E2-S1-T2 | #48 | Bearer JWTs (RS256/ES256) verified against a fetched, cached JWKS (OIDC discovery when no JWKS URL is set); iss, aud, exp, nbf and azp checked; configured org/actor/role claims map onto the session. With `FARSIDE_IDENTITY_ISSUER` set, the header stand-in gets 401. Tests sign with a locally generated key. |
+| E2-S1 | #46 | `GET`/`POST /v1/orgs/:orgId/claim`: the first verified user claims the org (owner), later users join (member), repeats are no-ops, each call is audited as `org.claim`. In identity mode every other org route needs membership. Memory and DynamoStore, cross-org 403 kept. |
+| E2-S1-T3 | #49 | Console Sign in (authorization code + PKCE) and Claim / Join screens, configured by `VITE_FARSIDE_IDENTITY_*`; the token goes in `sessionStorage` and is sent as a bearer. Vitest + axe, Playwright axe in both themes and the full flow on stubbed provider and API. |
+| E2-S1-T1 | #47 | Sign-in screens sit in the Farside shell (skip link, landmarks, title, focus) and the navigation appears once signed in; covered by the shell and e2e accessibility tests. The AIF Program UI design was not readable, so AIF parity is a later review. Nothing was copied from AIF. |
+| E2-S1-T5 | #51 | `npm run identity:rehearse` (`scripts/identity-rehearsal/`) runs claim, sign-in, join, org-scoped read and cross-org 403 against a running backend and writes `docs/identity/run-records/<date>-claim-rehearsal.json`. Without a test tenant it prints `skipped: no identity test tenant` and exits 0. |
 
 ## Leftovers
 
-### Moonaan Identity (#46, #48, #49)
+### Moonaan Identity tenant hookup (#45, #46, #48, #49, #51)
 
-`x-farside-org` / `x-farside-actor` headers stand in for tokens. Claim and sign-in screens wait on Identity.
+Only the live tenant hookup remains. Everything is built against standard OIDC and switched on by configuration; no Moonaan Identity internals are assumed (its repo was not readable and no tenant was reachable).
+
+1. Register the console as a public client (authorization code + PKCE) and get the issuer, audience, org claim name and, if any, the role claim from Identity.
+2. Backend: set `FARSIDE_IDENTITY_ISSUER`, `FARSIDE_IDENTITY_AUDIENCE`, `FARSIDE_IDENTITY_ORG_CLAIM` (and optionally `FARSIDE_IDENTITY_JWKS_URL`, `_CLIENT_ID`, `_ACTOR_CLAIM`, `_ROLE_CLAIM`, `_CLAIM_ROLE`, `_ALGORITHMS`, `_CLOCK_TOLERANCE_SECONDS`, `_JWKS_CACHE_SECONDS`). Unset, the `x-farside-org` / `x-farside-actor` header session stays as before.
+3. Console: build with `VITE_FARSIDE_API_URL`, `VITE_FARSIDE_IDENTITY_ISSUER`, `VITE_FARSIDE_IDENTITY_CLIENT_ID`, `VITE_FARSIDE_IDENTITY_ORG_CLAIM` (see `docs/console-design.md`).
+4. Run the claim rehearsal on the test tenant (`scripts/identity-rehearsal/checklist.md`) and commit the dated record.
+5. AIF parity review of the shell navigation and its accessibility tests (#47) once the AIF Program UI design is readable.
+
+Not built: provider logout (Sign out is local), token refresh (after `exp`, screens show "Not signed in"; Sign out or a reload returns to Sign in), and owner-only actions beyond the claim.
 
 ### Live federated connect (#52, #53)
 
