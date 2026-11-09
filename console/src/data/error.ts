@@ -4,12 +4,15 @@ export type DataErrorKind =
 export class DataError extends Error {
   readonly kind: DataErrorKind;
   readonly status: number | null;
+  /** The problem body's `error` code, when the API sent one (for example `claim_role_required`). */
+  readonly code: string | undefined;
 
-  constructor(kind: DataErrorKind, status: number | null, message: string) {
+  constructor(kind: DataErrorKind, status: number | null, message: string, code?: string) {
     super(message);
     this.name = "DataError";
     this.kind = kind;
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -20,8 +23,13 @@ const KIND_BY_STATUS: Record<number, DataErrorKind> = {
   410: "gone",
 };
 
-export function errorFromStatus(status: number, title: string): DataError {
-  return new DataError(KIND_BY_STATUS[status] ?? "failed", status, `${status} ${title}`.trim());
+export function errorFromStatus(status: number, title: string, code?: string): DataError {
+  return new DataError(
+    KIND_BY_STATUS[status] ?? "failed",
+    status,
+    `${status} ${title}`.trim(),
+    code,
+  );
 }
 
 export function toDataError(error: unknown): DataError {

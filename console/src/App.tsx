@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type ComponentType, type MouseEvent } from
 import { CLOUDS, type Cloud } from "@farside/scan-contracts";
 import { apiSource } from "./data/api";
 import { DataProvider } from "./data/context";
+import { identityFromEnv, type IdentityRuntime } from "./data/identity";
 import type { DataSource } from "./data/types";
+import { useIdentity, type IdentityState } from "./data/use-identity";
 import { Billing } from "./Billing";
 import { BlindSpots } from "./BlindSpots";
 import { Connect } from "./Connect";
@@ -16,7 +18,18 @@ import { Scans } from "./Scans";
 import { Settings } from "./Settings";
 import { NotFound } from "./NotFound";
 import { Offboarding } from "./Offboarding";
-import { DEMO_LABEL, NOT_CONNECTED_STATE, PRODUCT_NAME, SHELL_NAV, slugOf } from "./shell";
+import { OrgClaim } from "./OrgClaim";
+import { SignIn } from "./SignIn";
+import {
+  CLAIM_TITLE,
+  DEMO_LABEL,
+  JOIN_TITLE,
+  NOT_CONNECTED_STATE,
+  PRODUCT_NAME,
+  SHELL_NAV,
+  SIGN_IN_TITLE,
+  slugOf,
+} from "./shell";
 import { CLOUD_LABEL } from "./terms";
 
 function configuredSource(cloud: Cloud | ""): DataSource | null {
@@ -34,6 +47,19 @@ async function resolveSource(
     return demoSource(cloud || undefined);
   }
   return configuredSource(cloud);
+}
+
+function gateTitle(state: IdentityState): string | null {
+  switch (state.phase) {
+    case "signed-out":
+      return SIGN_IN_TITLE;
+    case "claim":
+      return state.view.claimed ? JOIN_TITLE : CLAIM_TITLE;
+    case "loading":
+      return PRODUCT_NAME;
+    default:
+      return null;
+  }
 }
 
 function currentHash(): string {
@@ -64,14 +90,45 @@ function skipToMain(event: MouseEvent<HTMLAnchorElement>) {
   document.getElementById("main")?.focus();
 }
 
-export function App({ demo, source }: { demo?: boolean; source?: DataSource | null } = {}) {
+export function App({
+  demo,
+  source,
+  identity,
+}: {
+  demo?: boolean;
+  source?: DataSource | null;
+  /** Sign-in runtime; defaults to the VITE_FARSIDE_IDENTITY_* env. Ignored with a source or demo. */
+  identity?: IdentityRuntime | null;
+} = {}) {
   const [resolved, setResolved] = useState<DataSource | null | undefined>(source);
   const [hash, setHash] = useState(currentHash);
   const [cloud, setCloud] = useState<Cloud | "">("");
+  const [envIdentity] = useState(() =>
+    identity === undefined ? identityFromEnv(import.meta.env, window.location) : null,
+  );
+  const runtime =
+    source !== undefined || demo ? null : identity === undefined ? envIdentity : identity;
+  const auth = useIdentity(runtime);
+  const session = auth.state.phase === "ready" ? auth.state.session : null;
+  const gate = runtime ? gateTitle(auth.state) : null;
 
   useEffect(() => {
     if (source !== undefined) {
       setResolved(source);
+      return;
+    }
+    if (runtime) {
+      setResolved(
+        session?.orgId
+          ? apiSource({
+              baseUrl: runtime.apiUrl,
+              orgId: session.orgId,
+              token: session.token,
+              ...(runtime.fetch ? { fetch: runtime.fetch } : {}),
+              ...(cloud ? { cloud } : {}),
+            })
+          : undefined,
+      );
       return;
     }
     let cancelled = false;
@@ -83,7 +140,7 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
     return () => {
       cancelled = true;
     };
-  }, [demo, source, cloud]);
+  }, [demo, source, cloud, runtime, session]);
 
   useEffect(() => {
     const onHash = () => setHash(currentHash());
@@ -100,8 +157,40 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
 
   const firstHash = useRef(true);
   useEffect(() => {
-    document.title = resolved ? `${title} - ${PRODUCT_NAME}` : PRODUCT_NAME;
-  }, [title, resolved]);
+    document.title =
+      gate && gate !== PRODUCT_NAME
+        ? `${gate} - ${PRODUCT_NAME}`
+        : resolved && !gate
+          ? `${title} - ${PRODUCT_NAME}`
+          : PRODUCT_NAME;
+  }, [title, resolved, gate]);
+
+  // After a sign-in step the user took (claim, join, sign out), focus the new screen's heading.
+  // The first settled screen on load keeps the skip link as the first tab stop.
+  const settledOnce = useRef(false);
+  const focusPending = useRef(false);
+  useEffect(() => {
+    const phase = auth.state.phase;
+    if (phase === "off" || phase === "loading") {
+      return;
+    }
+    if (settledOnce.current) {
+      focusPending.current = true;
+    }
+    settledOnce.current = true;
+  }, [auth.state.phase]);
+  useEffect(() => {
+    if (!focusPending.current || (auth.state.phase === "ready" && !resolved)) {
+      return;
+    }
+    focusPending.current = false;
+    document.getElementById("page-title")?.focus();
+  });
+
+  const signedInAs =
+    auth.state.phase === "ready" || auth.state.phase === "claim"
+      ? (auth.state.session.name ?? auth.state.session.orgId)
+      : null;
 
   useEffect(() => {
     if (firstHash.current) {
@@ -122,7 +211,7 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
       <header className="topbar">
         <p className="brand">{PRODUCT_NAME}</p>
         {resolved?.mode === "demo" ? <p className="chip chip-warn">{DEMO_LABEL}</p> : null}
-        {source === undefined && resolved ? (
+        {source === undefined && resolved && !gate ? (
           <div className="field cloud-filter">
             <label htmlFor="cloud-filter">Cloud</label>
             <select
@@ -140,27 +229,49 @@ export function App({ demo, source }: { demo?: boolean; source?: DataSource | nu
             </select>
           </div>
         ) : null}
+        {signedInAs ? (
+          <div className="account">
+            <p className="account-name">Signed in as {signedInAs}</p>
+            <button className="action action-secondary" type="button" onClick={auth.signOut}>
+              Sign out
+            </button>
+          </div>
+        ) : null}
       </header>
       <div className="layout">
-        <nav className="sidenav" aria-label="Farside">
-          <ul>
-            {SHELL_NAV.map((item) => {
-              const itemSlug = slugOf(item);
-              return (
-                <li key={item}>
-                  <a
-                    href={`#${itemSlug}`}
-                    aria-current={Page && itemSlug === slug ? "page" : undefined}
-                  >
-                    {item}
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+        {gate ? null : (
+          <nav className="sidenav" aria-label="Farside">
+            <ul>
+              {SHELL_NAV.map((item) => {
+                const itemSlug = slugOf(item);
+                return (
+                  <li key={item}>
+                    <a
+                      href={`#${itemSlug}`}
+                      aria-current={Page && itemSlug === slug ? "page" : undefined}
+                    >
+                      {item}
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        )}
         <main className="main" id="main" tabIndex={-1}>
-          {resolved === undefined ? (
+          {auth.state.phase === "signed-out" && runtime ? (
+            <SignIn
+              providerName={runtime.config.providerName}
+              onSignIn={auth.signIn}
+              problem={auth.state.problem}
+            />
+          ) : auth.state.phase === "claim" ? (
+            <OrgClaim
+              view={auth.state.view}
+              signedInAs={auth.state.session.name}
+              onClaim={auth.claim}
+            />
+          ) : resolved === undefined || gate ? (
             <>
               <h1 className="page-title" id="page-title" tabIndex={-1}>
                 {PRODUCT_NAME}

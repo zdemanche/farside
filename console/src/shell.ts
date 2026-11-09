@@ -20,4 +20,9 @@ export const SHELL_NAV = [
   "Offboarding",
 ] as const;
 
+/** Screens shown in place of the navigation when sign-in is configured (#49). */
+export const SIGN_IN_TITLE = "Sign in";
+export const CLAIM_TITLE = "Claim your organisation";
+export const JOIN_TITLE = "Join your organisation";
+
 export const slugOf = (item: string): string => item.toLowerCase().replaceAll(" ", "-");
