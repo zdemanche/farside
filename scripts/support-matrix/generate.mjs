@@ -45,7 +45,6 @@ export function liveRunRecords(name, body) {
 }
 
 export const flattenLiveRun = liveRunRecords;
-}
 
 export function loadRecords(dir) {
   return [
