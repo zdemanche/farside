@@ -2,7 +2,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { derive, readNotes, regenerate, renderRows, run } from "./generate.mjs";
+import { derive, flattenLiveRun, loadRecords, readNotes, regenerate, renderRows, run } from "./generate.mjs";
 
 const spec = () => ({
   checks: [
@@ -80,5 +80,24 @@ describe("support matrix generator", () => {
     expect(run({ root })).toEqual([expect.stringContaining("out of date")]);
     expect(run({ root, write: true })).toEqual([]);
     expect(run({ root })).toEqual([]);
+  });
+  it("reads GCP live-run records: pass/fail entries count, not-run and role runs do not", () => {
+    const root = mkdtempSync(join(tmpdir(), "live-runs-"));
+    mkdirSync(join(root, "live-runs"));
+    writeFileSync(
+      join(root, "live-runs", "2026-12-01-p-checks.json"),
+      JSON.stringify({
+        liveRunAt: "2026-12-01",
+        checks: [
+          { checkId: "a", result: "pass" },
+          { checkId: "b", result: "not-run" },
+        ],
+      }),
+    );
+    writeFileSync(join(root, "live-runs", "2026-12-01-p-roles.json"), JSON.stringify({ liveRunAt: "2026-12-01", roles: [] }));
+    const records = loadRecords(root);
+    expect(records).toEqual([{ file: "live-runs/2026-12-01-p-checks.json", checkId: "a", liveRunAt: "2026-12-01", result: "pass" }]);
+    expect(derive(spec(), records).checks[0]).toMatchObject({ status: "verified", liveRunAt: "2026-12-01" });
+    expect(flattenLiveRun("x.json", { liveRunAt: "2026-12-01", checks: [{ checkId: "a", result: "fail" }] })).toHaveLength(1);
   });
 });

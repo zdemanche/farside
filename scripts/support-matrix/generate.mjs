@@ -14,15 +14,33 @@ export const CLOUDS = {
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-export function loadRecords(dir) {
-  const folder = join(dir, "run-records");
+function readJsonFiles(folder) {
   if (!existsSync(folder)) {
     return [];
   }
   return readdirSync(folder)
     .filter((name) => name.endsWith(".json"))
     .sort()
-    .map((name) => ({ file: name, ...JSON.parse(readFileSync(join(folder, name), "utf8")) }));
+    .map((name) => ({ name, body: JSON.parse(readFileSync(join(folder, name), "utf8")) }));
+}
+
+// Live-run record: docs/<cloud>/live-runs/*.json, one run per file:
+// { "liveRunAt": "YYYY-MM-DD", "checks": [{ "checkId": "...", "result": "pass" | "fail" | "not-run" }] }
+// Only pass/fail entries count; files without a checks array (role runs) are ignored.
+export function flattenLiveRun(name, run) {
+  if (!Array.isArray(run.checks)) {
+    return [];
+  }
+  return run.checks
+    .filter((check) => check.result !== "not-run")
+    .map((check) => ({ file: `live-runs/${name}`, checkId: check.checkId, liveRunAt: run.liveRunAt, result: check.result }));
+}
+
+export function loadRecords(dir) {
+  return [
+    ...readJsonFiles(join(dir, "run-records")).map(({ name, body }) => ({ file: name, ...body })),
+    ...readJsonFiles(join(dir, "live-runs")).flatMap(({ name, body }) => flattenLiveRun(name, body)),
+  ];
 }
 
 /** A check is verified only by a dated passing record; the latest passing record wins. */
