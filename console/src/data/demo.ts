@@ -530,6 +530,10 @@ function costWasteFor(cloud?: Cloud): CostWasteView {
   };
 }
 
+function findingsFor(cloud?: Cloud): Finding[] {
+  return FINDINGS.filter((finding) => !cloud || finding.scope.cloud === cloud);
+}
+
 export function demoSource(cloud?: Cloud): DataSource {
   let settings = DEFAULT_SETTINGS;
   return {
@@ -561,8 +565,8 @@ export function demoSource(cloud?: Cloud): DataSource {
       total: HEALTH.assessedScopes + HEALTH.unassessedScopes,
       formula: HEALTH_SCORE_FORMULA,
     }),
-    recovery: async () => recoveryFrom(FINDINGS),
-    lifecycle: async () => lifecycleFrom(FINDINGS, AS_OF),
+    recovery: async () => recoveryFrom(findingsFor(cloud)),
+    lifecycle: async () => lifecycleFrom(findingsFor(cloud), AS_OF),
     settings: async () => settings,
     saveSettings: async (next) => {
       settings = next;

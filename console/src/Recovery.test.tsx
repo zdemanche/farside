@@ -26,6 +26,7 @@ describe("Recovery screen", () => {
       rows: [
         {
           id: "1",
+          cloud: "azure" as const,
           system: "vm-one",
           checkId: "check-one",
           evidence: "protected false",
@@ -33,6 +34,7 @@ describe("Recovery screen", () => {
         },
         {
           id: "2",
+          cloud: "gcp" as const,
           system: "db-two",
           checkId: "check-two",
           evidence: "zoneRedundant false",
@@ -50,7 +52,7 @@ describe("Recovery screen", () => {
     expect(screen.getByRole("heading", { name: "Recovery" })).toBeTruthy();
     await screen.findByRole("table", { name: "Recovery gaps" });
     const vm = screen.getByRole("row", { name: /vm-one/ });
-    expect(vm.textContent).toBe("vm-onecheck-oneprotected falseassessed");
+    expect(vm.textContent).toBe("vm-oneAzurecheck-oneprotected falseassessed");
     expect(screen.getByRole("row", { name: /db-two/ }).textContent).toContain("undetermined");
     await expectAxeClean(container);
   });
@@ -66,7 +68,16 @@ describe("Recovery screen", () => {
       <Recovery />,
       sourceWith({
         recovery: async () => ({
-          rows: [{ id: "x", system: "vm-x", checkId: "c", evidence: "", coverage: "assessed" }],
+          rows: [
+            {
+              id: "x",
+              cloud: "azure" as const,
+              system: "vm-x",
+              checkId: "c",
+              evidence: "",
+              coverage: "assessed",
+            },
+          ],
           unprotected: 0,
           checked: 1,
           undetermined: 2,

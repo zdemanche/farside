@@ -73,4 +73,22 @@ describe("cloud dimension", () => {
       expect(rows.every((row) => !/\bAzure\b/.test(row.textContent ?? ""))).toBe(true);
     });
   });
+
+  it.each(["lifecycle", "recovery"])(
+    "labels the %s screen by cloud and drops Azure rows when GCP is chosen",
+    async (route) => {
+      window.location.hash = `#${route}`;
+      render(<App demo />);
+      await screen.findByRole("columnheader", { name: "Cloud" });
+      const azureRows = screen
+        .getAllByRole("row")
+        .filter((row) => within(row).queryByRole("cell", { name: "Azure" }));
+      expect(azureRows.length).toBeGreaterThan(0);
+      fireEvent.change(screen.getByLabelText("Cloud"), { target: { value: "gcp" } });
+      await waitFor(() => {
+        const rows = screen.queryAllByRole("row");
+        expect(rows.every((row) => !within(row).queryByRole("cell", { name: "Azure" }))).toBe(true);
+      });
+    },
+  );
 });
