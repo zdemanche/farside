@@ -2,7 +2,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { derive, readNotes, regenerate, renderRows, run } from "./generate.mjs";
+import { derive, liveRunRecords, loadRecords, readNotes, regenerate, renderRows, run, writeSpecStatus } from "./generate.mjs";
 
 const spec = () => ({
   checks: [
@@ -80,5 +80,78 @@ describe("support matrix generator", () => {
     expect(run({ root })).toEqual([expect.stringContaining("out of date")]);
     expect(run({ root, write: true })).toEqual([]);
     expect(run({ root })).toEqual([]);
+  });
+
+  it("flattens live runner records with a checks list and ignores evidence-only records", () => {
+    expect(liveRunRecords("2026-12-01-access.json", { kind: "access", liveRunAt: "2026-12-01" })).toEqual([]);
+    expect(
+      liveRunRecords("2026-12-01-checks-noncost.json", {
+        liveRunAt: "2026-12-01",
+        checks: [
+          { checkId: "a", result: "pass", defects: [] },
+          { checkId: "b", result: "fail", defects: ["x"] },
+        ],
+      }),
+    ).toEqual([
+      { file: "live-runs/2026-12-01-checks-noncost.json", checkId: "a", liveRunAt: "2026-12-01", result: "pass" },
+      { file: "live-runs/2026-12-01-checks-noncost.json", checkId: "b", liveRunAt: "2026-12-01", result: "fail" },
+    ]);
+  });
+
+  it("regenerates the Azure spec and matrix from a live run record with --write-spec (#125)", () => {
+    const root = mkdtempSync(join(tmpdir(), "matrix-live-"));
+    for (const dir of ["azure", "gcp"]) {
+      mkdirSync(join(root, "docs", dir), { recursive: true });
+      for (const file of ["launch-checks.json", "support-matrix.md"]) {
+        cpSync(join("docs", dir, file), join(root, "docs", dir, file));
+      }
+    }
+    mkdirSync(join(root, "docs/azure/live-runs"));
+    writeFileSync(
+      join(root, "docs/azure/live-runs/2026-12-01-checks-noncost.json"),
+      JSON.stringify({
+        kind: "checks-noncost",
+        liveRunAt: "2026-12-01",
+        checks: [
+          { checkId: "azure-waste-unattached-disks", result: "pass", defects: [] },
+          { checkId: "azure-waste-old-snapshots", result: "fail", defects: ["snapshot-old: pass (expected fail)"] },
+        ],
+      }),
+    );
+    expect(loadRecords(join(root, "docs/azure"))).toHaveLength(2);
+    expect(run({ root })).toEqual(
+      expect.arrayContaining([expect.stringContaining("spec 'azure-waste-unattached-disks' says unverified")]),
+    );
+    expect(run({ root, write: true, writeSpec: true })).toEqual([]);
+    expect(run({ root })).toEqual([]);
+    const spec = JSON.parse(readFileSync(join(root, "docs/azure/launch-checks.json"), "utf8"));
+    const byId = Object.fromEntries(spec.checks.map((check) => [check.id, check]));
+    expect(byId["azure-waste-unattached-disks"]).toMatchObject({ status: "verified", support: "supported", liveRunAt: "2026-12-01" });
+    expect(byId["azure-waste-old-snapshots"]).toMatchObject({ status: "unverified", support: "not-supported", liveRunAt: null });
+    expect(readFileSync(join(root, "docs/azure/support-matrix.md"), "utf8")).toContain(
+      "| azure-waste-unattached-disks | waste | Unattached disks | Reader | verified | supported | 2026-12-01 |",
+    );
+  });
+
+  it("edits only status, support and liveRunAt in the spec text", () => {
+    const text = [
+      "{",
+      '  "checks": [',
+      "    {",
+      '      "id": "a",',
+      '      "evidenceFields": ["x", "y"],',
+      '      "status": "unverified",',
+      '      "support": "not-supported",',
+      '      "liveRunAt": null',
+      "    }",
+      "  ]",
+      "}",
+      "",
+    ].join("\n");
+    const next = writeSpecStatus(text, [{ id: "a", status: "verified", support: "supported", liveRunAt: "2026-12-01" }]);
+    expect(next).toBe(
+      text.replace('"unverified"', '"verified"').replace('"not-supported"', '"supported"').replace("null", '"2026-12-01"'),
+    );
+    expect(() => writeSpecStatus(text, [{ id: "zzz" }])).toThrow(/no check/);
   });
 });
