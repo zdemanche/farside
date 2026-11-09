@@ -3,7 +3,7 @@ import type { OrgParams, RoutePlugin } from "../http/context.js";
 import { problem, sendClean } from "../http/responses.js";
 import { offboardBody, orgParams } from "../http/schemas.js";
 import { audit } from "../observability.js";
-import { sessionFromHeaders } from "../session.js";
+import { sessionOf } from "../http/hooks.js";
 
 type OffboardBody = { confirm?: boolean; exportOffered?: boolean; now?: string };
 
@@ -26,7 +26,7 @@ export const offboardRoutes: RoutePlugin = (ctx) => async (app) => {
           errors: [{ path: "body", message: "confirm and exportOffered must be true" }],
         });
       }
-      const actorId = sessionFromHeaders(request)?.actorId ?? "unknown";
+      const actorId = sessionOf(request)?.actorId ?? "unknown";
       const record = await ctx.store.offboard(orgId, ctx.clientTime(body.now), "customer", actorId);
       audit(request.log, "org.offboard", { trigger: record.trigger });
       return sendClean(reply, 200, deletionView(record));

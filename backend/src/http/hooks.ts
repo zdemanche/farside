@@ -12,7 +12,8 @@ import type { DeletionRecord } from "../offboard.js";
 import { asMutable } from "../readonly.js";
 import { isDemoOrg, seedDemoOrg } from "../demo.js";
 import { auditRetention } from "../observability.js";
-import { assertOrgAccess, isOperator, sessionFromHeaders } from "../session.js";
+import { roleOf } from "../org-claim.js";
+import { assertOrgAccess, isOperator, sessionFromHeaders, type Session } from "../session.js";
 import type { AppContext, OrgParams } from "./context.js";
 import { problem, rejectSecrets, sendClean } from "./responses.js";
 
@@ -26,7 +27,43 @@ const DEMO_CANNED_POSTS = new Set([
   "POST /alerts",
 ]);
 const FORMAT_KEYWORDS = new Set(["pattern", "format"]);
-const READ_ONLY_EXEMPT = new Set(["POST /offboard", "POST /schedule/tick"]);
+const READ_ONLY_EXEMPT = new Set(["POST /offboard", "POST /schedule/tick", "POST /claim"]);
+
+type AuthResult = { session: Session } | { error: string; detail?: string };
+
+const authResults = new WeakMap<FastifyRequest, AuthResult>();
+
+async function authenticate(ctx: AppContext, request: FastifyRequest): Promise<AuthResult> {
+  if (ctx.identity) {
+    return ctx.identity.authenticate(request.headers);
+  }
+  const session = sessionFromHeaders(request);
+  return session ? { session: { ...session, via: "header" } } : { error: "missing_session" };
+}
+
+/** The session resolved for this request in onRequest; null when it carried none or an invalid one. */
+export function sessionOf(request: FastifyRequest): Session | null {
+  const result = authResults.get(request);
+  return result && "session" in result ? result.session : null;
+}
+
+function unauthorized(ctx: AppContext, request: FastifyRequest, reply: FastifyReply) {
+  if (!ctx.identity) {
+    return problem(reply, 401, "Unauthorized");
+  }
+  const result = authResults.get(request);
+  const error = result && "error" in result ? result.error : "missing_token";
+  if (result && "detail" in result && result.detail) {
+    request.log.info({ authError: error, detail: result.detail }, "bearer token rejected");
+  }
+  void reply.header(
+    "www-authenticate",
+    error === "missing_token" ? 'Bearer realm="farside"' : `Bearer realm="farside", error="invalid_token"`,
+  );
+  return problem(reply, 401, error === "header_session_disabled" ? "Header session disabled" : "Unauthorized", {
+    error,
+  });
+}
 
 function orgIdOf(request: FastifyRequest): string | undefined {
   return (request.params as Partial<OrgParams> | undefined)?.orgId;
@@ -100,9 +137,9 @@ function orgGate(ctx: AppContext): preValidationAsyncHookHandler {
     if (!orgId || config.operator) {
       return undefined;
     }
-    const session = sessionFromHeaders(request);
+    const session = sessionOf(request);
     if (!session) {
-      return problem(reply, 401, "Unauthorized");
+      return unauthorized(ctx, request, reply);
     }
     if (assertOrgAccess(session, orgId) !== "ok") {
       return problem(reply, 403, "Forbidden");
@@ -121,6 +158,12 @@ function orgGate(ctx: AppContext): preValidationAsyncHookHandler {
     }
     if (deletion && !config.allowDeleted) {
       return problem(reply, 410, "Gone", { deletedAt: deletion.deletedAt });
+    }
+    if (ctx.identity && !deletion && !config.claim && !isDemoOrg(orgId)) {
+      const claim = await ctx.store.orgClaim(orgId);
+      if (!roleOf(claim, session.actorId)) {
+        return problem(reply, 403, "Forbidden", { error: claim ? "not_a_member" : "org_not_claimed" });
+      }
     }
     if (isDemoOrg(orgId) && !deletion) {
       await seedDemoOrg(ctx.store);
@@ -149,7 +192,9 @@ export function registerHttp(app: FastifyInstance, ctx: AppContext): void {
     void reply.header("x-request-id", request.id);
     const operator =
       request.routeOptions.config.operator === true && isOperator(request, ctx.operatorToken);
-    const session = sessionFromHeaders(request);
+    const auth = await authenticate(ctx, request);
+    authResults.set(request, auth);
+    const session = "session" in auth ? auth.session : null;
     const actorId = operator ? "operator" : session?.actorId;
     const boundOrgId = orgIdOf(request) ?? session?.orgId;
     request.log = request.log.child({

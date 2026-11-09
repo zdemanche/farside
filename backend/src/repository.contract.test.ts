@@ -577,6 +577,42 @@ describe.each(implementations)("OrgRepository contract: $name", ({ create }) => 
     release();
   });
 
+  it("lets the first caller claim an org, later callers join, and repeats change nothing", async () => {
+    const store = create();
+    const orgId = `claim-${randomUUID().slice(0, 8)}`;
+    expect(await store.orgClaim(orgId)).toBeNull();
+    expect(await store.claimOrg(orgId, "dev", { mayOwn: false })).toEqual({ outcome: "refused", claim: null, role: null });
+    expect(await store.orgClaim(orgId)).toBeNull();
+    const claimed = await store.claimOrg(orgId, "cto");
+    expect(claimed).toMatchObject({ outcome: "claimed", role: "owner", claim: { orgId, ownerId: "cto" } });
+    expect(await store.claimOrg(orgId, "cto")).toMatchObject({ outcome: "existing", role: "owner" });
+    expect(await store.claimOrg(orgId, "dev", { mayOwn: false })).toMatchObject({ outcome: "joined", role: "member" });
+    const stored = await store.orgClaim(orgId);
+    expect(stored?.members.map((member) => [member.actorId, member.role])).toEqual([
+      ["cto", "owner"],
+      ["dev", "member"],
+    ]);
+    expect(await store.orgClaim(`${orgId}-other`)).toBeNull();
+  });
+
+  it("gives exactly one owner when several users claim at once", async () => {
+    const store = create();
+    const orgId = `race-${randomUUID().slice(0, 8)}`;
+    const results = await Promise.all(["a", "b", "c", "d"].map((actor) => store.claimOrg(orgId, actor)));
+    expect(results.filter((result) => result.outcome === "claimed")).toHaveLength(1);
+    expect(results.filter((result) => result.outcome === "joined")).toHaveLength(3);
+    expect((await store.orgClaim(orgId))?.members).toHaveLength(4);
+  });
+
+  it("drops the claim on offboard", async () => {
+    const store = create();
+    const orgId = `claim-off-${randomUUID().slice(0, 8)}`;
+    await store.claimOrg(orgId, "cto");
+    await store.offboard(orgId, NOW);
+    await expect(store.orgClaim(orgId)).rejects.toBeInstanceOf(DeletedOrgError);
+    await expect(store.claimOrg(orgId, "cto")).rejects.toBeInstanceOf(DeletedOrgError);
+  });
+
   it("lists the orgs that hold data", async () => {
     const store = create();
     const [a, b] = [orgName(), orgName()];
