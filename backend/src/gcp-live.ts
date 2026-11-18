@@ -45,6 +45,8 @@ export type GcpOptions = {
   fetch?: FetchLike;
   now?: () => Date;
   sleep?: (ms: number) => Promise<void>;
+  /** #199: report Recommender's one figure as a range from zero up to it. Off unless set. */
+  recommenderCeiling?: boolean;
 };
 
 /** HTTP 403: the identity lacks a permission. */
@@ -513,6 +515,7 @@ export function recommendationFrom(
   row: Json,
   projectId: string,
   recommenderId: string,
+  ceiling = false,
 ): GcpRecommendation | null {
   const name = text(row.name);
   if (!name) {
@@ -540,7 +543,11 @@ export function recommendationFrom(
     resourceName: resourceName ?? name,
     subtype: text(row.recommenderSubtype) ?? "",
     projectId,
-    ...(amount !== null && amount < 0 ? { savingsMax: Math.round(-amount * 100) / 100 } : {}),
+    ...(amount !== null && amount < 0
+      ? ceiling
+        ? { savingsMin: 0, savingsMax: Math.round(-amount * 100) / 100, savingsCeiling: true }
+        : { savingsMax: Math.round(-amount * 100) / 100 }
+      : {}),
     ...(currency ? { currency } : {}),
   };
 }
@@ -562,7 +569,12 @@ export function liveRecommenderClient(options: GcpOptions): RecommenderClient {
         throw error;
       }
       return rows.flatMap((row) => {
-        const rec = recommendationFrom(row, input.projectId, input.recommenderId);
+        const rec = recommendationFrom(
+          row,
+          input.projectId,
+          input.recommenderId,
+          options.recommenderCeiling === true,
+        );
         return rec ? [rec] : [];
       });
     },

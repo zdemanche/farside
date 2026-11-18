@@ -57,6 +57,8 @@ export const GCP_LIVE_ENV = {
   awsWebIdentityTokenFile: "AWS_WEB_IDENTITY_TOKEN_FILE",
   billingTable: "FARSIDE_GCP_BILLING_EXPORT_TABLE",
   jobProjectId: "FARSIDE_GCP_BIGQUERY_JOB_PROJECT",
+  /** Optional. "1" reports a Recommender figure as 0 up to it (#199). */
+  recommenderCeiling: "FARSIDE_GCP_RECOMMENDER_CEILING",
 } as const;
 
 export type GcpLiveConfig = {
@@ -69,6 +71,7 @@ export type GcpLiveConfig = {
   subjectTokenPath: string;
   billingTable?: string;
   jobProjectId: string;
+  recommenderCeiling?: boolean;
 };
 
 export class GcpLiveConfigError extends Error {
@@ -120,6 +123,7 @@ export function gcpLiveConfigFromEnv(env: NodeJS.Dict<string> = process.env): Gc
     subjectTokenPath: required.subjectTokenPath ?? "",
     ...(billingTable ? { billingTable } : {}),
     jobProjectId: safeProjectId(read(GCP_LIVE_ENV.jobProjectId) ?? projectId),
+    ...(env[GCP_LIVE_ENV.recommenderCeiling] === "1" ? { recommenderCeiling: true } : {}),
   };
 }
 
@@ -174,6 +178,7 @@ export function gcpLiveClients(config: GcpLiveConfig, deps: GcpLiveDeps = {}): G
     ...(deps.fetch ? { fetch: deps.fetch } : {}),
     ...(deps.now ? { now: deps.now } : {}),
     ...(deps.sleep ? { sleep: deps.sleep } : {}),
+    ...(config.recommenderCeiling ? { recommenderCeiling: true } : {}),
   };
   const billing = config.billingTable
     ? {
