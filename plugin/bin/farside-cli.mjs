@@ -37,6 +37,12 @@ function walkForbidden(value, path, errors) {
         message: "raw provider payload fields are rejected; store aggregates only"
       });
     }
+    if ((key === "tags" || key === "labels") && child !== null && typeof child === "object" && !Array.isArray(child)) {
+      for (const [tagKey, tagValue] of Object.entries(child)) {
+        walkForbidden(tagValue, `${childPath}.${tagKey}`, errors);
+      }
+      continue;
+    }
     walkForbidden(child, childPath, errors);
   }
 }
