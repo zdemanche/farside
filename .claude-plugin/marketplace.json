@@ -12,7 +12,7 @@
       "name": "farside",
       "source": "./plugin",
       "description": "Azure and GCP infrastructure scanning, issues, and cost. Same checks as the Farside product, run locally.",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "author": {
         "name": "Moonaan, LLC"
       },
