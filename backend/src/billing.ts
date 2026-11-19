@@ -24,7 +24,45 @@ export type BillingView = {
 };
 
 const CARD_KEY = /card|pan|cvv|cvc|cardnumber|card_number/i;
-const CARD_VALUE = /\b(?:\d[ -]*?){13,19}\b/;
+const CARD_VALUE = /\b(?:\d[ -]*?){13,19}\b/g;
+
+function keysOf(value: unknown): string[] {
+  if (value === null || typeof value !== "object") {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(keysOf);
+  }
+  return Object.entries(value).flatMap(([key, child]) => [key, ...keysOf(child)]);
+}
+
+/** A real card number passes the Luhn check. A long amount or an id usually does not. */
+function luhnValid(digits: string): boolean {
+  let sum = 0;
+  let double = false;
+  for (let index = digits.length - 1; index >= 0; index -= 1) {
+    let digit = Number(digits[index]);
+    if (double) {
+      digit *= 2;
+      if (digit > 9) {
+        digit -= 9;
+      }
+    }
+    sum += digit;
+    double = !double;
+  }
+  return sum % 10 === 0;
+}
+
+function looksLikeCardNumber(text: string): boolean {
+  for (const match of text.matchAll(CARD_VALUE)) {
+    const digits = match[0].replace(/\D/g, "");
+    if (digits.length >= 13 && digits.length <= 19 && luhnValid(digits)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export class CardDataError extends Error {
   constructor() {
@@ -34,8 +72,9 @@ export class CardDataError extends Error {
 }
 
 export function assertNoCardData(value: unknown): void {
-  const text = JSON.stringify(value);
-  if (CARD_KEY.test(text) || CARD_VALUE.test(text)) {
+  // Keys are checked on their own, so a plan called "Company" or "Expansion" is not read as a PAN key. Values are checked
+  // for a Luhn-valid 13 to 19 digit run, so a long amount or id is not read as a card number.
+  if (keysOf(value).some((key) => CARD_KEY.test(key)) || looksLikeCardNumber(JSON.stringify(value))) {
     throw new CardDataError();
   }
 }
