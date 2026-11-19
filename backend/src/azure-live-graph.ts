@@ -145,6 +145,13 @@ export function normaliseLiveRow(raw: Record<string, unknown>, now: Date): Resou
   if (typeof properties.powerState === "string") {
     properties.powerState = properties.powerState.replace(/^PowerState\//i, "").toLowerCase();
   }
+  // An absent instance view or disk state comes back from Resource Graph as "". That is "not read", not a state, so a check
+  // must see null and answer undetermined rather than pass.
+  for (const key of ["powerState", "diskState"]) {
+    if (properties[key] === "") {
+      properties[key] = null;
+    }
+  }
   if (properties.associatedTo === "") {
     properties.associatedTo = null;
   }
