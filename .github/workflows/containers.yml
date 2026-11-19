@@ -51,8 +51,9 @@ jobs:
 
   publish:
     name: publish ${{ matrix.image }}
-    # A manual run publishes (and moves the latest tag) only from main. Releases, tags and workflow_call are unchanged.
-    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
+    # A manual run publishes (and moves the latest tag) only from main or a v* release tag, so a manual run on a branch
+    # no longer overwrites the images. Push of a tag, releases and workflow_call are unchanged.
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
