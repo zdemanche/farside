@@ -106,7 +106,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ steps.stack.outputs.region }}
-      - uses: pulumi/actions@v6
+      - uses: pulumi/actions@v7
         if: steps.creds.outputs.enabled == 'true'
       - name: Pulumi ${{ inputs.preview && 'preview' || 'up' }}
         if: steps.creds.outputs.enabled == 'true'
