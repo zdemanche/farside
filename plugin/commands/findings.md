@@ -13,3 +13,5 @@ node ${CLAUDE_PLUGIN_ROOT}/bin/farside.mjs findings --workspace "$HOME/farside-e
 ```
 
 Read `issues.json`, `findings.json`, and `coverage.json` in that workspace. Cite every claim with the issue id. Keep savings as ranges. Treat `undetermined` as a result and say the closer. Never state a finding the CLI did not produce.
+
+If the command exits with a non-zero status, show its error output and stop. Do not read or summarise any workspace file: what is there is from an earlier run, not this one.

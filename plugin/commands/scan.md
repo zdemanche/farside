@@ -15,3 +15,7 @@ node ${CLAUDE_PLUGIN_ROOT}/bin/farside.mjs scan --workspace "$HOME/farside-engag
 `$ARGUMENTS` must include `--cloud azure|gcp` and `--scope <id>`. Add `--fixture` when the user wants the synthetic estate.
 
 After the command exits, summarise only `findings.json`, `coverage.json`, and `issues.json` from that workspace. Never state a finding the CLI did not produce.
+
+If the command exits with a non-zero status, show its error output and stop. Do not read or summarise any workspace file: what is there is from an earlier run, not this one.
+
+If `--fixture` was used, say plainly that the findings are synthetic and are not from a real estate.
