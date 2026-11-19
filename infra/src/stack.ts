@@ -199,7 +199,9 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     value: operatorToken,
     tags,
   });
-  const ssmKey = aws.kms.getKeyOutput({ keyId: "alias/aws/ssm" });
+  // The AWS-managed ssm key is created lazily the first time a SecureString exists in the region. In a fresh account
+  // the lookup would fail before this stack made its own SecureString, so wait for the parameter.
+  const ssmKey = aws.kms.getKeyOutput({ keyId: "alias/aws/ssm" }, { dependsOn: [tokenParameter] });
   const region = aws.getRegionOutput().region;
 
   const apiLogs = new aws.cloudwatch.LogGroup(`${apiName}-logs`, {
@@ -262,6 +264,12 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     timeout: 300,
     tags,
   });
+  // Scheduler invokes the tick asynchronously, so Lambda's own default of 2 async retries would re-run a tick that timed
+  // out. The Scheduler target already sets 0 retries. Match it, so a late tick is not run again on top of the next one.
+  new aws.lambda.FunctionEventInvokeConfig(`${tickName}-invoke-config`, {
+    functionName: tick.name,
+    maximumRetryAttempts: 0,
+  });
   const schedulerRole = new aws.iam.Role(`${tickName}-scheduler-role`, {
     name: `${tickName}-scheduler-role`,
     assumeRolePolicy: assumeRole("scheduler.amazonaws.com", plan.accountId),
@@ -285,6 +293,68 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
       roleArn: schedulerRole.arn,
       retryPolicy: { maximumRetryAttempts: 0, maximumEventAgeInSeconds: 300 },
     },
+  });
+
+  // Alarms. They notify an SNS topic. Subscribe an address or a pager to the alertTopicArn output; until then they show
+  // in the CloudWatch console only. The tick runs every 15 minutes, so a 30 minute window with no invocation is a miss.
+  const alerts = new aws.sns.Topic(`${prefix}-alerts`, { name: `${prefix}-alerts`, tags });
+  const alarm = (
+    id: string,
+    description: string,
+    fn: pulumi.Input<string>,
+    metricName: string,
+    options: {
+      statistic: string;
+      period: number;
+      comparisonOperator: string;
+      threshold: number;
+      treatMissingData: string;
+    },
+  ) =>
+    new aws.cloudwatch.MetricAlarm(`${prefix}-${id}`, {
+      alarmDescription: description,
+      namespace: "AWS/Lambda",
+      metricName,
+      dimensions: { FunctionName: fn },
+      evaluationPeriods: 1,
+      alarmActions: [alerts.arn],
+      tags,
+      ...options,
+    });
+  alarm("tick-errors", "The scheduled tick failed.", tick.name, "Errors", {
+    statistic: "Sum",
+    period: 900,
+    comparisonOperator: "GreaterThanOrEqualToThreshold",
+    threshold: 1,
+    treatMissingData: "notBreaching",
+  });
+  alarm("tick-throttles", "The scheduled tick was throttled.", tick.name, "Throttles", {
+    statistic: "Sum",
+    period: 900,
+    comparisonOperator: "GreaterThanOrEqualToThreshold",
+    threshold: 1,
+    treatMissingData: "notBreaching",
+  });
+  alarm("tick-duration", "The scheduled tick ran past 240s of its 300s timeout.", tick.name, "Duration", {
+    statistic: "Maximum",
+    period: 900,
+    comparisonOperator: "GreaterThanThreshold",
+    threshold: 240_000,
+    treatMissingData: "notBreaching",
+  });
+  alarm("tick-missing", "The scheduled tick has not run for 30 minutes.", tick.name, "Invocations", {
+    statistic: "Sum",
+    period: 1800,
+    comparisonOperator: "LessThanThreshold",
+    threshold: 1,
+    treatMissingData: "breaching",
+  });
+  alarm("api-errors", "The API function is failing.", api.name, "Errors", {
+    statistic: "Sum",
+    period: 300,
+    comparisonOperator: "GreaterThanOrEqualToThreshold",
+    threshold: 5,
+    treatMissingData: "notBreaching",
   });
 
   const consoleBucket = new aws.s3.Bucket(`${prefix}-console`, {
@@ -351,6 +421,8 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     consoleUrl: pulumi.interpolate`https://${cdn.domainName}`,
     apiUrl: apiUrl.functionUrl,
     consoleBucket: consoleBucket.bucket,
+    distributionId: cdn.id,
+    alertTopicArn: alerts.arn,
     scheduleName: schedule.name,
     tableName: store.name,
   };

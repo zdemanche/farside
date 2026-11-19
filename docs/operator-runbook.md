@@ -347,3 +347,13 @@ Do not PATCH or DELETE. The write was refused. Retry the same PUT **without** `c
 - Response is 201. `roles` lists the required set. A scan starts unless the contract is paused.
 
 Covered in `backend/src/secrets.test.ts` (“injected connect secret is refused, then a clean retry stores the connection”). Overlap and `harvest_timeout` stay on their step Rollback sections above.
+
+## Alarms
+
+The stack creates an SNS topic (`alertTopicArn` output) and CloudWatch alarms on it: the tick failing, being throttled, running past 240s of its 300s timeout, or not running for 30 minutes, and the API function failing. Nothing is subscribed by default, so until you subscribe an address or a pager to the topic the alarms show in the CloudWatch console only:
+
+```sh
+aws sns subscribe --topic-arn "$(pulumi stack output alertTopicArn)" --protocol email --notification-endpoint <address>
+```
+
+The tick's Lambda async retries are off, so a failed or late tick is not run again on top of the next one.

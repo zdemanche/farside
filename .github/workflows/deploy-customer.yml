@@ -139,4 +139,11 @@ jobs:
           set -euo pipefail
           BUCKET=$(pulumi stack output consoleBucket --stack "$STACK")
           aws s3 sync ../console/dist "s3://$BUCKET" --delete
+          # index.html is cached for a day and the sync just deleted the old hashed assets, so edges would serve a page that
+          # points at files that are gone. A failed invalidation (the role may lack cloudfront:CreateInvalidation) warns only.
+          DISTRIBUTION=$(pulumi stack output distributionId --stack "$STACK" || true)
+          if [ -n "$DISTRIBUTION" ]; then
+            aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths "/*" >/dev/null \
+              || echo "::warning::CloudFront invalidation failed; the console may serve a stale index.html for up to 24 hours"
+          fi
           echo "Deployed $STACK. Console: $(pulumi stack output consoleUrl --stack "$STACK")" >> "$GITHUB_STEP_SUMMARY"
