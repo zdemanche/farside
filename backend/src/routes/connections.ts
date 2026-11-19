@@ -2,6 +2,7 @@ import type { OrgParams, RoutePlugin } from "../http/context.js";
 import { problem, sendClean, sendStored } from "../http/responses.js";
 import { connectionBody, connectionParams, orgParams } from "../http/schemas.js";
 import { canScan } from "../billing.js";
+import { requireOwner } from "../identity-policy.js";
 import { audit } from "../observability.js";
 import type { Cloud } from "../cloud.js";
 import { DEFAULT_CLOUD } from "../providers/index.js";
@@ -24,6 +25,9 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
       config: { rejectSecrets: true, invalidTitle: "Invalid connection" },
     },
     async (request, reply) => {
+      if (!(await requireOwner(ctx, request, reply))) {
+        return reply;
+      }
       const { orgId } = request.params;
       const { tenantId, subscriptionId, cloud, asOf } = request.body;
       const grantedRoles = await ctx.roleLister.list({
@@ -79,6 +83,9 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
     "/v1/orgs/:orgId/connections/:connectionId",
     { schema: { params: connectionParams } },
     async (request, reply) => {
+      if (!(await requireOwner(ctx, request, reply))) {
+        return reply;
+      }
       if (!(await ctx.store.deleteConnection(request.params.orgId, request.params.connectionId))) {
         return problem(reply, 404, "Not found");
       }

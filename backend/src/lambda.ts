@@ -3,6 +3,7 @@ import { azureLiveFromEnv } from "./azure-live-harvest.js";
 import { unconfiguredHarvester } from "./scans.js";
 import { systemClock } from "./clock.js";
 import { identityConfigFromEnv } from "./identity.js";
+import { assertIdentityPolicy } from "./identity-policy.js";
 import { pino } from "pino";
 import { loggerFromEnv, pinoOptions } from "./observability.js";
 import { storeFromEnv } from "./store-from-env.js";
@@ -57,12 +58,14 @@ export async function resolveOperatorToken(
 }
 
 async function start() {
+  const identity = identityConfigFromEnv(process.env);
+  assertIdentityPolicy(process.env, identity);
   const store = await storeFromEnv(process.env, systemClock, pino(pinoOptions(loggerFromEnv()) || {}));
   const live = azureLiveFromEnv(process.env, { store, fallback: unconfiguredHarvester(), clock: systemClock });
   const app = buildApp(store, {
     operatorToken: await resolveOperatorToken(),
     logger: loggerFromEnv(),
-    identity: identityConfigFromEnv(process.env),
+    identity,
     ...(live ? { harvester: live.harvester, harvestClients: live.harvestClients, roleLister: live.roleLister } : {}),
   });
   await app.ready();

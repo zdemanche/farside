@@ -47,6 +47,11 @@ Only the live tenant hookup remains. Everything is built against standard OIDC a
 
 Not built: provider logout (Sign out is local), token refresh (after `exp`, screens show "Not signed in"; Sign out or a reload returns to Sign in), and owner-only actions beyond the claim.
 
+Opt-in hardening (`backend/src/identity-policy.ts`), both off unless set, so nothing above changes by default:
+
+- `FARSIDE_REQUIRE_IDENTITY=1` refuses to start (container and Lambda) when `FARSIDE_IDENTITY_ISSUER` is unset. Without Identity the API trusts the `x-farside-org` header, so a deploy that misses the issuer would let any caller act as any org. With `NODE_ENV=production` and no Identity, startup logs a warning either way.
+- `FARSIDE_OWNER_ONLY_DESTRUCTIVE=1` limits `POST /offboard` and connection `PUT` / `DELETE` to the org's owner. Any verified user of the tenant can join the org through `POST /claim`, so without it any member can offboard it. Reads and settings stay open to members.
+
 ### Live federated connect (#52, #53)
 
 Built: `federatedTokenProvider` exchanges the runtime's OIDC token (`client_assertion`, no secret) for an ARM token in the customer tenant, cached per tenant. With `FARSIDE_AZURE_LIVE=1`, Connect lists roles live (`liveRoleLister`) for #55/#56. Tested against mocked fetch only. Left: `npm run azure-live:access` on the test tenant writes the #41/#42 record.
