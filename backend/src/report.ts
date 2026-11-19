@@ -47,17 +47,34 @@ export function issueCategory(checkId: string): IssueCategory {
   return "Other";
 }
 
-export function sumIssueSavings(rows: readonly ExportIssueRow[]): { min: string; max: string; currency: string } | null {
-  const priced = rows.filter((row) => row.savings);
-  if (priced.length === 0) {
-    return null;
+type MoneyRange = { min: string; max: string; currency: string };
+
+/**
+ * Nameable waste per currency, from open issues only. A closed issue is already fixed and a not-confirmed one is
+ * unknown this scan, so neither is waste to claim. Currencies are never added together.
+ */
+export function sumIssueSavingsByCurrency(rows: readonly ExportIssueRow[]): MoneyRange[] {
+  const totals = new Map<string, { min: number; max: number }>();
+  for (const row of rows) {
+    if (row.status !== "open" || !row.savings) {
+      continue;
+    }
+    const total = totals.get(row.savings.currency) ?? { min: 0, max: 0 };
+    total.min += Number(row.savings.min);
+    total.max += Number(row.savings.max);
+    totals.set(row.savings.currency, total);
   }
-  const currency = priced[0]?.savings?.currency ?? "USD";
-  return {
-    min: priced.reduce((sum, row) => sum + Number(row.savings?.min ?? 0), 0).toFixed(2),
-    max: priced.reduce((sum, row) => sum + Number(row.savings?.max ?? 0), 0).toFixed(2),
+  return [...totals].map(([currency, total]) => ({
+    min: total.min.toFixed(2),
+    max: total.max.toFixed(2),
     currency,
-  };
+  }));
+}
+
+/** The single-currency total, or null when nothing is open and priced, or when the currencies differ. */
+export function sumIssueSavings(rows: readonly ExportIssueRow[]): MoneyRange | null {
+  const byCurrency = sumIssueSavingsByCurrency(rows);
+  return byCurrency.length === 1 ? (byCurrency[0] ?? null) : null;
 }
 
 export function latestCostAmount(rows: readonly ExportCostRow[]): ExportCostRow | null {
@@ -92,11 +109,10 @@ export function unsourcedReportClaims(
   if (month) {
     amounts.add(month.amount);
   }
-  const waste = sumIssueSavings(issueRows);
   const ranges = new Set(
     issueRows.flatMap((row) => (row.savings ? [`${row.savings.min}-${row.savings.max}`] : [])),
   );
-  if (waste) {
+  for (const waste of sumIssueSavingsByCurrency(issueRows)) {
     ranges.add(`${waste.min}-${waste.max}`);
   }
   return extractReportClaims(html).flatMap((claim) => {
@@ -124,10 +140,10 @@ export function renderConsultantReport(input: {
   findings: readonly Finding[];
   coverage: readonly CoverageEntry[];
 }): string {
-  const waste = sumIssueSavings(input.issues);
+  const wasteByCurrency = sumIssueSavingsByCurrency(input.issues);
   const month = latestCostAmount(input.cost);
   const displayedMonth = month?.amount ?? null;
-  const currency = month?.currency ?? waste?.currency ?? "USD";
+  const currency = month?.currency ?? wasteByCurrency[0]?.currency ?? "USD";
   const grouped = Object.fromEntries(ISSUE_CATEGORIES.map((name) => [name, [] as ExportIssueRow[]])) as Record<
     IssueCategory,
     ExportIssueRow[]
@@ -171,9 +187,15 @@ export function renderConsultantReport(input: {
         `<li>${escapeHtml(entry.checkId)} · ${escapeHtml(entry.subscriptionOrProject)} · ${escapeHtml(entry.state)}</li>`,
     )
     .join("");
-  const wasteMarkup = waste
-    ? `<p data-range-min="${escapeHtml(waste.min)}" data-range-max="${escapeHtml(waste.max)}">Nameable waste ${escapeHtml(money(waste.min, waste.max, waste.currency))}</p>`
-    : "<p>Nameable waste is not assessed.</p>";
+  const wasteMarkup =
+    wasteByCurrency.length > 0
+      ? wasteByCurrency
+          .map(
+            (waste) =>
+              `<p data-range-min="${escapeHtml(waste.min)}" data-range-max="${escapeHtml(waste.max)}">Nameable waste ${escapeHtml(money(waste.min, waste.max, waste.currency))}</p>`,
+          )
+          .join("")
+      : "<p>Nameable waste is not assessed.</p>";
   const monthMarkup = displayedMonth
     ? `<p data-figure="monthlyCost" data-amount="${escapeHtml(displayedMonth)}">Monthly cost ${escapeHtml(currency)} ${escapeHtml(displayedMonth)}</p>`
     : "<p>Monthly cost is not assessed.</p>";
