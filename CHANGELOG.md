@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.0](https://github.com/zdemanche/farside/compare/v0.3.0...v0.4.0) (2026-11-19)
+
+
+### Features
+
+* **gcp:** report one Recommender figure as 0 up to it, when switched on ([#199](https://github.com/zdemanche/farside/issues/199)) ([#424](https://github.com/zdemanche/farside/issues/424)) ([7bb2c38](https://github.com/zdemanche/farside/commit/7bb2c3842e7c34a1dcaa26669d551338cd65ba78))
+* **identity:** opt-in startup guard and owner-only destructive actions ([#427](https://github.com/zdemanche/farside/issues/427)) ([d4bdb75](https://github.com/zdemanche/farside/commit/d4bdb75f49d346616c9fd739d0d33d822291c393))
+
+
+### Bug Fixes
+
+* **azure:** read an empty powerState or diskState as not read, not as a state ([#426](https://github.com/zdemanche/farside/issues/426)) ([53a09f2](https://github.com/zdemanche/farside/commit/53a09f249b0368218021574b8d02aca6025570f7))
+* bound the settings numbers; let customer tag keys be named raw or payload ([#429](https://github.com/zdemanche/farside/issues/429)) ([abf73dd](https://github.com/zdemanche/farside/commit/abf73dd54d6b935fe99ecb0e5a6ae3e104972ea0))
+* **ci,plugin:** publish from a manual run only on main; mark workspace text untrusted ([#428](https://github.com/zdemanche/farside/issues/428)) ([2f8b3dd](https://github.com/zdemanche/farside/commit/2f8b3dd3f877eb8a0ea3315b5fda47471ea77805))
+* **connect:** answer 502 with the cause when Azure refuses the federated token ([#425](https://github.com/zdemanche/farside/issues/425)) ([13936a6](https://github.com/zdemanche/farside/commit/13936a68c11f8e3c8ae52fb4404862f27a01ddc1))
+* **report:** total only open issues, and never add currencies together ([#430](https://github.com/zdemanche/farside/issues/430)) ([11cbf24](https://github.com/zdemanche/farside/commit/11cbf24d178a6c204e9fe267c70c49c169c03f31))
+
 ## [0.3.0](https://github.com/zdemanche/farside/compare/v0.2.0...v0.3.0) (2026-11-04)
 
 
