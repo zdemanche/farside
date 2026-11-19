@@ -8,6 +8,7 @@ import {
 } from "./cloud-asset.js";
 import type { Clock } from "./clock.js";
 import { applyCoverageResults } from "./coverage.js";
+import { errorDetail } from "./error-detail.js";
 import {
   gcpFederatedTokenProvider,
   fileSubjectToken,
@@ -148,6 +149,8 @@ export type GcpLiveDeps = {
   readFile?: (path: string) => Promise<string>;
   now?: () => Date;
   sleep?: (ms: number) => Promise<void>;
+  /** Reports a failed Cloud Asset read with its safe cause. Off unless given. */
+  log?: (fields: Record<string, unknown>, message: string) => void;
 };
 
 export type GcpLiveClients = {
@@ -322,7 +325,14 @@ export type LiveGcpHarvestClients = Pick<
   "cloudAsset" | "serviceReads" | "recommender"
 >;
 
-export function liveGcpHarvester(clients: LiveGcpHarvestClients, clock?: Clock): Harvester {
+/** Where a failed read is reported. Gets the safe fields only (see errorDetail), never a message, URL or body. */
+export type GcpHarvestLog = (fields: Record<string, unknown>, message: string) => void;
+
+export function liveGcpHarvester(
+  clients: LiveGcpHarvestClients,
+  clock?: Clock,
+  log?: GcpHarvestLog,
+): Harvester {
   return {
     async harvest(input) {
       const projectId = safeProjectId(input.subscriptionId);
@@ -333,6 +343,13 @@ export function liveGcpHarvester(clients: LiveGcpHarvestClients, clock?: Clock):
         settings: input.settings,
         observedAt,
       });
+      if (!cai.ok) {
+        // The result below still reads as an empty, undetermined harvest. This is the only place the cause is kept.
+        log?.(
+          { event: "gcp.harvest.failed", projectId, reason: cai.reason, ...errorDetail(cai.cause) },
+          "gcp harvest failed",
+        );
+      }
       let assets = cai.assets;
       let coverage = cai.coverage;
       if (cai.ok) {
@@ -376,6 +393,6 @@ export function selectGcpHarvester(
 ): Harvester {
   const config = gcpLiveConfigFromEnv(env);
   return config
-    ? liveGcpHarvester(gcpLiveClients(config, deps), clock)
+    ? liveGcpHarvester(gcpLiveClients(config, deps), clock, deps.log)
     : providerFor("gcp").harvester(clock);
 }

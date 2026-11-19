@@ -112,6 +112,8 @@ export class CloudAssetFailedCallError extends Error {
 export type CloudAssetHarvest = {
   ok: boolean;
   reason?: "throttling" | "failed_call";
+  /** The error behind `reason`, for the caller to log through errorDetail(). Never part of the stored result. */
+  cause?: unknown;
   inventory: Inventory;
   facts: ResourceFacts[];
   coverage: CoverageEntry[];
@@ -299,6 +301,7 @@ export async function harvestCloudAssets(input: {
       return {
         ok: false,
         reason,
+        cause: error,
         inventory: inventoryFromAssets(assets, settings.ownerTagKey, observedAt),
         facts: factsFromAssets(assets),
         coverage: coverageFor(input.projectId, checkIds, "undetermined", reason),

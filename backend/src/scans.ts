@@ -241,8 +241,9 @@ export class ScanFailedError extends Error {
   constructor(
     message: string,
     readonly coveredScopes: string[],
+    options?: { cause?: unknown },
   ) {
-    super(message);
+    super(message, options?.cause === undefined ? undefined : { cause: options.cause });
     this.name = "ScanFailedError";
   }
 }

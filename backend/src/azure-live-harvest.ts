@@ -167,7 +167,7 @@ export async function harvestLiveSubscription(input: {
     observedAt: input.observedAt,
   });
   if (!graph.ok) {
-    throw new ScanFailedError(`resource graph ${graph.reason ?? "failed_call"}`, []);
+    throw new ScanFailedError(`resource graph ${graph.reason ?? "failed_call"}`, [], { cause: graph.cause });
   }
   const backed = await withBackupFacts(input.arm, input.subscriptionId, graph.facts);
   const metrics = await withMetricFacts(input.arm, input.subscriptionId, backed);
