@@ -4106,6 +4106,7 @@ var checkGcpExpiringCerts = defineGcpCheck({
 var GCP_IDLE_RECS = "gcp-waste-idle-vm-and-disk-recommendations";
 var REC_TYPE = "recommender.googleapis.com/Recommendation";
 var RECOMMENDER_SAVINGS_BASIS = "Recommender savings range when present; otherwise undetermined, not a point value";
+var RECOMMENDER_CEILING_BASIS = "Up to Recommender's projected monthly saving; Recommender gives one figure, so the lower bound is zero";
 var EMPTY_RECOMMENDER_WORDING = "None were returned. Idle status is unknown.";
 var RECOMMENDER_ROLE_CLOSER = "Grant Recommender Viewer and a recommendation list for that project";
 var RECOMMENDER_RANGE_CLOSER = "A recommendation primaryImpact with a min/max cost range";
@@ -4120,8 +4121,8 @@ function scope3(projectId) {
     subscriptionOrProject: projectId
   };
 }
-function recommenderSavings(min, max, currency) {
-  return savingsRange({ min, max, currency, basis: RECOMMENDER_SAVINGS_BASIS });
+function recommenderSavings(min, max, currency, basis = RECOMMENDER_SAVINGS_BASIS) {
+  return savingsRange({ min, max, currency, basis });
 }
 function checkGcpIdleRecommendations(projectId, harvest) {
   if (!harvest.ok) {
@@ -4197,7 +4198,12 @@ function checkGcpIdleRecommendations(projectId, harvest) {
       });
     }
     try {
-      const savings = recommenderSavings(row.savingsMin, row.savingsMax, row.currency ?? "USD");
+      const savings = recommenderSavings(
+        row.savingsMin,
+        row.savingsMax,
+        row.currency ?? "USD",
+        row.savingsCeiling ? RECOMMENDER_CEILING_BASIS : RECOMMENDER_SAVINGS_BASIS
+      );
       return acceptFinding3({
         checkId: GCP_IDLE_RECS,
         result: "fail",
@@ -4246,6 +4252,7 @@ function harvestRecommendations(inventory, facts) {
     const savingsMin = num(fields, "savingsMin");
     const savingsMax = num(fields, "savingsMax");
     const currency = str(fields, "currency");
+    const savingsCeiling = bool(fields, "savingsCeiling") === true;
     list.push({
       recommendationId: nonEmptyStr(fields, "recommendationId") ?? resource.displayName,
       recommenderId: nonEmptyStr(fields, "recommenderId") ?? "",
@@ -4254,7 +4261,8 @@ function harvestRecommendations(inventory, facts) {
       projectId,
       ...savingsMin === null ? {} : { savingsMin },
       ...savingsMax === null ? {} : { savingsMax },
-      ...currency ? { currency } : {}
+      ...currency ? { currency } : {},
+      ...savingsCeiling ? { savingsCeiling } : {}
     });
     byProject.set(projectId, list);
   }

@@ -1,5 +1,5 @@
 import { assertValid, validateFinding, type Finding, type Inventory } from "@farside/scan-contracts";
-import { checkDefinition, indexFacts, nonEmptyStr, num, str } from "./checks/define.js";
+import { bool, checkDefinition, indexFacts, nonEmptyStr, num, str } from "./checks/define.js";
 import { recordCoverageScope, type CoverageEntry } from "./coverage.js";
 import type { ResourceFacts } from "./facts.js";
 import { projectOf } from "./providers/gcp-scope.js";
@@ -10,6 +10,14 @@ export const REC_TYPE = "recommender.googleapis.com/Recommendation";
 
 export const RECOMMENDER_SAVINGS_BASIS =
   "Recommender savings range when present; otherwise undetermined, not a point value";
+
+/**
+ * #199. Live Recommender gives one projected monthly saving. It is the most the action can save, and it may save
+ * nothing if the recommendation is wrong, so the live reader (when switched on) reports 0 up to that figure and
+ * marks it with savingsCeiling. Facts without the mark keep RECOMMENDER_SAVINGS_BASIS and the point-value rule.
+ */
+export const RECOMMENDER_CEILING_BASIS =
+  "Up to Recommender's projected monthly saving; Recommender gives one figure, so the lower bound is zero";
 
 export const EMPTY_RECOMMENDER_WORDING =
   "None were returned. Idle status is unknown.";
@@ -27,6 +35,8 @@ export type GcpRecommendation = {
   savingsMin?: number;
   savingsMax?: number;
   currency?: string;
+  /** The range runs from zero up to Recommender's one projected figure (#199). */
+  savingsCeiling?: boolean;
 };
 
 export type RecommenderHarvest =
@@ -46,8 +56,13 @@ function scope(projectId: string) {
   };
 }
 
-export function recommenderSavings(min: number, max: number, currency: string) {
-  return savingsRange({ min, max, currency, basis: RECOMMENDER_SAVINGS_BASIS });
+export function recommenderSavings(
+  min: number,
+  max: number,
+  currency: string,
+  basis: string = RECOMMENDER_SAVINGS_BASIS,
+) {
+  return savingsRange({ min, max, currency, basis });
 }
 
 export function checkGcpIdleRecommendations(
@@ -129,7 +144,12 @@ export function checkGcpIdleRecommendations(
       });
     }
     try {
-      const savings = recommenderSavings(row.savingsMin, row.savingsMax, row.currency ?? "USD");
+      const savings = recommenderSavings(
+        row.savingsMin,
+        row.savingsMax,
+        row.currency ?? "USD",
+        row.savingsCeiling ? RECOMMENDER_CEILING_BASIS : RECOMMENDER_SAVINGS_BASIS,
+      );
       return acceptFinding({
         checkId: GCP_IDLE_RECS,
         result: "fail",
@@ -183,6 +203,7 @@ function harvestRecommendations(
     const savingsMin = num(fields, "savingsMin");
     const savingsMax = num(fields, "savingsMax");
     const currency = str(fields, "currency");
+    const savingsCeiling = bool(fields, "savingsCeiling") === true;
     list.push({
       recommendationId: nonEmptyStr(fields, "recommendationId") ?? resource.displayName,
       recommenderId: nonEmptyStr(fields, "recommenderId") ?? "",
@@ -192,6 +213,7 @@ function harvestRecommendations(
       ...(savingsMin === null ? {} : { savingsMin }),
       ...(savingsMax === null ? {} : { savingsMax }),
       ...(currency ? { currency } : {}),
+      ...(savingsCeiling ? { savingsCeiling } : {}),
     });
     byProject.set(projectId, list);
   }

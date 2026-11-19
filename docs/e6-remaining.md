@@ -39,6 +39,7 @@ Only the live run remains. In order: fund the project and pool (#189); `seed.mjs
 Known before any live run:
 
 - Recommender returns a point cost, not a range. Live idle findings stay undetermined until the savings rule is decided, so that check will diff as fail.
+  - Proposed rule (#199), Zach DeManche to confirm: show one Recommender figure as a range from 0 up to that figure. Set `FARSIDE_GCP_RECOMMENDER_CEILING=1` to switch it on. Without it, nothing changes: the figure stays `savingsMax` only and the check stays undetermined. The range carries its own basis wording, so it cannot be read as a point estimate.
 - GKE reads need `container.clusters.list`, which no spec role grants. The role record lists it as unnamed.
 - `gke-stale` (GKE 1.24) cannot be created; `sql-stale` (MYSQL_5_6) may be refused. Both are flagged in `live-seed.json`.
 - Committed-use: no live reader and the seed buys no commitment. Spend-by-service needs a console comparison. Both record `not-run`.
