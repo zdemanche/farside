@@ -116,13 +116,27 @@ jobs:
           PULUMI_SECRETS_PROVIDER: ${{ vars.PULUMI_SECRETS_PROVIDER }}
           STACK: ${{ steps.stack.outputs.name }}
           PREVIEW: ${{ inputs.preview }}
+          CUSTOMER_NAME: ${{ inputs.customerName }}
         run: |
           set -euo pipefail
           if ! pulumi stack select "$STACK" 2>/dev/null; then
             pulumi stack init "$STACK" ${PULUMI_SECRETS_PROVIDER:+--secrets-provider "$PULUMI_SECRETS_PROVIDER"}
           fi
           if ! pulumi config get farside:operatorToken >/dev/null 2>&1; then
-            openssl rand -hex 32 | pulumi config set --secret farside:operatorToken
+            # The stack config file is rebuilt on every run, so the token is never found there. Reuse the deployed one from
+            # SSM so a deploy does not rotate it under warm Lambdas. Mint a new one only when it does not exist yet, or when
+            # it cannot be read (then say so, because that deploy rotates the token).
+            ERR="$RUNNER_TEMP/ssm-token.err"
+            if TOKEN=$(aws ssm get-parameter --name "/farside/$CUSTOMER_NAME/operator-token" --with-decryption \
+                --query Parameter.Value --output text 2>"$ERR"); then
+              printf '%s' "$TOKEN" | pulumi config set --secret farside:operatorToken
+              unset TOKEN
+            else
+              if ! grep -q ParameterNotFound "$ERR"; then
+                echo "::warning::Could not read the deployed operator token ($(head -c 200 "$ERR")); minting a new one, which rotates it"
+              fi
+              openssl rand -hex 32 | pulumi config set --secret farside:operatorToken
+            fi
           fi
           if [ "$PREVIEW" = "true" ]; then
             pulumi preview --diff
