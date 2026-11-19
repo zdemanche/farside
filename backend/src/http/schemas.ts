@@ -123,11 +123,12 @@ export const settingsBody = object(
     ownerTagKey: string(),
     productionTagKey: string(),
     productionTagValue: string(),
-    snapshotRetentionDays: { type: "integer", minimum: 1 },
-    certExpiryFlagDays: { type: "integer", minimum: 1 },
+    // Upper bounds are generous. They only stop absurd values (1e300 passed, was stored, then threw in the scheduler's date maths).
+    snapshotRetentionDays: { type: "integer", minimum: 1, maximum: 36500 },
+    certExpiryFlagDays: { type: "integer", minimum: 1, maximum: 3650 },
     scanScheduleEnabled: { type: "boolean" },
-    scanIntervalHours: { type: "integer", minimum: 1 },
-    scanRetryLimit: { type: "integer", minimum: 1 },
+    scanIntervalHours: { type: "integer", minimum: 1, maximum: 8760 },
+    scanRetryLimit: { type: "integer", minimum: 1, maximum: 20 },
     alertRecipients: {
       type: "array",
       maxItems: MAX_RECIPIENTS,
