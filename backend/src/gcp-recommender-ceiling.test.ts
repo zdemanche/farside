@@ -88,5 +88,6 @@ describe("a Recommender figure read as a ceiling (#199)", () => {
     );
     const finding = findings.find((item) => item.checkId === GCP_IDLE_RECS);
     expect(finding?.savings).toEqual({ min: "0.00", max: "12.25", currency: "USD" });
+    expect(finding?.evidence.fields.savingsBasis).toBe(RECOMMENDER_CEILING_BASIS);
   });
 });

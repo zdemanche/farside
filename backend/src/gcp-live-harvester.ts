@@ -312,6 +312,7 @@ export function recommendationAsset(row: GcpRecommendation & { location: string 
       ...(row.savingsMin === undefined ? {} : { savingsMin: row.savingsMin }),
       ...(row.savingsMax === undefined ? {} : { savingsMax: row.savingsMax }),
       ...(row.currency === undefined ? {} : { currency: row.currency }),
+      ...(row.savingsCeiling ? { savingsCeiling: true } : {}),
     },
   };
 }
