@@ -101,7 +101,7 @@ jobs:
       - name: Build console
         if: steps.creds.outputs.enabled == 'true'
         run: npm run build -w @farside/console
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: aws-actions/configure-aws-credentials@v6
         if: steps.creds.outputs.enabled == 'true'
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
