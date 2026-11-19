@@ -1,3 +1,5 @@
+import type { FastifyReply } from "fastify";
+import { FederatedExchangeError } from "../azure-federated.js";
 import type { OrgParams, RoutePlugin } from "../http/context.js";
 import { problem, sendClean, sendStored } from "../http/responses.js";
 import { connectionBody, connectionParams, orgParams } from "../http/schemas.js";
@@ -8,6 +10,30 @@ import { DEFAULT_CLOUD } from "../providers/index.js";
 import { probeRoles } from "../role-probe.js";
 
 type ConnectionInput = { tenantId: string; subscriptionId: string; cloud?: Cloud; asOf?: string };
+
+/** Entra refusing the federated token is the customer's setup, not a Farside fault: answer 502 with the cause, not 500. */
+async function listRoles(
+  reply: FastifyReply,
+  list: () => Promise<string[]>,
+): Promise<string[] | null> {
+  try {
+    return await list();
+  } catch (error) {
+    if (error instanceof FederatedExchangeError) {
+      void problem(reply, 502, "Azure refused the federated sign-in for this tenant", {
+        detail: error.message,
+        errors: [
+          {
+            path: "tenantId",
+            message: "Check the federated credential for Farside in that tenant, then connect again.",
+          },
+        ],
+      });
+      return null;
+    }
+    throw error;
+  }
+}
 
 export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
   app.get<{ Params: OrgParams }>(
@@ -26,11 +52,16 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
     async (request, reply) => {
       const { orgId } = request.params;
       const { tenantId, subscriptionId, cloud, asOf } = request.body;
-      const grantedRoles = await ctx.roleLister.list({
-        tenantId,
-        subscriptionId,
-        cloud: cloud ?? DEFAULT_CLOUD,
-      });
+      const grantedRoles = await listRoles(reply, () =>
+        ctx.roleLister.list({
+          tenantId,
+          subscriptionId,
+          cloud: cloud ?? DEFAULT_CLOUD,
+        }),
+      );
+      if (!grantedRoles) {
+        return reply;
+      }
       const connection = await ctx.store.putConnection(orgId, {
         tenantId,
         subscriptionId,
@@ -63,11 +94,16 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
       if (!existing) {
         return problem(reply, 404, "Not found");
       }
-      const grantedRoles = await ctx.roleLister.list({
-        tenantId: existing.tenantId,
-        subscriptionId: existing.subscriptionId,
-        cloud: existing.cloud,
-      });
+      const grantedRoles = await listRoles(reply, () =>
+        ctx.roleLister.list({
+          tenantId: existing.tenantId,
+          subscriptionId: existing.subscriptionId,
+          cloud: existing.cloud,
+        }),
+      );
+      if (!grantedRoles) {
+        return reply;
+      }
       const probed = probeRoles(existing.cloud, grantedRoles);
       const patched = await ctx.store.patchConnection(orgId, connectionId, probed);
       audit(request.log, probed.healthy ? "connection.roles" : "connection.revoked");
