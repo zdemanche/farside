@@ -11,24 +11,45 @@ import { probeRoles } from "../role-probe.js";
 
 type ConnectionInput = { tenantId: string; subscriptionId: string; cloud?: Cloud; asOf?: string };
 
-/** Entra refusing the federated token is the customer's setup, not a Farside fault: answer 502 with the cause, not 500. */
+/**
+ * A refused Entra exchange is not a Farside fault, so answer 502 with the cause, not 500. A 4xx refusal points at the
+ * customer's federated credential. A 5xx, a throttle or a malformed response is Entra being unavailable, so it says to
+ * retry and does not send the customer to fix a credential that may be fine. Only the status and code are returned
+ * and logged, never Entra's free text.
+ */
 async function listRoles(
   reply: FastifyReply,
+  tenantId: string,
   list: () => Promise<string[]>,
 ): Promise<string[] | null> {
   try {
     return await list();
   } catch (error) {
     if (error instanceof FederatedExchangeError) {
-      void problem(reply, 502, "Azure refused the federated sign-in for this tenant", {
-        detail: error.message,
-        errors: [
-          {
-            path: "tenantId",
-            message: "Check the federated credential for Farside in that tenant, then connect again.",
-          },
-        ],
-      });
+      reply.request.log.warn(
+        { tenantId, status: error.status, code: error.code },
+        "federated token refused",
+      );
+      const transient =
+        error.status >= 500 || error.status === 429 || error.code === "malformed_token_response";
+      void problem(
+        reply,
+        502,
+        transient
+          ? "Azure sign-in is unavailable for this tenant"
+          : "Azure refused the federated sign-in for this tenant",
+        {
+          detail: error.message,
+          errors: [
+            {
+              path: "tenantId",
+              message: transient
+                ? "Azure did not complete the sign-in. Try again shortly."
+                : "Check the federated credential for Farside in that tenant, then connect again.",
+            },
+          ],
+        },
+      );
       return null;
     }
     throw error;
@@ -52,7 +73,7 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
     async (request, reply) => {
       const { orgId } = request.params;
       const { tenantId, subscriptionId, cloud, asOf } = request.body;
-      const grantedRoles = await listRoles(reply, () =>
+      const grantedRoles = await listRoles(reply, tenantId, () =>
         ctx.roleLister.list({
           tenantId,
           subscriptionId,
@@ -94,7 +115,7 @@ export const connectionRoutes: RoutePlugin = (ctx) => async (app) => {
       if (!existing) {
         return problem(reply, 404, "Not found");
       }
-      const grantedRoles = await listRoles(reply, () =>
+      const grantedRoles = await listRoles(reply, existing.tenantId, () =>
         ctx.roleLister.list({
           tenantId: existing.tenantId,
           subscriptionId: existing.subscriptionId,
