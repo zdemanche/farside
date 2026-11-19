@@ -115,3 +115,23 @@ describe("live hierarchy, backup and roles", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+describe("normaliseLiveRow with an absent instance view or disk state", () => {
+  const base = {
+    id: "/subscriptions/s/resourceGroups/g/providers/Microsoft.Compute/virtualMachines/vm",
+    type: "microsoft.compute/virtualmachines",
+    name: "vm",
+  };
+
+  it("turns an empty powerState or diskState into null, so a check says undetermined", () => {
+    const row = normaliseLiveRow({ ...base, powerState: "", diskState: "" }, NOW);
+    expect(row?.properties?.powerState).toBeNull();
+    expect(row?.properties?.diskState).toBeNull();
+  });
+
+  it("keeps a real state, lower-cased and without the PowerState/ prefix", () => {
+    const row = normaliseLiveRow({ ...base, powerState: "PowerState/Stopped", diskState: "Unattached" }, NOW);
+    expect(row?.properties?.powerState).toBe("stopped");
+    expect(row?.properties?.diskState).toBe("Unattached");
+  });
+});
