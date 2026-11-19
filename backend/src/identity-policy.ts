@@ -36,6 +36,11 @@ export function assertIdentityPolicy(
   if (env[REQUIRE_IDENTITY_ENV] === "1") {
     throw new IdentityRequiredError();
   }
+  if (env[OWNER_ONLY_ENV] === "1") {
+    warn(
+      `${OWNER_ONLY_ENV}=1 has no effect without Identity: the header session can be forged, so anyone can claim ownership. Set FARSIDE_IDENTITY_ISSUER.`,
+    );
+  }
   if (env.NODE_ENV === "production") {
     warn(
       `Identity is not configured, so the API trusts the x-farside-org header. Set FARSIDE_IDENTITY_ISSUER, or ${REQUIRE_IDENTITY_ENV}=1 to refuse to start without it.`,

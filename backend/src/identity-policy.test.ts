@@ -35,6 +35,19 @@ describe("assertIdentityPolicy", () => {
     expect(warn.mock.calls[0]?.[0]).toContain("FARSIDE_IDENTITY_ISSUER");
   });
 
+  it("warns that owner-only cannot hold without Identity, and still starts", () => {
+    const warn = vi.fn();
+    expect(() => assertIdentityPolicy({ [OWNER_ONLY_ENV]: "1" }, undefined, warn)).not.toThrow();
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0]?.[0]).toContain(OWNER_ONLY_ENV);
+  });
+
+  it("does not warn about owner-only when Identity is configured", () => {
+    const warn = vi.fn();
+    assertIdentityPolicy({ [OWNER_ONLY_ENV]: "1" }, IDENTITY, warn);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("is silent in development and when the flag is anything but 1", () => {
     const warn = vi.fn();
     expect(() => assertIdentityPolicy({}, undefined, warn)).not.toThrow();

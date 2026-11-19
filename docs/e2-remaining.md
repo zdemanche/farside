@@ -50,7 +50,7 @@ Not built: provider logout (Sign out is local), token refresh (after `exp`, scre
 Opt-in hardening (`backend/src/identity-policy.ts`), both off unless set, so nothing above changes by default:
 
 - `FARSIDE_REQUIRE_IDENTITY=1` refuses to start (container and Lambda) when `FARSIDE_IDENTITY_ISSUER` is unset. Without Identity the API trusts the `x-farside-org` header, so a deploy that misses the issuer would let any caller act as any org. With `NODE_ENV=production` and no Identity, startup logs a warning either way.
-- `FARSIDE_OWNER_ONLY_DESTRUCTIVE=1` limits `POST /offboard` and connection `PUT` / `DELETE` to the org's owner. Any verified user of the tenant can join the org through `POST /claim`, so without it any member can offboard it. Reads and settings stay open to members.
+- `FARSIDE_OWNER_ONLY_DESTRUCTIVE=1` limits `POST /offboard` and connection `PUT` / `DELETE` to the org's owner. Any verified user of the tenant can join the org through `POST /claim`, so without it any member can offboard it. Reads, settings, scans, `PUT /inventory` and `PUT /coverage` stay open to members (left open on purpose: they may be used by a member-run harvest). It only holds with Identity configured, because the header session can be forged; without Identity, startup warns.
 
 ### Live federated connect (#52, #53)
 
