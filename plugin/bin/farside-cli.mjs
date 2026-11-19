@@ -2735,17 +2735,22 @@ function issueCategory(checkId) {
   }
   return "Other";
 }
-function sumIssueSavings(rows) {
-  const priced = rows.filter((row) => row.savings);
-  if (priced.length === 0) {
-    return null;
+function sumIssueSavingsByCurrency(rows) {
+  const totals = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    if (row.status !== "open" || !row.savings) {
+      continue;
+    }
+    const total = totals.get(row.savings.currency) ?? { min: 0, max: 0 };
+    total.min += Number(row.savings.min);
+    total.max += Number(row.savings.max);
+    totals.set(row.savings.currency, total);
   }
-  const currency = priced[0]?.savings?.currency ?? "USD";
-  return {
-    min: priced.reduce((sum, row) => sum + Number(row.savings?.min ?? 0), 0).toFixed(2),
-    max: priced.reduce((sum, row) => sum + Number(row.savings?.max ?? 0), 0).toFixed(2),
+  return [...totals].map(([currency, total]) => ({
+    min: total.min.toFixed(2),
+    max: total.max.toFixed(2),
     currency
-  };
+  }));
 }
 function latestCostAmount(rows) {
   const months = rows.filter((row) => !row.provisional);
@@ -2755,10 +2760,10 @@ function money(min, max, currency) {
   return `${currency} ${min}\u2013${max}`;
 }
 function renderConsultantReport(input) {
-  const waste = sumIssueSavings(input.issues);
+  const wasteByCurrency = sumIssueSavingsByCurrency(input.issues);
   const month = latestCostAmount(input.cost);
   const displayedMonth = month?.amount ?? null;
-  const currency = month?.currency ?? waste?.currency ?? "USD";
+  const currency = month?.currency ?? wasteByCurrency[0]?.currency ?? "USD";
   const grouped = Object.fromEntries(ISSUE_CATEGORIES.map((name) => [name, []]));
   for (const issue of input.issues) {
     grouped[issueCategory(issue.checkId)].push(issue);
@@ -2787,7 +2792,9 @@ function renderConsultantReport(input) {
   const coverageItems = input.coverage.map(
     (entry) => `<li>${escapeHtml(entry.checkId)} \xB7 ${escapeHtml(entry.subscriptionOrProject)} \xB7 ${escapeHtml(entry.state)}</li>`
   ).join("");
-  const wasteMarkup = waste ? `<p data-range-min="${escapeHtml(waste.min)}" data-range-max="${escapeHtml(waste.max)}">Nameable waste ${escapeHtml(money(waste.min, waste.max, waste.currency))}</p>` : "<p>Nameable waste is not assessed.</p>";
+  const wasteMarkup = wasteByCurrency.length > 0 ? wasteByCurrency.map(
+    (waste) => `<p data-range-min="${escapeHtml(waste.min)}" data-range-max="${escapeHtml(waste.max)}">Nameable waste ${escapeHtml(money(waste.min, waste.max, waste.currency))}</p>`
+  ).join("") : "<p>Nameable waste is not assessed.</p>";
   const monthMarkup = displayedMonth ? `<p data-figure="monthlyCost" data-amount="${escapeHtml(displayedMonth)}">Monthly cost ${escapeHtml(currency)} ${escapeHtml(displayedMonth)}</p>` : "<p>Monthly cost is not assessed.</p>";
   return `<!DOCTYPE html>
 <html lang="en" data-theme="moonaan">
