@@ -51,7 +51,8 @@ jobs:
 
   publish:
     name: publish ${{ matrix.image }}
-    if: github.event_name != 'pull_request'
+    # A manual run publishes (and moves the latest tag) only from main. Releases, tags and workflow_call are unchanged.
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     permissions:
       contents: read
