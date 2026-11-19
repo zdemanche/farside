@@ -2,6 +2,7 @@ import { buildApp } from "./app.js";
 import { azureLiveFromEnv } from "./azure-live-harvest.js";
 import { systemClock } from "./clock.js";
 import { identityConfigFromEnv } from "./identity.js";
+import { assertIdentityPolicy } from "./identity-policy.js";
 import { pino } from "pino";
 import { auditRetention, loggerFromEnv, pinoOptions } from "./observability.js";
 import { storeFromEnv } from "./store-from-env.js";
@@ -12,6 +13,9 @@ const port = Number.parseInt(process.env.PORT ?? "8080", 10);
 const host = process.env.HOST ?? "0.0.0.0";
 const RETENTION_SWEEP_MS = 3_600_000;
 
+const identity = identityConfigFromEnv(process.env);
+assertIdentityPolicy(process.env, identity);
+
 const store = await storeFromEnv(process.env, systemClock, pino(pinoOptions(loggerFromEnv()) || {}));
 const live = azureLiveFromEnv(process.env, { store, fallback: unconfiguredHarvester(), clock: systemClock });
 const app = buildApp(store, {
@@ -19,7 +23,7 @@ const app = buildApp(store, {
   ...(live ? { harvester: live.harvester, harvestClients: live.harvestClients, roleLister: live.roleLister } : {}),
   logger: loggerFromEnv(),
   operatorToken: process.env.FARSIDE_OPERATOR_TOKEN || undefined,
-  identity: identityConfigFromEnv(process.env),
+  identity,
 });
 
 setInterval(() => {

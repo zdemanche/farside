@@ -4,6 +4,7 @@ import { problem, sendClean } from "../http/responses.js";
 import { offboardBody, orgParams } from "../http/schemas.js";
 import { audit } from "../observability.js";
 import { sessionOf } from "../http/hooks.js";
+import { requireOwner } from "../identity-policy.js";
 
 type OffboardBody = { confirm?: boolean; exportOffered?: boolean; now?: string };
 
@@ -25,6 +26,9 @@ export const offboardRoutes: RoutePlugin = (ctx) => async (app) => {
         return problem(reply, 400, "Offboard not confirmed", {
           errors: [{ path: "body", message: "confirm and exportOffered must be true" }],
         });
+      }
+      if (!(await requireOwner(ctx, request, reply))) {
+        return reply;
       }
       const actorId = sessionOf(request)?.actorId ?? "unknown";
       const record = await ctx.store.offboard(orgId, ctx.clientTime(body.now), "customer", actorId);
