@@ -7,6 +7,7 @@ import {
   exportFilename,
   exportInventory,
   exportIssues,
+  type ExportInventoryRow,
   type ExportKind,
 } from "../export.js";
 import type { OrgParams, RoutePlugin } from "../http/context.js";
@@ -48,16 +49,23 @@ export const exportRoutes: RoutePlugin = (ctx) => async (app) => {
       const cloud = cloudOf(request.query);
       const org = await ctx.store.read(request.params.orgId, "inventories", "inventory");
       const inventory = cloud ? (inventoriesFor(org, cloud)[0] ?? null) : org.inventory;
+      const exportedAt = ctx.clientTime(request.query.asOf);
+      const envelope = exportInventory(request.params.orgId, inventory ?? null, exportedAt);
+      // With no cloud given, an org with several clouds exports all of them, like the console table and the CLI. The
+      // single-cloud result above (the last-written inventory) is unchanged.
+      const every = cloud ? [] : inventoriesFor(org);
+      const body =
+        every.length > 1
+          ? {
+              ...envelope,
+              rows: every.flatMap(
+                (each) =>
+                  exportInventory(request.params.orgId, each, exportedAt).rows as ExportInventoryRow[],
+              ),
+            }
+          : envelope;
       attachment(reply, "inventory");
-      return sendClean(
-        reply,
-        200,
-        exportInventory(
-          request.params.orgId,
-          inventory ?? null,
-          ctx.clientTime(request.query.asOf),
-        ),
-      );
+      return sendClean(reply, 200, body);
     },
   );
 
