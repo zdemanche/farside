@@ -37,7 +37,7 @@ After changing anything the CLI imports, run `npm run plugin:bundle` and commit 
 Workspace files default to `~/farside-engagements` (outside the git repo, like Atlas engagements). Override with `--workspace`. `state.json` keeps scan history, per-cloud inventory and cost, so scanning a second cloud into the same workspace keeps the first cloud's findings and issues, and scan ids keep counting (`scan-1`, `scan-2`, ...). A rescan of the same cloud and scope replaces only that scope's rows.
 
 1. `/farside:connect --cloud azure` (or `gcp`) — probes local credentials and names missing roles.
-2. `/farside:scan --cloud azure --scope <subscription-id> --fixture` — runs the bundled CLI against the synthetic estate. Drop `--fixture` only when live harvest exists (#59 / #197).
+2. `/farside:scan --cloud azure --scope <subscription-id> --fixture` — runs the bundled CLI against the synthetic estate. Drop `--fixture` and set the live variables below to scan a real cloud.
 3. `/farside:findings` — explains issues from workspace files. Cite issue ids. Never state a finding the CLI did not produce.
 4. `/farside:report` — writes `report.html` from the workspace export (headline, issues by category, savings ranges, blind spots, coverage, undetermined).
 
@@ -49,6 +49,19 @@ npm run farside -w @farside/backend -- scan --cloud azure --scope main --fixture
 npm run farside -w @farside/backend -- findings
 npm run farside -w @farside/backend -- report
 ```
+
+## Live scanning (opt-in)
+
+Without any of these variables the CLI behaves exactly as above: `--fixture` scans the synthetic estate, and a scan without it fails because no live harvest is configured. Setting a cloud's switch makes `scan` read the real cloud through federated credentials, the same way the backend does. No client secret or key is accepted. The local sign-in probe is skipped when a switch is on, because the credentials come from the environment.
+
+| Cloud | Variables | Notes |
+|---|---|---|
+| Azure | `FARSIDE_AZURE_LIVE=1`, `FARSIDE_AZURE_CLIENT_ID`, `FARSIDE_AZURE_TENANT_ID`, and `AWS_WEB_IDENTITY_TOKEN_FILE` (or `FARSIDE_AZURE_ASSERTION_FILE`) | `--scope` is the subscription id. The scan lists the roles the identity holds on it and names any missing ones on stderr. |
+| GCP | `FARSIDE_GCP_LIVE=1`, `FARSIDE_GCP_PROJECT_ID`, `FARSIDE_GCP_POOL_PROJECT_NUMBER`, `FARSIDE_GCP_POOL_ID`, `FARSIDE_GCP_PROVIDER_ID`, `FARSIDE_GCP_SERVICE_ACCOUNT`, and `FARSIDE_GCP_SUBJECT_TOKEN_FILE` (or `AWS_WEB_IDENTITY_TOKEN_FILE`) | `--scope` must be the configured project; any other scope is refused before a network call. |
+
+When a live read fails, stderr names the error and its causes with their status, code and federation step (for example `FederatedExchangeError` with `AADSTS70021`), and never a token, URL or response body. A failed Azure scan exits 1 and writes nothing to the workspace. A refused GCP federation still produces an empty, undetermined scan (as in the backend), and stderr says why.
+
+Built and tested against mocked clouds only. The first run against a real subscription or project is the live-verification step in the go-live issues (#413, #414).
 
 ## What stays in the CLI
 

@@ -26,6 +26,7 @@ import {
   type CredentialProbe,
   type RoleGap,
 } from "./cli-credentials.js";
+import { CliLiveConfigError, causeChain, cliLiveSources, failureSink, liveRequested, type CliLive } from "./cli-live.js";
 import { ScanRunner, providerFor, unconfiguredHarvester } from "./lib.js";
 import { asMutable } from "./readonly.js";
 import { assertNoSecrets } from "./secrets.js";
@@ -122,6 +123,8 @@ export type CliIo = {
   env?: NodeJS.Dict<string>;
   probe?: (cloud: Cloud) => CredentialProbe;
   grantedRoles?: readonly string[];
+  /** Test seams for live scanning (a fake network and token file). Production leaves this unset. */
+  liveDeps?: { fetch?: (input: string, init: RequestInit) => Promise<Response>; readFile?: (path: string) => Promise<string> };
 };
 
 type Flags = {
@@ -282,7 +285,9 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
   }
   const dir = resolveWorkspace(flags, io);
   const clock = io.clock ?? systemClock;
-  if (!flags.fixture) {
+  // Live scanning uses federated credentials from the environment, not a local sign-in, so the local probe does not apply.
+  const liveWanted = !flags.fixture && liveRequested(flags.cloud, io.env ?? process.env);
+  if (!flags.fixture && !liveWanted) {
     const probe = io.probe?.(flags.cloud) ?? probeLocalCredentials(flags.cloud, io.env ?? process.env);
     if (!probe.present) {
       writeLine(stderr, probe.error ?? "signed-in Azure CLI / DefaultAzureCredential or GCP Application Default Credentials required");
@@ -296,7 +301,31 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
   const store = new MemoryStore(clock);
   const state = readWorkspaceState(dir);
   await restoreWorkspace(store, dir, state);
-  const harvester = flags.fixture ? providerFor(flags.cloud).harvester(clock) : unconfiguredHarvester();
+  let live: CliLive | null = null;
+  if (liveWanted) {
+    try {
+      live = await cliLiveSources({
+        cloud: flags.cloud,
+        scope: flags.scope,
+        env: io.env ?? process.env,
+        store,
+        clock,
+        orgId: CLI_ORG_ID,
+        ...(io.liveDeps ?? {}),
+        log: (fields, message) => writeLine(stderr, { message, ...fields }),
+      });
+    } catch (error) {
+      writeLine(stderr, error instanceof CliLiveConfigError ? error.message : { failed: "live_setup", cause: causeChain(error) });
+      return EXIT_FAILED;
+    }
+    const gaps = live?.grantedRoles ? missingRoles(flags.cloud, live.grantedRoles) : [];
+    if (gaps.length > 0) {
+      writeLine(stderr, { missingRoles: gaps });
+    }
+  }
+  const harvester = flags.fixture
+    ? providerFor(flags.cloud).harvester(clock)
+    : (live?.harvester ?? unconfiguredHarvester());
   const runner = new ScanRunner(
     store,
     harvester,
@@ -306,8 +335,9 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
           commitmentClient: fixtureCommitmentClient(),
           budgetClient: fixtureBudgetClient(),
         }
-      : {},
+      : (live?.clients ?? {}),
     clock,
+    live ? failureSink((fields) => writeLine(stderr, fields)) : undefined,
   );
   const { done } = await runner.start({
     orgId: CLI_ORG_ID,
