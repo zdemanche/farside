@@ -347,3 +347,15 @@ Do not PATCH or DELETE. The write was refused. Retry the same PUT **without** `c
 - Response is 201. `roles` lists the required set. A scan starts unless the contract is paused.
 
 Covered in `backend/src/secrets.test.ts` (“injected connect secret is refused, then a clean retry stores the connection”). Overlap and `harvest_timeout` stay on their step Rollback sections above.
+
+## Alarms
+
+The stack creates an SNS topic (`alertTopicArn` output) and CloudWatch alarms on it: the tick failing, being throttled, running past 240s of its 300s timeout, or not running for about an hour (two empty 30 minute windows), and the API function failing. Nothing is subscribed by default, so until you subscribe an address or a pager to the topic the alarms show in the CloudWatch console only:
+
+```sh
+aws sns subscribe --topic-arn "$(pulumi stack output alertTopicArn --stack <stack>)" --protocol email --notification-endpoint <address>
+```
+
+The tick's Lambda async retries are off, and an async event older than 300 seconds is dropped, so a failed, throttled or late tick is not run again on top of the next one. The "tick missing" alarm needs two empty 30 minute windows in a row, so it fires after about an hour without a tick.
+
+The deploy role needs these permissions for the alarms, the topic and the invoke config, on top of what it already has: `sns:CreateTopic`, `sns:TagResource`, `sns:GetTopicAttributes`, `cloudwatch:PutMetricAlarm`, `cloudwatch:TagResource`, `cloudwatch:ListTagsForResource`, `cloudwatch:DescribeAlarms`, `lambda:PutFunctionEventInvokeConfig` and `lambda:GetFunctionEventInvokeConfig`. A role chained into OrganizationAccountAccessRole has them. A narrowly scoped `AWS_ROLE_ARN` needs them added before the next deploy. After the console upload, the deploy also asks CloudFront to invalidate the distribution (`cloudfront:CreateInvalidation`); without that permission it warns and the console can serve a stale `index.html` for up to a day.
