@@ -269,6 +269,9 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
   new aws.lambda.FunctionEventInvokeConfig(`${tickName}-invoke-config`, {
     functionName: tick.name,
     maximumRetryAttempts: 0,
+    // Without an age limit Lambda holds a throttled or system-failed async event for up to 6 hours and runs it late, on
+    // top of a later tick. 300s matches the Scheduler target's maximumEventAgeInSeconds.
+    maximumEventAgeInSeconds: 300,
   });
   const schedulerRole = new aws.iam.Role(`${tickName}-scheduler-role`, {
     name: `${tickName}-scheduler-role`,
@@ -309,6 +312,9 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
       comparisonOperator: string;
       threshold: number;
       treatMissingData: string;
+      /** Windows that must breach. Defaults to 1. */
+      evaluationPeriods?: number;
+      datapointsToAlarm?: number;
     },
   ) =>
     new aws.cloudwatch.MetricAlarm(`${prefix}-${id}`, {
@@ -342,12 +348,16 @@ export function declareStack({ plan, apiBundle, tickBundle, operatorToken, logRe
     threshold: 240_000,
     treatMissingData: "notBreaching",
   });
-  alarm("tick-missing", "The scheduled tick has not run for 30 minutes.", tick.name, "Invocations", {
+  // Two empty 30 minute windows in a row (about an hour with no tick). Lambda metrics land a few minutes late and the
+  // 15 minute rate is not aligned to the windows, so one empty window can be a delay, not a miss.
+  alarm("tick-missing", "The scheduled tick has not run for an hour.", tick.name, "Invocations", {
     statistic: "Sum",
     period: 1800,
     comparisonOperator: "LessThanThreshold",
     threshold: 1,
     treatMissingData: "breaching",
+    evaluationPeriods: 2,
+    datapointsToAlarm: 2,
   });
   alarm("api-errors", "The API function is failing.", api.name, "Errors", {
     statistic: "Sum",

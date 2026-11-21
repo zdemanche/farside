@@ -5,6 +5,8 @@ import { parseAccountRegistry } from "./account.js";
 type Recorded = { type: string; name: string; inputs: Record<string, unknown> };
 
 const recorded: Recorded[] = [];
+/** Resource registrations and invokes in the order the mocks saw them. */
+const order: string[] = [];
 
 const registry = parseAccountRegistry(
   JSON.stringify({
@@ -37,6 +39,7 @@ describe("stack alarms, tick retries and the console invalidation output", () =>
       {
         newResource(args) {
           recorded.push({ type: args.type, name: args.name, inputs: args.inputs });
+          order.push(`resource:${args.type}:${args.name}`);
           return {
             id: `${args.name}-id`,
             state: {
@@ -56,6 +59,7 @@ describe("stack alarms, tick retries and the console invalidation output", () =>
             return { region: "us-east-2", name: "us-east-2" };
           }
           if (args.token === "aws:kms/getKey:getKey") {
+            order.push("invoke:getKey");
             return { arn: "arn:aws:kms:us-east-2:123456789012:key/ssm-mock" };
           }
           return args.inputs;
@@ -104,6 +108,8 @@ describe("stack alarms, tick retries and the console invalidation output", () =>
       treatMissingData: "breaching",
       comparisonOperator: "LessThanThreshold",
       period: 1800,
+      evaluationPeriods: 2,
+      datapointsToAlarm: 2,
     });
     expect(byName("tick-errors")?.inputs.treatMissingData).toBe("notBreaching");
   });
@@ -122,10 +128,23 @@ describe("stack alarms, tick retries and the console invalidation output", () =>
     const configs = ofType("aws:lambda/functionEventInvokeConfig:FunctionEventInvokeConfig");
     expect(configs).toHaveLength(1);
     expect(configs[0]?.inputs.maximumRetryAttempts).toBe(0);
+    expect(configs[0]?.inputs.maximumEventAgeInSeconds).toBe(300);
   });
 
   it("exports the distribution id and the alert topic", async () => {
     expect(await resolved(outputs.distributionId)).toBeTruthy();
     expect(await resolved(outputs.alertTopicArn)).toContain("alerts");
+  });
+
+  it("looks up the AWS-managed ssm key only after the operator-token parameter exists", () => {
+    const parameter = order.findIndex(
+      (entry) =>
+        entry.startsWith("resource:aws:ssm/parameter:Parameter:") &&
+        entry.endsWith("-operator-token"),
+    );
+    const lookup = order.indexOf("invoke:getKey");
+    expect(parameter).toBeGreaterThanOrEqual(0);
+    expect(lookup).toBeGreaterThanOrEqual(0);
+    expect(lookup).toBeGreaterThan(parameter);
   });
 });
