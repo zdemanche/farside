@@ -350,7 +350,7 @@ Covered in `backend/src/secrets.test.ts` (“injected connect secret is refused,
 
 ## Alarms
 
-The stack creates an SNS topic (`alertTopicArn` output) and CloudWatch alarms on it: the tick failing, being throttled, running past 240s of its 300s timeout, or not running for 30 minutes, and the API function failing. Nothing is subscribed by default, so until you subscribe an address or a pager to the topic the alarms show in the CloudWatch console only:
+The stack creates an SNS topic (`alertTopicArn` output) and CloudWatch alarms on it: the tick failing, being throttled, running past 240s of its 300s timeout, or not running for about an hour (two empty 30 minute windows), and the API function failing. Nothing is subscribed by default, so until you subscribe an address or a pager to the topic the alarms show in the CloudWatch console only:
 
 ```sh
 aws sns subscribe --topic-arn "$(pulumi stack output alertTopicArn --stack <stack>)" --protocol email --notification-endpoint <address>
