@@ -7,7 +7,7 @@ import {
   exportFilename,
   exportInventory,
   exportIssues,
-  type ExportEnvelope,
+  type ExportInventoryRow,
   type ExportKind,
 } from "../export.js";
 import type { OrgParams, RoutePlugin } from "../http/context.js";
@@ -58,9 +58,10 @@ export const exportRoutes: RoutePlugin = (ctx) => async (app) => {
         every.length > 1
           ? {
               ...envelope,
-              rows: every.flatMap((each) => [
-                ...exportInventory(request.params.orgId, each, exportedAt).rows,
-              ]) as ExportEnvelope["rows"],
+              rows: every.flatMap(
+                (each) =>
+                  exportInventory(request.params.orgId, each, exportedAt).rows as ExportInventoryRow[],
+              ),
             }
           : envelope;
       attachment(reply, "inventory");

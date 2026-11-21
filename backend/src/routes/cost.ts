@@ -30,16 +30,13 @@ export const costRoutes: RoutePlugin = (ctx) => async (app) => {
         "findings",
         "coverage",
       );
-      // Stored cost, alerts and commitments come from Azure billing only (the export route says the same), so a view
-      // scoped to another cloud has none. Passing them through showed Azure spend under "Google Cloud".
-      const azureOnly = cloud === undefined || cloud === "azure";
       return sendClean(
         reply,
         200,
         costWasteView({
-          cost: azureOnly ? asMutable<CostSnapshot | null>(org.cost) : null,
-          alerts: azureOnly ? asMutable<AlertAnalysis | null>(org.alerts) : null,
-          commitments: azureOnly ? asMutable<CommitmentSnapshot | null>(org.commitments) : null,
+          cost: asMutable<CostSnapshot | null>(org.cost),
+          alerts: asMutable<AlertAnalysis | null>(org.alerts),
+          commitments: asMutable<CommitmentSnapshot | null>(org.commitments),
           findings: cloudFilter(org.findings, cloud, (finding) => finding.scope.cloud),
           coverage: cloudFilter(org.coverage, cloud, (entry) => entry.cloud),
         }),
