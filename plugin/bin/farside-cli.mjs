@@ -8053,7 +8053,6 @@ function gcpSources(input) {
     harvester,
     clients: {},
     finalize(output, scope4, before) {
-      const fixtureOnly = new Set(FIXTURE_ONLY_GCP_CHECKS.keys());
       const unassessed = /* @__PURE__ */ new Map();
       for (const entry of harvestCoverage) {
         unassessed.set(entry.checkId, entry);
@@ -8076,11 +8075,21 @@ function gcpSources(input) {
       const dropFinding = (finding) => ownFinding(finding) && adjust.has(finding.checkId);
       const dropIssue = (issue) => ownIssue(issue) && adjust.has(issue.checkId);
       const keptFindings = before.findings.filter(
-        (finding) => ownFinding(finding) && unassessed.has(finding.checkId) && !fixtureOnly.has(finding.checkId)
+        (finding) => ownFinding(finding) && unassessed.has(finding.checkId)
       );
-      const keptIssues = before.issues.filter(
-        (issue) => ownIssue(issue) && unassessed.has(issue.checkId) && !fixtureOnly.has(issue.checkId)
-      );
+      const keptIssues = before.issues.filter((issue) => ownIssue(issue) && unassessed.has(issue.checkId)).map((issue) => {
+        if (issue.status === "closed") {
+          return issue;
+        }
+        const entry = unassessed.get(issue.checkId);
+        const { closingScanId: _closing, ...rest } = issue;
+        return {
+          ...rest,
+          status: "not_confirmed",
+          coverage: entry?.state ?? "unassessed",
+          notConfirmedReason: entry?.reason ?? "This scan did not cover the issue scope, so Farside could not confirm it."
+        };
+      });
       const coverage = [
         ...output.coverage.filter(
           (entry) => !(entry.subscriptionOrProject === scope4 && adjust.has(entry.checkId))

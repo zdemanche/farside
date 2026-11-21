@@ -450,13 +450,22 @@ describe("farside CLI: a live GCP scan", () => {
       ).toEqual(before["coverage.json"]);
     });
 
-    it("does not close or drop the project's own earlier issue when a rescan cannot assess its check", async () => {
+    it("keeps the project's own earlier issue, as not confirmed, when a rescan cannot assess its check", async () => {
       const { dir, run } = gcpScan("farside-test", fetch);
       const before = seed(dir, ["farside-test"]);
       expect(await run()).toBe(EXIT_OK);
-      expect(read(dir, "issues.json").filter((row) => row.checkId === IDLE)).toEqual(
-        before["issues.json"],
-      );
+      const issues = read(dir, "issues.json").filter((row) => row.checkId === IDLE);
+      const prior = (before["issues.json"] as Array<Record<string, unknown>>)[0];
+      // One row, the same id and history, no longer confirmed: the rule applyScanToIssues applies to an uncovered scope.
+      expect(issues).toHaveLength(1);
+      expect(issues[0]).toMatchObject({
+        id: prior?.id,
+        status: "not_confirmed",
+        coverage: "unassessed",
+        firstSeen: prior?.firstSeen,
+        lastConfirmed: prior?.lastConfirmed,
+      });
+      expect(typeof issues[0]?.notConfirmedReason).toBe("string");
       expect(read(dir, "findings.json").filter((row) => row.checkId === IDLE)).toEqual(
         before["findings.json"],
       );
@@ -464,6 +473,36 @@ describe("farside CLI: a live GCP scan", () => {
         state: "unassessed",
         causeId: "missing_role",
       });
+    });
+
+    it("keeps an earlier closed issue closed", async () => {
+      const { dir, run } = gcpScan("farside-test", fetch);
+      seed(dir, ["farside-test"]);
+      const closed = {
+        ...(read(dir, "issues.json")[0] as Record<string, unknown>),
+        status: "closed",
+        coverage: "assessed",
+        closingScanId: "scan-0",
+      };
+      writeFileSync(join(dir, "issues.json"), JSON.stringify([closed]));
+      writeFileSync(join(dir, "findings.json"), "[]");
+      expect(await run()).toBe(EXIT_OK);
+      const issues = read(dir, "issues.json").filter((row) => row.checkId === IDLE);
+      expect(issues).toHaveLength(1);
+      expect(issues[0]).toMatchObject({ id: closed.id, status: "closed" });
+    });
+
+    it("does not count an unconfirmed issue's savings as nameable waste in the report", async () => {
+      const { dir, run } = gcpScan("farside-test", fetch);
+      seed(dir, ["farside-test"]);
+      expect(await run()).toBe(EXIT_OK);
+      const report = capture();
+      expect(await runCli(["report", "--workspace", dir], { ...report, clock })).toBe(EXIT_OK);
+      const html = readFileSync(join(dir, "report.html"), "utf8");
+      expect(html).toContain("Nameable waste is not assessed.");
+      expect(html).not.toMatch(/Nameable waste [A-Z]{3}/);
+      // The issue itself is still listed, marked not confirmed.
+      expect(html).toContain("not_confirmed");
     });
   });
 

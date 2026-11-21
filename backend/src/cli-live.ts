@@ -212,7 +212,6 @@ function gcpSources(input: CliLiveInput): CliLive | null {
     finalize(output, scope, before) {
       // Fixture-only checks never report on a real project, so nothing of theirs is kept. Harvest-failure checks could not
       // be assessed this scan, so what an earlier scan found for them is kept exactly as it was, not closed and not dropped.
-      const fixtureOnly = new Set(FIXTURE_ONLY_GCP_CHECKS.keys());
       const unassessed = new Map<string, CoverageEntry>();
       for (const entry of harvestCoverage) {
         unassessed.set(entry.checkId, entry);
@@ -236,15 +235,28 @@ function gcpSources(input: CliLiveInput): CliLive | null {
       const dropFinding = (finding: Finding) => ownFinding(finding) && adjust.has(finding.checkId);
       const dropIssue = (issue: StoredIssue) => ownIssue(issue) && adjust.has(issue.checkId);
       const keptFindings = before.findings.filter(
-        (finding) =>
-          ownFinding(finding) &&
-          unassessed.has(finding.checkId) &&
-          !fixtureOnly.has(finding.checkId),
+        (finding) => ownFinding(finding) && unassessed.has(finding.checkId),
       );
-      const keptIssues = before.issues.filter(
-        (issue) =>
-          ownIssue(issue) && unassessed.has(issue.checkId) && !fixtureOnly.has(issue.checkId),
-      );
+      // What an earlier scan saved for a check this scan could not assess is kept, but it is no longer confirmed: the same
+      // change applyScanToIssues makes to an issue whose scope was not covered. A closed issue stays closed. Left open and
+      // assessed, the report would add its savings to "Nameable waste" next to the check it lists as unassessed.
+      const keptIssues = before.issues
+        .filter((issue) => ownIssue(issue) && unassessed.has(issue.checkId))
+        .map((issue): StoredIssue => {
+          if (issue.status === "closed") {
+            return issue;
+          }
+          const entry = unassessed.get(issue.checkId);
+          const { closingScanId: _closing, ...rest } = issue;
+          return {
+            ...rest,
+            status: "not_confirmed",
+            coverage: entry?.state ?? "unassessed",
+            notConfirmedReason:
+              entry?.reason ??
+              "This scan did not cover the issue scope, so Farside could not confirm it.",
+          };
+        });
       const coverage = [
         ...output.coverage.filter(
           (entry) => !(entry.subscriptionOrProject === scope && adjust.has(entry.checkId)),
