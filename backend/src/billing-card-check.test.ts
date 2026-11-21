@@ -41,4 +41,36 @@ describe("assertNoCardData", () => {
     expect(() => assertNoCardData({ id: "1234567890123" })).not.toThrow();
     expect(() => assertNoCardData({ startDate: "2026-10-01T00:00:00.000Z" })).not.toThrow();
   });
+
+  it("rejects a card number with another digit group in front of it", () => {
+    for (const note of [
+      "Acme 2026-11 4242 4242 4242 4242",
+      "2026 4111 1111 1111 1111",
+      "ref 12 4111 1111 1111 1111",
+      "12 34 4111-1111-1111-1111",
+    ]) {
+      expect(() => assertNoCardData({ plan: note })).toThrow(CardDataError);
+    }
+  });
+
+  it("rejects dot separators and a number joined to letters", () => {
+    expect(() => assertNoCardData({ note: "4111.1111.1111.1111" })).toThrow(CardDataError);
+    expect(() => assertNoCardData({ note: "x4111111111111111" })).toThrow(CardDataError);
+  });
+
+  it("walks a very deep or cyclic body without overflowing the stack", () => {
+    let deep: Record<string, unknown> = { leaf: "ok" };
+    for (let index = 0; index < 5000; index += 1) {
+      deep = { next: deep };
+    }
+    expect(() => assertNoCardData(deep)).not.toThrow(RangeError);
+    const cyclic: Record<string, unknown> = { a: 1 };
+    cyclic.self = cyclic;
+    expect(() => assertNoCardData(cyclic)).not.toThrow(RangeError);
+  });
+
+  it("does not take several short groups for a card number", () => {
+    expect(() => assertNoCardData({ note: "2026-11-20 12 30 45" })).not.toThrow();
+    expect(() => assertNoCardData({ note: "version 1.2.3 build 4567" })).not.toThrow();
+  });
 });

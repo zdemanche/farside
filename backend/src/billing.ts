@@ -24,16 +24,32 @@ export type BillingView = {
 };
 
 const CARD_KEY = /card|pan|cvv|cvc|cardnumber|card_number/i;
-const CARD_VALUE = /\b(?:\d[ -]*?){13,19}\b/g;
+/** Runs of digit groups joined by a space, dot or dash: "4111 1111 1111 1111", "ref 12 4111-1111-1111-1111". */
+const DIGIT_RUN = /\d+(?:[ .-]\d+)*/g;
 
+/** Every key in the value, at any depth. Iterative with a visited set, so a deep or cyclic body cannot overflow the stack. */
 function keysOf(value: unknown): string[] {
-  if (value === null || typeof value !== "object") {
-    return [];
+  const keys: string[] = [];
+  const seen = new WeakSet<object>();
+  const stack: unknown[] = [value];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current === null || typeof current !== "object" || seen.has(current)) {
+      continue;
+    }
+    seen.add(current);
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        stack.push(item);
+      }
+    } else {
+      for (const [key, child] of Object.entries(current)) {
+        keys.push(key);
+        stack.push(child);
+      }
+    }
   }
-  if (Array.isArray(value)) {
-    return value.flatMap(keysOf);
-  }
-  return Object.entries(value).flatMap(([key, child]) => [key, ...keysOf(child)]);
+  return keys;
 }
 
 /** A real card number passes the Luhn check. A long amount or an id usually does not. */
@@ -54,11 +70,24 @@ function luhnValid(digits: string): boolean {
   return sum % 10 === 0;
 }
 
+/**
+ * True when some run of whole digit groups, starting anywhere in a digit run, holds 13 to 19 digits that pass Luhn. Trying
+ * every start means a digit group before the number ("ref 12 4111 1111 1111 1111") cannot hide it.
+ */
 function looksLikeCardNumber(text: string): boolean {
-  for (const match of text.matchAll(CARD_VALUE)) {
-    const digits = match[0].replace(/\D/g, "");
-    if (digits.length >= 13 && digits.length <= 19 && luhnValid(digits)) {
-      return true;
+  for (const run of text.matchAll(DIGIT_RUN)) {
+    const groups = run[0].split(/[ .-]/);
+    for (let start = 0; start < groups.length; start += 1) {
+      let digits = "";
+      for (let end = start; end < groups.length; end += 1) {
+        digits += groups[end];
+        if (digits.length > 19) {
+          break;
+        }
+        if (digits.length >= 13 && luhnValid(digits)) {
+          return true;
+        }
+      }
     }
   }
   return false;
