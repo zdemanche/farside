@@ -5361,8 +5361,8 @@ function mergeScanFacts(existing, next, inventory, subscriptionId) {
   ];
 }
 var ScanFailedError = class extends Error {
-  constructor(message, coveredScopes) {
-    super(message);
+  constructor(message, coveredScopes, options) {
+    super(message, options?.cause === void 0 ? void 0 : { cause: options.cause });
     this.coveredScopes = coveredScopes;
     this.name = "ScanFailedError";
   }

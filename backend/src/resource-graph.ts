@@ -150,8 +150,9 @@ export class ResourceGraphThrottleError extends Error {
 }
 
 export class ResourceGraphFailedCallError extends Error {
-  constructor() {
-    super("Resource Graph call failed");
+  /** The original error, kept so a refused federation or a 403 is not lost behind "call failed". */
+  constructor(cause?: unknown) {
+    super("Resource Graph call failed", cause === undefined ? undefined : { cause });
     this.name = "ResourceGraphFailedCallError";
   }
 }
@@ -159,6 +160,8 @@ export class ResourceGraphFailedCallError extends Error {
 export type ResourceGraphHarvest = {
   ok: boolean;
   reason?: "throttling" | "failed_call";
+  /** The error behind `reason`, for the caller to log. Never part of the stored result. */
+  cause?: unknown;
   inventory: Inventory;
   facts: ResourceFacts[];
   coverage: CoverageEntry[];
@@ -378,6 +381,7 @@ export async function harvestResourceGraph(input: {
       return {
         ok: false,
         reason,
+        cause: error,
         inventory: inventoryFromRows(rows, settings.ownerTagKey, observedAt),
         facts: factsFromRows(rows),
         coverage: coverageFor(input.subscriptionId, checkIds, "undetermined", reason),

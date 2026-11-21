@@ -213,7 +213,7 @@ export function liveResourceGraphClient(options: ArmOptions): ResourceGraphClien
         if (error instanceof AzureApiError && error.status === 429) {
           throw new ResourceGraphThrottleError();
         }
-        throw new ResourceGraphFailedCallError();
+        throw new ResourceGraphFailedCallError(error);
       }
     },
   };
