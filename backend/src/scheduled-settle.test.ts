@@ -133,7 +133,7 @@ describe("tick settle window follows the remaining Lambda time", () => {
     expect(typeof summaries[0]?.[0].durationMs).toBe("number");
   });
 
-  it("works without a remaining-time source, as before", async () => {
+  it("works without a remaining-time source, and waits the whole configured window as before", async () => {
     const store = seeded("org-a");
     const log = fakeLog();
     const runner = new ScanRunner(
@@ -143,14 +143,17 @@ describe("tick settle window follows the remaining Lambda time", () => {
       clock,
       log,
     );
+    const started = Date.now();
     await runScheduledTick({
       store,
       scheduler: new ScanScheduler(store, runner, clock),
       clock,
       log,
-      settleMs: 20,
+      settleMs: 200,
       pollMs: 5,
     });
+    // No remaining-time source, so nothing may shorten the configured 200ms window.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(180);
     const summary = log.info.mock.calls.find(
       ([fields]) => fields.event === "schedule.tick.summary",
     );
