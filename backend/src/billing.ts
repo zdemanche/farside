@@ -24,13 +24,12 @@ export type BillingView = {
 };
 
 const CARD_KEY = /card|pan|cvv|cvc|cardnumber|card_number/i;
-/** Runs of digit groups joined by one or more spaces, dots or dashes: "4111 1111 1111 1111", "4111 - 1111", "ref 12 4111-1111". */
-const DIGIT_RUN = /\d+(?:[ .-]+\d+)*/g;
-const GROUP_SEPARATOR = /[ .-]+/;
-/** Card lengths: 13 (old Visa), 15 (Amex), 16 (most), 19 (long Visa and others). */
-const CARD_LENGTHS = [13, 15, 16, 19];
-/** First digits of the major card networks: Amex 3, Visa 4, Mastercard 2 and 5, Discover 6. */
-const CARD_FIRST_DIGIT = /^[23456]/;
+/**
+ * Any 13 to 19 digits, with spaces or dashes between them. Unchanged from before on purpose: this is a safeguard against
+ * storing card data, so it rejects every such span, including long ids and amounts that are not cards. Loosening it (for
+ * example with a Luhn check) lets card numbers through when other digits are attached, which review found repeatedly.
+ */
+const CARD_VALUE = /\b(?:\d[ -]*?){13,19}\b/;
 
 /** Every key in the value, at any depth. Iterative with a visited set, so a deep or cyclic body cannot overflow the stack. */
 export function keysOf(value: unknown): string[] {
@@ -57,64 +56,6 @@ export function keysOf(value: unknown): string[] {
   return keys;
 }
 
-/** A real card number passes the Luhn check. A long amount or an id usually does not. */
-function luhnValid(digits: string): boolean {
-  let sum = 0;
-  let double = false;
-  for (let index = digits.length - 1; index >= 0; index -= 1) {
-    let digit = Number(digits[index]);
-    if (double) {
-      digit *= 2;
-      if (digit > 9) {
-        digit -= 9;
-      }
-    }
-    sum += digit;
-    double = !double;
-  }
-  return sum % 10 === 0;
-}
-
-/**
- * True when a card number can be read out of the text. Within a run of digit groups, every start is tried, so a digit group
- * before the number ("ref 12 4111 1111 1111 1111") cannot hide it. Within a single long group (14 or more digits, no
- * separator) the card-length prefixes and suffixes are tried too, so a number pasted with a CVV or expiry on the end
- * ("4111111111111111123"), or with digits in front, is still caught. The old check rejected any such 13 to 19 digit token.
- */
-function looksLikeCardNumber(text: string): boolean {
-  for (const run of text.matchAll(DIGIT_RUN)) {
-    const groups = run[0].split(GROUP_SEPARATOR);
-    for (let start = 0; start < groups.length; start += 1) {
-      let digits = "";
-      for (let end = start; end < groups.length; end += 1) {
-        digits += groups[end];
-        if (digits.length > 19) {
-          break;
-        }
-        if (digits.length >= 13 && luhnValid(digits)) {
-          return true;
-        }
-      }
-    }
-    for (const group of groups) {
-      if (group.length < 14) {
-        continue;
-      }
-      for (const length of CARD_LENGTHS) {
-        if (length >= group.length) {
-          continue;
-        }
-        for (const window of [group.slice(0, length), group.slice(group.length - length)]) {
-          if (CARD_FIRST_DIGIT.test(window) && luhnValid(window)) {
-            return true;
-          }
-        }
-      }
-    }
-  }
-  return false;
-}
-
 export class CardDataError extends Error {
   constructor() {
     super("billing data must not hold card numbers");
@@ -123,9 +64,9 @@ export class CardDataError extends Error {
 }
 
 export function assertNoCardData(value: unknown): void {
-  // Keys are checked on their own, so a plan called "Company" or "Expansion" is not read as a PAN key. Values are checked
-  // for a Luhn-valid 13 to 19 digit run, so a long amount or id is not read as a card number.
-  if (keysOf(value).some((key) => CARD_KEY.test(key)) || looksLikeCardNumber(JSON.stringify(value))) {
+  // The card words are matched against keys only, so a plan called "Company" or "Expansion" (each contains "pan") is not
+  // read as a PAN key. A card number in any value is still rejected, exactly as before.
+  if (keysOf(value).some((key) => CARD_KEY.test(key)) || CARD_VALUE.test(JSON.stringify(value))) {
     throw new CardDataError();
   }
 }
