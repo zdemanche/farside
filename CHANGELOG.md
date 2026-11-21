@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.0](https://github.com/zdemanche/farside/compare/v0.4.0...v0.5.0) (2026-11-21)
+
+
+### Features
+
+* **cli:** opt-in live scanning from the plugin CLI ([#441](https://github.com/zdemanche/farside/issues/441)) ([6a37221](https://github.com/zdemanche/farside/commit/6a372219273678f44cb91b88e9a14c9d83a5c291))
+
+
+### Bug Fixes
+
+* **billing:** match the card words against keys only, so plans like Company are accepted ([#439](https://github.com/zdemanche/farside/issues/439)) ([dde04f9](https://github.com/zdemanche/farside/commit/dde04f95fd11a1d528efaf0f82b64c342aaf2517))
+* **deploy:** reuse the deployed operator token instead of minting one every run ([#436](https://github.com/zdemanche/farside/issues/436)) ([d6352cf](https://github.com/zdemanche/farside/commit/d6352cf390ad1817ea5536eb77725ec43c6453f2))
+* **harvest:** keep the cause behind a failed Azure or GCP read ([#433](https://github.com/zdemanche/farside/issues/433)) ([043b184](https://github.com/zdemanche/farside/commit/043b1844b269d06d72b43b81ca4ffb51ef63c67b))
+* **infra:** wait for the ssm key, add alarms, stop tick retries, invalidate CloudFront ([#435](https://github.com/zdemanche/farside/issues/435)) ([e4fc170](https://github.com/zdemanche/farside/commit/e4fc170a4623d225bf1d454048a881256fb73cfc))
+* **plugin:** stop on a failed command, and say when findings are synthetic ([#434](https://github.com/zdemanche/farside/issues/434)) ([54f6e54](https://github.com/zdemanche/farside/commit/54f6e54cdc81a04ff91abab2ea399e8b134b6b48))
+* **routes:** export every cloud's inventory when no cloud is given ([#438](https://github.com/zdemanche/farside/issues/438)) ([2dcf965](https://github.com/zdemanche/farside/commit/2dcf965e0535d9ac7cd7f73f7b4581b9b1828f10))
+* **scheduled:** cap the settle window by the Lambda's remaining time, log a tick summary ([#437](https://github.com/zdemanche/farside/issues/437)) ([62aae6b](https://github.com/zdemanche/farside/commit/62aae6b6cf70d4deaec657c41598ce270bce11e8))
+
 ## [0.4.0](https://github.com/zdemanche/farside/compare/v0.3.0...v0.4.0) (2026-11-19)
 
 
