@@ -24,7 +24,37 @@ export type BillingView = {
 };
 
 const CARD_KEY = /card|pan|cvv|cvc|cardnumber|card_number/i;
+/**
+ * Any 13 to 19 digits, with spaces or dashes between them. Unchanged from before on purpose: this is a safeguard against
+ * storing card data, so it rejects every such span, including long ids and amounts that are not cards. Loosening it (for
+ * example with a Luhn check) lets card numbers through when other digits are attached, which review found repeatedly.
+ */
 const CARD_VALUE = /\b(?:\d[ -]*?){13,19}\b/;
+
+/** Every key in the value, at any depth. Iterative with a visited set, so a deep or cyclic body cannot overflow the stack. */
+export function keysOf(value: unknown): string[] {
+  const keys: string[] = [];
+  const seen = new WeakSet<object>();
+  const stack: unknown[] = [value];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current === null || typeof current !== "object" || seen.has(current)) {
+      continue;
+    }
+    seen.add(current);
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        stack.push(item);
+      }
+    } else {
+      for (const [key, child] of Object.entries(current)) {
+        keys.push(key);
+        stack.push(child);
+      }
+    }
+  }
+  return keys;
+}
 
 export class CardDataError extends Error {
   constructor() {
@@ -34,8 +64,9 @@ export class CardDataError extends Error {
 }
 
 export function assertNoCardData(value: unknown): void {
-  const text = JSON.stringify(value);
-  if (CARD_KEY.test(text) || CARD_VALUE.test(text)) {
+  // The card words are matched against keys only, so a plan called "Company" or "Expansion" (each contains "pan") is not
+  // read as a PAN key. A card number in any value is still rejected, exactly as before.
+  if (keysOf(value).some((key) => CARD_KEY.test(key)) || CARD_VALUE.test(JSON.stringify(value))) {
     throw new CardDataError();
   }
 }
