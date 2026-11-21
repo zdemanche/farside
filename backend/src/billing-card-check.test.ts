@@ -86,4 +86,92 @@ describe("assertNoCardData", () => {
     expect(() => assertNoCardData({ note: "2026-11-20 12 30 45" })).not.toThrow();
     expect(() => assertNoCardData({ note: "version 1.2.3 build 4567" })).not.toThrow();
   });
+
+  it("rejects a card number with repeated or spaced separators between groups", () => {
+    for (const note of [
+      "4111  1111  1111  1111",
+      "4111 - 1111 - 1111 - 1111",
+      "4111 -- 1111 .. 1111 -  1111",
+      "ref  12  -  4111  1111  1111  1111",
+    ]) {
+      expect(() => assertNoCardData({ note })).toThrow(CardDataError);
+    }
+  });
+
+  it("rejects a card number with a CVV, an expiry or other digits joined on in the same group", () => {
+    for (const note of [
+      "4111111111111111123",
+      "4242424242424242314",
+      "99" + "4111111111111111",
+      "4111111111111111" + "99",
+      "378282246310005" + "1234",
+    ]) {
+      expect(() => assertNoCardData({ note })).toThrow(CardDataError);
+    }
+  });
+
+  it("still accepts a long amount or id that does not start like a card or does not pass Luhn", () => {
+    for (const note of [
+      "10000000000000",
+      "1234567890123456",
+      "1000000000000000001",
+      "PO 2026 11 20 1234 5678",
+    ]) {
+      expect(() => assertNoCardData({ note })).not.toThrow();
+    }
+  });
+
+  it("stays fast on a large body of tiny digit groups", () => {
+    const started = Date.now();
+    expect(() => assertNoCardData({ note: "1 - ".repeat(250_000) })).not.toThrow();
+    expect(() => assertNoCardData({ note: "1-".repeat(500_000) })).not.toThrow();
+    expect(Date.now() - started).toBeLessThan(10_000);
+  });
+
+  it("rejects generated card numbers in many formats, seeded so it is repeatable", () => {
+    let seed = 20261120;
+    const next = (max: number) => {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      return seed % max;
+    };
+    const checkDigit = (body: string) => {
+      for (let digit = 0; digit < 10; digit += 1) {
+        const candidate = body + digit;
+        let sum = 0;
+        let double = false;
+        for (let index = candidate.length - 1; index >= 0; index -= 1) {
+          let value = Number(candidate[index]);
+          if (double) {
+            value *= 2;
+            if (value > 9) {
+              value -= 9;
+            }
+          }
+          sum += value;
+          double = !double;
+        }
+        if (sum % 10 === 0) {
+          return candidate;
+        }
+      }
+      throw new Error("no check digit");
+    };
+    const separators = [" ", "-", ".", "  ", " - ", "--", ""];
+    for (let round = 0; round < 300; round += 1) {
+      const length = [13, 15, 16, 19][next(4)] as number;
+      const first = ["3", "4", "5", "6"][next(4)] as string;
+      let body = first;
+      while (body.length < length - 1) {
+        body += String(next(10));
+      }
+      const number = checkDigit(body);
+      const separator = separators[next(separators.length)] as string;
+      const groups = number.match(/.{1,4}/g) as string[];
+      const written = groups.join(separator);
+      const lead = ["", "pay ", "ref 12 ", "Acme 2026-11 ", "99 - "][next(5)] as string;
+      const tail = ["", " please", " 123", ""][next(4)] as string;
+      const text = `${lead}${written}${tail}`;
+      expect(() => assertNoCardData({ note: text }), text).toThrow(CardDataError);
+    }
+  });
 });

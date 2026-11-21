@@ -24,8 +24,13 @@ export type BillingView = {
 };
 
 const CARD_KEY = /card|pan|cvv|cvc|cardnumber|card_number/i;
-/** Runs of digit groups joined by a space, dot or dash: "4111 1111 1111 1111", "ref 12 4111-1111-1111-1111". */
-const DIGIT_RUN = /\d+(?:[ .-]\d+)*/g;
+/** Runs of digit groups joined by one or more spaces, dots or dashes: "4111 1111 1111 1111", "4111 - 1111", "ref 12 4111-1111". */
+const DIGIT_RUN = /\d+(?:[ .-]+\d+)*/g;
+const GROUP_SEPARATOR = /[ .-]+/;
+/** Card lengths: 13 (old Visa), 15 (Amex), 16 (most), 19 (long Visa and others). */
+const CARD_LENGTHS = [13, 15, 16, 19];
+/** First digits of the major card networks: Amex 3, Visa 4, Mastercard 2 and 5, Discover 6. */
+const CARD_FIRST_DIGIT = /^[23456]/;
 
 /** Every key in the value, at any depth. Iterative with a visited set, so a deep or cyclic body cannot overflow the stack. */
 export function keysOf(value: unknown): string[] {
@@ -71,12 +76,14 @@ function luhnValid(digits: string): boolean {
 }
 
 /**
- * True when some run of whole digit groups, starting anywhere in a digit run, holds 13 to 19 digits that pass Luhn. Trying
- * every start means a digit group before the number ("ref 12 4111 1111 1111 1111") cannot hide it.
+ * True when a card number can be read out of the text. Within a run of digit groups, every start is tried, so a digit group
+ * before the number ("ref 12 4111 1111 1111 1111") cannot hide it. Within a single long group (14 or more digits, no
+ * separator) the card-length prefixes and suffixes are tried too, so a number pasted with a CVV or expiry on the end
+ * ("4111111111111111123"), or with digits in front, is still caught. The old check rejected any such 13 to 19 digit token.
  */
 function looksLikeCardNumber(text: string): boolean {
   for (const run of text.matchAll(DIGIT_RUN)) {
-    const groups = run[0].split(/[ .-]/);
+    const groups = run[0].split(GROUP_SEPARATOR);
     for (let start = 0; start < groups.length; start += 1) {
       let digits = "";
       for (let end = start; end < groups.length; end += 1) {
@@ -86,6 +93,21 @@ function looksLikeCardNumber(text: string): boolean {
         }
         if (digits.length >= 13 && luhnValid(digits)) {
           return true;
+        }
+      }
+    }
+    for (const group of groups) {
+      if (group.length < 14) {
+        continue;
+      }
+      for (const length of CARD_LENGTHS) {
+        if (length >= group.length) {
+          continue;
+        }
+        for (const window of [group.slice(0, length), group.slice(group.length - length)]) {
+          if (CARD_FIRST_DIGIT.test(window) && luhnValid(window)) {
+            return true;
+          }
         }
       }
     }
