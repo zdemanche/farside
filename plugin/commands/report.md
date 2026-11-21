@@ -13,3 +13,5 @@ node ${CLAUDE_PLUGIN_ROOT}/bin/farside.mjs report --workspace "$HOME/farside-eng
 ```
 
 After the command exits, open `report.html` in that workspace. Cite issue ids from the report. Never state a figure or issue the CLI did not write.
+
+If the command exits with a non-zero status, show its error output and stop. Do not read or summarise any workspace file: what is there is from an earlier run, not this one.
