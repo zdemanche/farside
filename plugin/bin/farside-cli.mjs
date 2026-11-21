@@ -3660,7 +3660,7 @@ function applyAzureHarvests({ subscriptionId }, collected, outputs) {
   return { findings, coverage: fillUnrunLaunchCoverage(coverage, subscriptionId) };
 }
 async function collectAzureHarvests(context) {
-  const { subscriptionId, signal, remainingMs, clock, clients } = context;
+  const { subscriptionId, signal, remainingMs, clock: clock2, clients } = context;
   const billingScope = `/subscriptions/${subscriptionId}`;
   const collected = {};
   if (clients.costClient) {
@@ -3671,7 +3671,7 @@ async function collectAzureHarvests(context) {
         subscriptionId,
         billingScope,
         agreementType: "payg",
-        asOf: clock()
+        asOf: clock2()
       }),
       remainingMs()
     );
@@ -3692,7 +3692,7 @@ async function collectAzureHarvests(context) {
   if (clients.budgetClient) {
     collected.budgets = await abortable(
       signal,
-      harvestBudgets({ client: clients.budgetClient, lastConfirmed: clock() }),
+      harvestBudgets({ client: clients.budgetClient, lastConfirmed: clock2() }),
       remainingMs()
     );
     if (signal.aborted) {
@@ -3706,7 +3706,7 @@ async function collectAzureHarvests(context) {
 }
 
 // backend/src/providers/fixture-harvester.ts
-function fixtureHarvester(inventory, facts = [], clock) {
+function fixtureHarvester(inventory, facts = [], clock2) {
   return {
     async harvest(input) {
       const provider = providerFor(inventory.cloud);
@@ -3717,7 +3717,7 @@ function fixtureHarvester(inventory, facts = [], clock) {
       );
       return {
         inventory: applyOwnerTag(
-          clock ? { ...inventory, observedAt: clock() } : inventory,
+          clock2 ? { ...inventory, observedAt: clock2() } : inventory,
           input.settings.ownerTagKey
         ),
         coverage,
@@ -3736,9 +3736,9 @@ var azureProvider = {
   requiredRoles: REQUIRED_AZURE_ROLES,
   optionalRoles: OPTIONAL_AZURE_ROLES,
   scopeOf: subscriptionOf,
-  harvester: (clock) => {
+  harvester: (clock2) => {
     const manifest = ground_truth_default;
-    return fixtureHarvester(inventoryFromManifest(manifest), factsFromManifest(manifest), clock);
+    return fixtureHarvester(inventoryFromManifest(manifest), factsFromManifest(manifest), clock2);
   },
   checks: [
     checkAllResources,
@@ -3878,6 +3878,7 @@ function gcpResourceUri(item) {
   }
   return `//${service}/projects/${item.project}/regions/${item.region}/${collection}/${item.id}`;
 }
+var applyOwnerLabel = applyOwnerTag;
 function toGcpInventoryRecord(item, ownerLabelKey) {
   const owner = item.labels[ownerLabelKey];
   return {
@@ -4603,9 +4604,9 @@ var gcpProvider = {
   ],
   optionalRoles: ["BigQuery access to the billing export"],
   scopeOf: projectOf,
-  harvester: (clock) => {
+  harvester: (clock2) => {
     const manifest = ground_truth_default2;
-    return fixtureHarvester(inventoryFromGcpManifest(manifest), factsFromGcpManifest(manifest), clock);
+    return fixtureHarvester(inventoryFromGcpManifest(manifest), factsFromGcpManifest(manifest), clock2);
   },
   checks: [
     checkGcpUnattachedDisks,
@@ -4704,6 +4705,897 @@ function probeLocalCredentials(cloud, env = process.env, home = env.HOME ?? home
   };
 }
 
+// backend/src/metrics.ts
+var IDLE_LOAD_BALANCERS2 = "azure-waste-idle-load-balancers";
+var IDLE_NAT_GATEWAYS2 = "azure-waste-idle-nat-gateways";
+var METRIC_CHECK_IDS = [IDLE_LOAD_BALANCERS2, IDLE_NAT_GATEWAYS2];
+var METRIC_RESOURCE_TYPES = [
+  "Microsoft.Network/loadBalancers",
+  "Microsoft.Network/natGateways"
+];
+var METRIC_WINDOW = "7d";
+var MONITORING_ROLE_CLOSER = "Monitoring Reader on the subscription that owns the resource";
+var MissingMonitoringRoleError = class extends Error {
+  constructor() {
+    super("Monitoring Reader is missing");
+    this.name = "MissingMonitoringRoleError";
+  }
+};
+function missingRoleCoverage3(subscriptionId) {
+  return METRIC_CHECK_IDS.map(
+    (checkId) => recordCoverageScope({
+      subscriptionOrProject: subscriptionId,
+      checkId,
+      state: "unassessed",
+      causeId: "missing_role",
+      closer: MONITORING_ROLE_CLOSER
+    })
+  );
+}
+function applyMetricFacts(facts, aggregates) {
+  const byUri = new Map(aggregates.map((row) => [row.resourceUri, row]));
+  return facts.map((fact) => {
+    const metric = byUri.get(fact.resourceUri);
+    if (!metric) {
+      return fact;
+    }
+    return {
+      resourceUri: fact.resourceUri,
+      fields: {
+        ...fact.fields,
+        metricWindow: metric.window,
+        byteCount: metric.value
+      }
+    };
+  });
+}
+
+// backend/src/azure-live.ts
+var ARM_ORIGIN = "https://management.azure.com";
+var REQUEST_TIMEOUT_MS = 3e4;
+var MAX_ATTEMPTS = 3;
+var MAX_RETRY_WAIT_MS = 5e3;
+var MAX_PAGES = 50;
+var AzureAccessDeniedError = class extends Error {
+  constructor(status) {
+    super(`Azure refused the read (HTTP ${status})`);
+    this.status = status;
+    this.name = "AzureAccessDeniedError";
+  }
+  status;
+};
+var AzureAuthError = class extends Error {
+  constructor() {
+    super("Azure rejected the access token (HTTP 401)");
+    this.name = "AzureAuthError";
+  }
+};
+var AzureApiError = class extends Error {
+  constructor(status) {
+    super(`Azure returned HTTP ${status}`);
+    this.status = status;
+    this.name = "AzureApiError";
+  }
+  status;
+};
+var MetricUnavailableError = class extends Error {
+  constructor() {
+    super("Azure returned no metric data for the window");
+    this.name = "MetricUnavailableError";
+  }
+};
+var SUBSCRIPTION_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
+var ARM_PATH = /^\/subscriptions\/[A-Za-z0-9][A-Za-z0-9-]{0,63}(\/[A-Za-z0-9._()-]+)*$/;
+function isArmUrl(url) {
+  return url.startsWith(`${ARM_ORIGIN}/`);
+}
+function safeArmPath(path) {
+  if (!ARM_PATH.test(path) || path.split("/").some((part) => part === "." || part === "..")) {
+    throw new Error("not an Azure resource path");
+  }
+  return path;
+}
+function clock(options) {
+  return (options.now ?? (() => /* @__PURE__ */ new Date()))();
+}
+async function pause(options, ms) {
+  await (options.sleep ?? ((wait) => new Promise((resolve) => setTimeout(resolve, wait))))(ms);
+}
+function retryWait(response, attempt) {
+  const header = Number(response.headers.get("retry-after"));
+  const seconds = Number.isFinite(header) && header > 0 ? header * 1e3 : 500 * 2 ** attempt;
+  return Math.min(seconds, MAX_RETRY_WAIT_MS);
+}
+async function armJson(options, method, url, body) {
+  if (!isArmUrl(url)) {
+    throw new Error("refusing to send credentials outside Azure Resource Manager");
+  }
+  const call = options.fetch ?? ((input, init) => fetch(input, init));
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await call(url, {
+      method,
+      redirect: "error",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: {
+        authorization: `Bearer ${await options.token()}`,
+        accept: "application/json",
+        ...body === void 0 ? {} : { "content-type": "application/json" }
+      },
+      ...body === void 0 ? {} : { body: JSON.stringify(body) }
+    });
+    if (response.status === 401) {
+      throw new AzureAuthError();
+    }
+    if (response.status === 403) {
+      throw new AzureAccessDeniedError(response.status);
+    }
+    const throttled = response.status === 429 || response.status === 503;
+    if (throttled && attempt + 1 < MAX_ATTEMPTS) {
+      await pause(options, retryWait(response, attempt));
+      continue;
+    }
+    if (!response.ok) {
+      throw new AzureApiError(response.status);
+    }
+    return response.json();
+  }
+}
+function liveMetricsClient(options) {
+  return {
+    async query(input) {
+      const days = Number(/^(\d+)d$/.exec(input.window)?.[1]);
+      if (!Number.isInteger(days) || days < 1 || days > 30) {
+        throw new Error("metric window must be 1d to 30d");
+      }
+      const path = safeArmPath(input.resourceUri);
+      if (subscriptionOf(path).toLowerCase() !== input.subscriptionId.toLowerCase()) {
+        throw new Error("resource is not in the requested subscription");
+      }
+      const end = clock(options);
+      const start = new Date(end.getTime() - days * 864e5);
+      const query = new URLSearchParams({
+        "api-version": "2018-01-01",
+        metricnames: input.metricName,
+        aggregation: "Total",
+        interval: "P1D",
+        timespan: `${start.toISOString()}/${end.toISOString()}`
+      });
+      const url = `${ARM_ORIGIN}${path}/providers/microsoft.insights/metrics?${query}`;
+      let body;
+      try {
+        body = await armJson(options, "GET", url);
+      } catch (error) {
+        if (error instanceof AzureAccessDeniedError) {
+          throw new MissingMonitoringRoleError();
+        }
+        throw error;
+      }
+      const points = body.value?.[0]?.timeseries?.[0]?.data ?? [];
+      const totals = points.map((point) => point.total).filter((total) => typeof total === "number" && Number.isFinite(total));
+      if (totals.length === 0) {
+        throw new MetricUnavailableError();
+      }
+      return {
+        resourceUri: input.resourceUri,
+        metricName: "ByteCount",
+        window: input.window,
+        aggregation: "Total",
+        value: totals.reduce((sum, total) => sum + total, 0)
+      };
+    }
+  };
+}
+function isoDate(usageDate) {
+  const text3 = String(usageDate);
+  return /^\d{8}$/.test(text3) ? `${text3.slice(0, 4)}-${text3.slice(4, 6)}-${text3.slice(6, 8)}` : text3;
+}
+function costRequest(now) {
+  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 3, 1));
+  return {
+    type: "ActualCost",
+    timeframe: "Custom",
+    timePeriod: { from: from.toISOString(), to: now.toISOString() },
+    dataset: {
+      granularity: "Daily",
+      aggregation: { totalCost: { name: "Cost", function: "Sum" } },
+      grouping: [{ type: "Dimension", name: "ServiceName" }]
+    }
+  };
+}
+function liveCostClient(options) {
+  const request = costRequest(clock(options));
+  return {
+    async query(input) {
+      const url = input.page ? input.page : `${ARM_ORIGIN}${safeArmPath(input.billingScope)}/providers/Microsoft.CostManagement/query?api-version=2023-03-01`;
+      let body;
+      try {
+        body = await armJson(options, "POST", url, request);
+      } catch (error) {
+        if (error instanceof AzureAccessDeniedError) {
+          throw new MissingCostRoleError();
+        }
+        throw error;
+      }
+      const columns = (body.properties?.columns ?? []).map((column) => column.name);
+      const [cost, date, service, currency] = ["Cost", "UsageDate", "ServiceName", "Currency"].map(
+        (name) => columns.indexOf(name)
+      );
+      const raw = body.properties?.rows;
+      if ([cost, date, service, currency].includes(-1) || !Array.isArray(raw)) {
+        throw new AzureApiError(502);
+      }
+      const rows = raw.map((row) => {
+        if (!Array.isArray(row)) {
+          throw new AzureApiError(502);
+        }
+        const amount = row[cost];
+        if (typeof amount !== "number" || !Number.isFinite(amount)) {
+          throw new AzureApiError(502);
+        }
+        return {
+          date: isoDate(row[date]),
+          serviceName: String(row[service]),
+          costAmount: amount.toFixed(2),
+          currency: String(row[currency])
+        };
+      });
+      const next = body.properties?.nextLink;
+      return next ? { rows, nextPage: next } : { rows };
+    }
+  };
+}
+async function budgetNames(options, subscriptionId) {
+  const names = [];
+  let url = `${ARM_ORIGIN}${safeArmPath(`/subscriptions/${subscriptionId}`)}/providers/Microsoft.Consumption/budgets?api-version=2023-05-01`;
+  for (let page = 0; url && page < MAX_PAGES; page += 1) {
+    const body = await armJson(options, "GET", url);
+    names.push(...(body.value ?? []).flatMap((budget) => budget.name ? [budget.name] : []));
+    url = body.nextLink ?? void 0;
+  }
+  if (url) {
+    throw new Error("budgets list exceeded page limit");
+  }
+  return names;
+}
+function liveBudgetClient(options) {
+  return {
+    async list() {
+      const definitions = [];
+      for (const subscriptionId of options.subscriptionIds) {
+        if (!SUBSCRIPTION_ID.test(subscriptionId)) {
+          throw new Error("not a subscription id");
+        }
+        try {
+          const names = await budgetNames(options, subscriptionId);
+          definitions.push({ subscriptionId, budgetCount: names.length, budgetNames: names, readable: true });
+        } catch (error) {
+          const unreadable = error instanceof AzureAccessDeniedError || error instanceof AzureApiError && (error.status === 400 || error.status === 404);
+          if (!unreadable) {
+            throw error;
+          }
+          definitions.push({ subscriptionId, budgetCount: 0, budgetNames: [], readable: false });
+        }
+      }
+      return definitions;
+    }
+  };
+}
+
+// backend/src/azure-federated.ts
+import { readFile } from "node:fs/promises";
+var ENTRA_ORIGIN = "https://login.microsoftonline.com";
+var ARM_SCOPE = "https://management.azure.com/.default";
+var CLIENT_ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
+var REFRESH_BEFORE_EXPIRY_MS = 5 * 6e4;
+var ASSERTION_FILE_ENV = [
+  "FARSIDE_AZURE_ASSERTION_FILE",
+  "AZURE_FEDERATED_TOKEN_FILE",
+  "AWS_WEB_IDENTITY_TOKEN_FILE"
+];
+var GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var TENANT_DOMAIN = /^(?=.{3,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/i;
+var JWT = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/;
+var ERROR_CODE = /^[a-z_]{1,64}$/;
+var FederatedExchangeError = class extends Error {
+  constructor(status, code) {
+    super(`Entra refused the federated token exchange (HTTP ${status}${code ? `, ${code}` : ""})`);
+    this.status = status;
+    this.code = code;
+    this.name = "FederatedExchangeError";
+  }
+  status;
+  code;
+};
+function isGuid(value) {
+  return GUID.test(value);
+}
+function isTenantId(value) {
+  return GUID.test(value) || TENANT_DOMAIN.test(value);
+}
+function assertJwt(value, what) {
+  if (!JWT.test(value)) {
+    throw new Error(`${what} is not a JWT`);
+  }
+  return value;
+}
+function fileAssertionSource(path, read = (file) => readFile(file, "utf8")) {
+  return async () => assertJwt((await read(path)).trim(), "federated assertion file");
+}
+function assertionFileFromEnv(env) {
+  for (const name of ASSERTION_FILE_ENV) {
+    const value = env[name];
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+function accessTokenClaims(token) {
+  const payload = token.split(".")[1];
+  if (!payload) {
+    return { tid: null, oid: null };
+  }
+  try {
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    const pick = (key) => typeof claims[key] === "string" ? claims[key] : null;
+    return { tid: pick("tid"), oid: pick("oid") };
+  } catch {
+    return { tid: null, oid: null };
+  }
+}
+function refusalCode(body) {
+  const first = Array.isArray(body.error_codes) ? body.error_codes[0] : void 0;
+  if (typeof first === "number" && Number.isInteger(first)) {
+    return `AADSTS${first}`;
+  }
+  return typeof body.error === "string" && ERROR_CODE.test(body.error) ? body.error : null;
+}
+async function readBody(response) {
+  try {
+    const body = await response.json();
+    return typeof body === "object" && body !== null ? body : {};
+  } catch {
+    return {};
+  }
+}
+function federatedTokenProvider(options) {
+  if (!isTenantId(options.tenantId)) {
+    throw new Error("tenant id must be a GUID or a tenant domain");
+  }
+  if (!isGuid(options.clientId)) {
+    throw new Error("client id must be a GUID");
+  }
+  const now = options.now ?? Date.now;
+  const call = options.fetch ?? ((input, init) => fetch(input, init));
+  const url = `${ENTRA_ORIGIN}/${encodeURIComponent(options.tenantId)}/oauth2/v2.0/token`;
+  let cached = null;
+  let inflight = null;
+  async function exchange() {
+    const form = new URLSearchParams({
+      client_id: options.clientId,
+      scope: options.scope ?? ARM_SCOPE,
+      grant_type: "client_credentials",
+      client_assertion_type: CLIENT_ASSERTION_TYPE,
+      client_assertion: await options.assertion()
+    });
+    const response = await call(url, {
+      method: "POST",
+      redirect: "error",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+      body: form.toString()
+    });
+    const body = await readBody(response);
+    if (!response.ok) {
+      throw new FederatedExchangeError(response.status, refusalCode(body));
+    }
+    const lifetime = typeof body.expires_in === "string" ? Number(body.expires_in) : body.expires_in;
+    if (typeof body.access_token !== "string" || body.access_token.length === 0 || typeof body.token_type !== "string" || body.token_type.toLowerCase() !== "bearer" || typeof lifetime !== "number" || !Number.isFinite(lifetime) || lifetime <= 0) {
+      throw new FederatedExchangeError(502, "malformed_token_response");
+    }
+    const lifetimeMs = lifetime * 1e3;
+    cached = {
+      token: body.access_token,
+      refreshAt: now() + lifetimeMs - Math.min(REFRESH_BEFORE_EXPIRY_MS, lifetimeMs / 2)
+    };
+    return body.access_token;
+  }
+  return async () => {
+    if (cached && now() < cached.refreshAt) {
+      return cached.token;
+    }
+    inflight ??= exchange().finally(() => {
+      inflight = null;
+    });
+    return inflight;
+  };
+}
+function federatedTokenProviders(options) {
+  const byTenant = /* @__PURE__ */ new Map();
+  return (tenantId) => {
+    const key = tenantId.toLowerCase();
+    let provider = byTenant.get(key);
+    if (!provider) {
+      provider = federatedTokenProvider({ ...options, tenantId });
+      byTenant.set(key, provider);
+    }
+    return provider;
+  };
+}
+
+// backend/src/resource-graph.ts
+var ARG_PAGE_LIMIT = 50;
+var LAUNCH_RESOURCE_TYPES = [
+  "Microsoft.Compute/disks",
+  "Microsoft.Network/publicIPAddresses",
+  "Microsoft.Compute/snapshots",
+  "Microsoft.Compute/virtualMachines",
+  "Microsoft.Web/serverfarms",
+  "Microsoft.Network/loadBalancers",
+  "Microsoft.Network/natGateways",
+  "Microsoft.Sql/servers/databases",
+  "Microsoft.Web/certificates",
+  "Microsoft.Network/applicationGateways"
+];
+var BASE_COLUMNS = ["id", "type", "name", "location", "subscriptionId", "tags"];
+var TYPE_PROJECTION = {
+  "Microsoft.Compute/disks": [
+    ...BASE_COLUMNS,
+    "diskState = tostring(properties.diskState)",
+    "sizeGb = toint(properties.diskSizeGB)",
+    "skuName = tostring(sku.name)",
+    "attachedTo = tostring(managedBy)"
+  ],
+  "Microsoft.Network/publicIPAddresses": [
+    ...BASE_COLUMNS,
+    "associatedTo = coalesce(tostring(properties.ipConfiguration.id), tostring(properties.natGateway.id))",
+    "skuName = tostring(sku.name)"
+  ],
+  "Microsoft.Compute/snapshots": [
+    ...BASE_COLUMNS,
+    "timeCreated = tostring(properties.timeCreated)",
+    "sizeGb = toint(properties.diskSizeGB)"
+  ],
+  "Microsoft.Compute/virtualMachines": [
+    ...BASE_COLUMNS,
+    "vmSize = tostring(properties.hardwareProfile.vmSize)",
+    "powerState = tostring(properties.extended.instanceView.powerState.code)"
+  ],
+  "Microsoft.Web/serverfarms": [
+    ...BASE_COLUMNS,
+    "numberOfSites = toint(properties.numberOfSites)",
+    "skuName = tostring(sku.name)",
+    "kind"
+  ],
+  "Microsoft.Network/loadBalancers": [
+    ...BASE_COLUMNS,
+    "backendPools = tostring(properties.backendAddressPools)",
+    "skuName = tostring(sku.name)"
+  ],
+  "Microsoft.Network/natGateways": [
+    ...BASE_COLUMNS,
+    "attachedSubnetCount = coalesce(array_length(properties.subnets), 0)",
+    "skuName = tostring(sku.name)"
+  ],
+  "Microsoft.Sql/servers/databases": [
+    ...BASE_COLUMNS,
+    "zoneRedundant = tobool(properties.zoneRedundant)",
+    "backupRedundancy = tostring(properties.currentBackupStorageRedundancy)",
+    "skuName = tostring(sku.name)"
+  ],
+  "Microsoft.Web/certificates": [
+    ...BASE_COLUMNS,
+    "expirationDate = tostring(properties.expirationDate)",
+    "hostName = tostring(properties.hostNames[0])"
+  ],
+  "Microsoft.Network/applicationGateways": [
+    ...BASE_COLUMNS,
+    "certificateName = tostring(properties.sslCertificates[0].name)"
+  ]
+};
+var TYPE_CHECK_IDS = {
+  "Microsoft.Compute/disks": ["azure-inventory-all-resources", "azure-inventory-no-owner-tag", "azure-waste-unattached-disks"],
+  "Microsoft.Network/publicIPAddresses": [
+    "azure-inventory-all-resources",
+    "azure-inventory-no-owner-tag",
+    "azure-waste-unassociated-public-ips"
+  ],
+  "Microsoft.Compute/snapshots": ["azure-inventory-all-resources", "azure-inventory-no-owner-tag", "azure-waste-old-snapshots"],
+  "Microsoft.Compute/virtualMachines": [
+    "azure-inventory-all-resources",
+    "azure-inventory-no-owner-tag",
+    "azure-waste-stopped-not-deallocated-vms",
+    "azure-resilience-prod-vms-outside-backup",
+    "azure-lifecycle-retiring-skus"
+  ],
+  "Microsoft.Web/serverfarms": ["azure-inventory-all-resources", "azure-inventory-no-owner-tag", "azure-waste-empty-app-service-plans"],
+  "Microsoft.Network/loadBalancers": ["azure-inventory-all-resources", "azure-inventory-no-owner-tag", "azure-waste-idle-load-balancers"],
+  "Microsoft.Network/natGateways": ["azure-inventory-all-resources", "azure-inventory-no-owner-tag", "azure-waste-idle-nat-gateways"],
+  "Microsoft.Sql/servers/databases": [
+    "azure-inventory-all-resources",
+    "azure-inventory-no-owner-tag",
+    "azure-resilience-prod-sql-outside-backup",
+    "azure-resilience-db-zone-or-geo"
+  ],
+  "Microsoft.Web/certificates": [
+    "azure-inventory-all-resources",
+    "azure-inventory-no-owner-tag",
+    "azure-lifecycle-expiring-app-service-certs"
+  ],
+  "Microsoft.Network/applicationGateways": [
+    "azure-inventory-all-resources",
+    "azure-inventory-no-owner-tag",
+    "azure-lifecycle-expiring-gateway-certs"
+  ]
+};
+var ResourceGraphThrottleError = class extends Error {
+  constructor() {
+    super("Resource Graph throttled the query");
+    this.name = "ResourceGraphThrottleError";
+  }
+};
+var ResourceGraphFailedCallError = class extends Error {
+  /** The original error, kept so a refused federation or a 403 is not lost behind "call failed". */
+  constructor(cause) {
+    super("Resource Graph call failed", cause === void 0 ? void 0 : { cause });
+    this.name = "ResourceGraphFailedCallError";
+  }
+};
+function typeQuery(type) {
+  const projection = TYPE_PROJECTION[type] ?? [
+    "id",
+    "name",
+    "type",
+    "location",
+    "subscriptionId",
+    "tags",
+    "properties"
+  ];
+  return `Resources | where type =~ '${type}' | project ${projection.join(", ")}`;
+}
+function rowToRecord(row, ownerTagKey) {
+  const owner = row.tags[ownerTagKey];
+  return {
+    resourceUri: row.id,
+    resourceType: row.type,
+    region: row.location,
+    displayName: row.name,
+    tags: { ...row.tags },
+    ownerTag: owner && owner.length > 0 ? owner : null
+  };
+}
+function inventoryFromRows(rows, ownerTagKey, observedAt) {
+  const inventory = applyOwnerTag(
+    {
+      cloud: "azure",
+      observedAt,
+      resources: rows.map((row) => rowToRecord(row, ownerTagKey))
+    },
+    ownerTagKey
+  );
+  assertValid(validateInventory(inventory));
+  return inventory;
+}
+function factsFromRows(rows) {
+  return rows.map((row) => ({
+    resourceUri: row.id,
+    fields: {
+      location: row.location,
+      ...row.properties ?? {}
+    }
+  }));
+}
+function coverageFor(subscriptionId, checkIds, state, causeId) {
+  return checkIds.map(
+    (checkId) => recordCoverageScope({
+      subscriptionOrProject: subscriptionId,
+      checkId,
+      state,
+      ...causeId ? { causeId } : {}
+    })
+  );
+}
+function assessedInventoryCoverage(subscriptionId) {
+  return AZURE_LAUNCH_CHECK_IDS.map(
+    (checkId) => recordCoverageScope({
+      subscriptionOrProject: subscriptionId,
+      checkId,
+      state: AZURE_HARVEST_ASSESSED_CHECK_IDS.has(checkId) ? "assessed" : "unassessed",
+      ...AZURE_HARVEST_ASSESSED_CHECK_IDS.has(checkId) ? {} : { causeId: "not_run" }
+    })
+  );
+}
+async function harvestResourceGraph(input) {
+  const settings = input.settings ?? DEFAULT_SETTINGS;
+  const observedAt = input.observedAt ?? "1970-01-01T00:00:00.000Z";
+  const rows = [];
+  const queriedTypes = [];
+  for (const type of LAUNCH_RESOURCE_TYPES) {
+    try {
+      let skipToken;
+      for (let safety = 0; safety < ARG_PAGE_LIMIT; safety += 1) {
+        const page = await input.client.query(
+          skipToken ? { subscriptionId: input.subscriptionId, query: typeQuery(type), skipToken } : { subscriptionId: input.subscriptionId, query: typeQuery(type) }
+        );
+        rows.push(...page.data);
+        if (!page.skipToken) {
+          break;
+        }
+        skipToken = page.skipToken;
+      }
+      queriedTypes.push(type);
+    } catch (error) {
+      const reason = error instanceof ResourceGraphThrottleError ? "throttling" : "failed_call";
+      const remaining = LAUNCH_RESOURCE_TYPES.filter((item) => !queriedTypes.includes(item));
+      const checkIds = [...new Set(remaining.flatMap((item) => TYPE_CHECK_IDS[item]))];
+      return {
+        ok: false,
+        reason,
+        cause: error,
+        inventory: inventoryFromRows(rows, settings.ownerTagKey, observedAt),
+        facts: factsFromRows(rows),
+        coverage: coverageFor(input.subscriptionId, checkIds, "undetermined", reason),
+        rows,
+        queriedTypes
+      };
+    }
+  }
+  return {
+    ok: true,
+    inventory: inventoryFromRows(rows, settings.ownerTagKey, observedAt),
+    facts: factsFromRows(rows),
+    coverage: assessedInventoryCoverage(input.subscriptionId),
+    rows,
+    queriedTypes
+  };
+}
+
+// backend/src/role-probe.ts
+function presentRoles(cloud) {
+  const provider = providerFor(cloud);
+  return [...provider.requiredRoles, ...provider.optionalRoles];
+}
+function defaultRoleLister() {
+  return {
+    async list(input) {
+      return presentRoles(input.cloud);
+    }
+  };
+}
+function probeRoles(cloud, granted) {
+  const missing = missingRoles(cloud, granted);
+  return {
+    roles: [...granted],
+    missingRoles: missing,
+    healthy: !missing.some((gap) => gap.required)
+  };
+}
+
+// backend/src/azure-live-graph.ts
+var ARG_API_VERSION = "2022-10-01";
+var ARG_URL = `${ARM_ORIGIN}/providers/Microsoft.ResourceGraph/resources?api-version=${ARG_API_VERSION}`;
+var AUTHORIZATION_API_VERSION = "2022-04-01";
+var ARG_TOP = 1e3;
+var MAX_PAGES2 = 50;
+var DAY_MS2 = 864e5;
+var BASE_KEYS = /* @__PURE__ */ new Set(["id", "type", "name", "location", "subscriptionId", "tags"]);
+var ROLE_DEFINITION = /^(\/subscriptions\/[A-Za-z0-9-]{1,64})?\/providers\/Microsoft\.Authorization\/roleDefinitions\/[0-9a-f-]{36}$/i;
+var PROTECTED_ITEMS_QUERY = "RecoveryServicesResources | where type =~ 'microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems' | project sourceResourceId = tolower(tostring(properties.sourceResourceId)), vaultId = tostring(split(tolower(id), '/backupfabrics/')[0])";
+function isScalar(value) {
+  return value === null || ["string", "number", "boolean"].includes(typeof value);
+}
+async function argPage(options, query, scope4, skipToken) {
+  const body = await armJson(options, "POST", ARG_URL, {
+    ...scope4,
+    query,
+    options: { resultFormat: "objectArray", $top: ARG_TOP, ...skipToken ? { $skipToken: skipToken } : {} }
+  });
+  if (!Array.isArray(body.data)) {
+    throw new AzureApiError(502);
+  }
+  const rows = body.data.filter((row) => typeof row === "object" && row !== null);
+  const next = typeof body.$skipToken === "string" && body.$skipToken.length > 0 ? body.$skipToken : void 0;
+  return next ? { rows, skipToken: next } : { rows };
+}
+async function argAll(options, query, scope4) {
+  const rows = [];
+  let skipToken;
+  for (let page = 0; page < MAX_PAGES2; page += 1) {
+    const next = await argPage(options, query, scope4, skipToken);
+    rows.push(...next.rows);
+    if (!next.skipToken) {
+      return rows;
+    }
+    skipToken = next.skipToken;
+  }
+  throw new Error("Resource Graph query exceeded page limit");
+}
+function text(value) {
+  return typeof value === "string" ? value : "";
+}
+function wholeDays(from, to) {
+  return Math.floor((to - from) / DAY_MS2);
+}
+function backendAddressCount(pools) {
+  try {
+    const parsed = JSON.parse(pools);
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed.reduce(
+      (sum, pool) => sum + Math.max(
+        pool.properties?.backendIPConfigurations?.length ?? 0,
+        pool.properties?.loadBalancerBackendAddresses?.length ?? 0
+      ),
+      0
+    );
+  } catch {
+    return null;
+  }
+}
+function normaliseLiveRow(raw, now) {
+  const id = text(raw.id);
+  const type = text(raw.type);
+  if (!id || !type) {
+    return null;
+  }
+  const name = text(raw.name);
+  const lowerType = type.toLowerCase();
+  if (lowerType === "microsoft.sql/servers/databases" && name.toLowerCase() === "master") {
+    return null;
+  }
+  const tags = {};
+  if (typeof raw.tags === "object" && raw.tags !== null) {
+    for (const [key, value] of Object.entries(raw.tags)) {
+      if (typeof value === "string") {
+        tags[key] = value;
+      }
+    }
+  }
+  const properties = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!BASE_KEYS.has(key) && isScalar(value)) {
+      properties[key] = value;
+    }
+  }
+  if (typeof properties.powerState === "string") {
+    properties.powerState = properties.powerState.replace(/^PowerState\//i, "").toLowerCase();
+  }
+  for (const key of ["powerState", "diskState"]) {
+    if (properties[key] === "") {
+      properties[key] = null;
+    }
+  }
+  if (properties.associatedTo === "") {
+    properties.associatedTo = null;
+  }
+  if (properties.attachedTo === "") {
+    properties.attachedTo = null;
+  }
+  const created = Date.parse(text(properties.timeCreated));
+  if (Number.isFinite(created)) {
+    properties.ageDays = wholeDays(created, now.getTime());
+  }
+  const expires = Date.parse(text(properties.expirationDate));
+  if (Number.isFinite(expires)) {
+    properties.daysRemaining = wholeDays(now.getTime(), expires);
+  } else {
+    delete properties.expirationDate;
+  }
+  if (typeof properties.backendPools === "string") {
+    const count = backendAddressCount(properties.backendPools);
+    if (count !== null) {
+      properties.backendAddressCount = count;
+    }
+    delete properties.backendPools;
+  }
+  for (const key of ["certificateName", "hostName", "kind", "skuName", "backupRedundancy"]) {
+    if (properties[key] === "") {
+      delete properties[key];
+    }
+  }
+  return {
+    id,
+    type,
+    name,
+    location: text(raw.location),
+    subscriptionId: text(raw.subscriptionId),
+    tags,
+    ...Object.keys(properties).length > 0 ? { properties } : {}
+  };
+}
+function checkSubscription(subscriptionId) {
+  if (!SUBSCRIPTION_ID.test(subscriptionId)) {
+    throw new Error("not a subscription id");
+  }
+}
+function liveResourceGraphClient(options) {
+  const now = () => (options.now ?? (() => /* @__PURE__ */ new Date()))();
+  return {
+    async query(input) {
+      checkSubscription(input.subscriptionId);
+      try {
+        const page = await argPage(options, input.query, { subscriptions: [input.subscriptionId] }, input.skipToken);
+        const data = page.rows.map((row) => normaliseLiveRow(row, now())).filter((row) => row !== null);
+        return page.skipToken ? { data, skipToken: page.skipToken } : { data };
+      } catch (error) {
+        if (error instanceof AzureApiError && error.status === 429) {
+          throw new ResourceGraphThrottleError();
+        }
+        throw new ResourceGraphFailedCallError(error);
+      }
+    }
+  };
+}
+async function liveProtectedItems(options, subscriptionId) {
+  checkSubscription(subscriptionId);
+  const rows = await argAll(options, PROTECTED_ITEMS_QUERY, { subscriptions: [subscriptionId] });
+  const items = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const source = text(row.sourceResourceId).toLowerCase();
+    if (source) {
+      items.set(source, text(row.vaultId));
+    }
+  }
+  return items;
+}
+async function assignedRoleDefinitions(options, subscriptionId, principalId) {
+  const ids = /* @__PURE__ */ new Set();
+  const filter = encodeURIComponent(`assignedTo('${principalId}')`);
+  let url = `${ARM_ORIGIN}/subscriptions/${subscriptionId}/providers/Microsoft.Authorization/roleAssignments?api-version=${AUTHORIZATION_API_VERSION}&$filter=${filter}`;
+  for (let page = 0; url && page < MAX_PAGES2; page += 1) {
+    const body = await armJson(options, "GET", url);
+    for (const assignment of body.value ?? []) {
+      const id = assignment.properties?.roleDefinitionId;
+      if (typeof id === "string" && ROLE_DEFINITION.test(id)) {
+        ids.add(id);
+      }
+    }
+    url = body.nextLink ?? void 0;
+  }
+  if (url) {
+    throw new Error("role assignments exceeded page limit");
+  }
+  return [...ids];
+}
+function liveRoleLister(options) {
+  const fallback = options.fallback ?? defaultRoleLister();
+  return {
+    async list(input) {
+      if (input.cloud !== "azure") {
+        return fallback.list(input);
+      }
+      checkSubscription(input.subscriptionId);
+      const token = options.tokenFor(input.tenantId);
+      const arm = { token, ...options.fetch ? { fetch: options.fetch } : {} };
+      const { oid } = accessTokenClaims(await token());
+      if (!oid || !isGuid(oid)) {
+        throw new Error("federated token has no service principal object id");
+      }
+      let definitions;
+      try {
+        definitions = await assignedRoleDefinitions(arm, input.subscriptionId, oid);
+      } catch (error) {
+        if (error instanceof AzureAccessDeniedError) {
+          return [];
+        }
+        throw error;
+      }
+      const names = /* @__PURE__ */ new Set();
+      for (const id of definitions) {
+        const body = await armJson(arm, "GET", `${ARM_ORIGIN}${id}?api-version=${AUTHORIZATION_API_VERSION}`);
+        if (typeof body.properties?.roleName === "string") {
+          names.add(body.properties.roleName);
+        }
+      }
+      return [...names].sort();
+    }
+  };
+}
+
+// backend/src/scans.ts
+import { randomUUID } from "node:crypto";
+
 // backend/src/checks.ts
 var UnregisteredCheckError = class extends Error {
   constructor(checkId) {
@@ -4757,9 +5649,6 @@ function runChecks(input) {
   }
   return { findings, coverage };
 }
-
-// backend/src/scans.ts
-import { randomUUID } from "node:crypto";
 
 // backend/src/observability.ts
 var silentLog = {
@@ -4893,11 +5782,11 @@ var DEMO_ORG_ID = "demo";
 var WARNING_DAYS = 7;
 var GRACE_DAYS = 14;
 var RETAIN_DAYS = 30;
-var DAY_MS2 = 864e5;
+var DAY_MS3 = 864e5;
 var PAUSE_AFTER_DAYS = WARNING_DAYS + GRACE_DAYS;
 var OFFBOARD_AFTER_DAYS = PAUSE_AFTER_DAYS + RETAIN_DAYS;
 function addDays(iso, days) {
-  return new Date(Date.parse(iso) + days * DAY_MS2).toISOString();
+  return new Date(Date.parse(iso) + days * DAY_MS3).toISOString();
 }
 function retainUntil(contract) {
   const ended = contract.endDate ?? (contract.state === "ended" ? contract.stateChangedAt : null);
@@ -5377,11 +6266,11 @@ function unconfiguredHarvester() {
 }
 var NO_POST_HARVEST = { persist: async () => void 0, apply: (outputs) => outputs };
 var ScanRunner = class {
-  constructor(store, harvester, harvestClients = {}, clock = systemClock, log = silentLog, scanTimeoutMs = DEFAULT_SCAN_TIMEOUT_MS) {
+  constructor(store, harvester, harvestClients = {}, clock2 = systemClock, log = silentLog, scanTimeoutMs = DEFAULT_SCAN_TIMEOUT_MS) {
     this.store = store;
     this.harvester = harvester;
     this.harvestClients = harvestClients;
-    this.clock = clock;
+    this.clock = clock2;
     this.log = log;
     this.scanTimeoutMs = scanTimeoutMs;
   }
@@ -5658,17 +6547,1582 @@ var ScanRunner = class {
   }
 };
 
-// backend/src/role-probe.ts
-function presentRoles(cloud) {
-  const provider = providerFor(cloud);
-  return [...provider.requiredRoles, ...provider.optionalRoles];
+// backend/src/azure-live-harvest.ts
+var AZURE_LIVE_ENV = "FARSIDE_AZURE_LIVE";
+var AZURE_CLIENT_ID_ENV = "FARSIDE_AZURE_CLIENT_ID";
+var BACKUP_TYPES = ["microsoft.compute/virtualmachines", "microsoft.sql/servers/databases"];
+var AzureLiveConfigError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "AzureLiveConfigError";
+  }
+};
+function azureLiveConfigFromEnv(env) {
+  if (env[AZURE_LIVE_ENV] !== "1") {
+    return null;
+  }
+  if (typeof env.AZURE_CLIENT_SECRET === "string" && env.AZURE_CLIENT_SECRET.length > 0) {
+    throw new AzureLiveConfigError("client secrets are refused; live Azure uses federated credentials only");
+  }
+  const clientId = env[AZURE_CLIENT_ID_ENV] ?? "";
+  const assertionFile = assertionFileFromEnv(env);
+  const missing = [
+    ...isGuid(clientId) ? [] : [`${AZURE_CLIENT_ID_ENV} (app registration client id GUID)`],
+    ...assertionFile ? [] : [ASSERTION_FILE_ENV.join(" or ")]
+  ];
+  if (missing.length > 0 || !assertionFile) {
+    throw new AzureLiveConfigError(`${AZURE_LIVE_ENV}=1 also needs ${missing.join(", ")}`);
+  }
+  return { clientId, assertionFile };
 }
-function probeRoles(cloud, granted) {
-  const missing = missingRoles(cloud, granted);
+function connectionTenantResolver(store) {
+  return async (orgId, subscriptionId) => {
+    const { connections } = await store.read(orgId, "connections");
+    const target = subscriptionId.toLowerCase();
+    return connections.find((item) => item.cloud === "azure" && item.subscriptionId.toLowerCase() === target)?.tenantId ?? null;
+  };
+}
+function armFor(deps, tenantId) {
+  const clock2 = deps.clock ?? systemClock;
   return {
-    roles: [...granted],
-    missingRoles: missing,
-    healthy: !missing.some((gap) => gap.required)
+    token: deps.tokenFor(tenantId),
+    now: () => new Date(clock2()),
+    ...deps.fetch ? { fetch: deps.fetch } : {}
+  };
+}
+function hasType(fact, types) {
+  const uri = fact.resourceUri.toLowerCase();
+  return types.some((type) => uri.includes(`/providers/${type.toLowerCase()}/`));
+}
+async function withBackupFacts(arm, subscriptionId, facts) {
+  let items;
+  try {
+    items = await liveProtectedItems(arm, subscriptionId);
+  } catch (error) {
+    if (error instanceof AzureAuthError) {
+      throw error;
+    }
+    return facts;
+  }
+  return facts.map((fact) => {
+    if (!hasType(fact, BACKUP_TYPES)) {
+      return fact;
+    }
+    const vaultId = items.get(fact.resourceUri.toLowerCase());
+    return {
+      resourceUri: fact.resourceUri,
+      fields: { ...fact.fields, protected: vaultId !== void 0, ...vaultId ? { vaultId } : {} }
+    };
+  });
+}
+async function withMetricFacts(arm, subscriptionId, facts) {
+  const client = liveMetricsClient(arm);
+  const aggregates = [];
+  for (const fact of facts.filter((row) => hasType(row, METRIC_RESOURCE_TYPES))) {
+    try {
+      aggregates.push(
+        await client.query({ subscriptionId, resourceUri: fact.resourceUri, metricName: "ByteCount", window: METRIC_WINDOW })
+      );
+    } catch (error) {
+      if (error instanceof MissingMonitoringRoleError) {
+        return { facts, coverage: missingRoleCoverage3(subscriptionId) };
+      }
+      if (error instanceof AzureAuthError) {
+        throw error;
+      }
+    }
+  }
+  return { facts: applyMetricFacts(facts, aggregates), coverage: [] };
+}
+async function harvestLiveSubscription(input) {
+  const graph = await harvestResourceGraph({
+    client: liveResourceGraphClient(input.arm),
+    subscriptionId: input.subscriptionId,
+    settings: input.settings,
+    observedAt: input.observedAt
+  });
+  if (!graph.ok) {
+    throw new ScanFailedError(`resource graph ${graph.reason ?? "failed_call"}`, [], { cause: graph.cause });
+  }
+  const backed = await withBackupFacts(input.arm, input.subscriptionId, graph.facts);
+  const metrics = await withMetricFacts(input.arm, input.subscriptionId, backed);
+  const coverage = applyCoverageResults(graph.coverage, metrics.coverage);
+  return {
+    inventory: graph.inventory,
+    facts: metrics.facts,
+    coverage,
+    coveredScopes: coverage.filter((entry) => entry.state === "assessed").map((entry) => entry.id)
+  };
+}
+function liveAzureHarvester(deps) {
+  const clock2 = deps.clock ?? systemClock;
+  return {
+    async harvest(input) {
+      const tenantId = await deps.resolveTenant(input.orgId, input.subscriptionId);
+      if (!tenantId) {
+        return deps.fallback.harvest(input);
+      }
+      return harvestLiveSubscription({
+        arm: armFor(deps, tenantId),
+        subscriptionId: input.subscriptionId,
+        settings: input.settings,
+        observedAt: clock2()
+      });
+    }
+  };
+}
+function liveAzureClients(deps) {
+  return async ({ orgId, subscriptionId }) => {
+    const tenantId = await deps.resolveTenant(orgId, subscriptionId);
+    if (!tenantId) {
+      return {};
+    }
+    const arm = armFor(deps, tenantId);
+    return {
+      costClient: liveCostClient(arm),
+      budgetClient: liveBudgetClient({ ...arm, subscriptionIds: [subscriptionId] })
+    };
+  };
+}
+function azureLiveWiring(config, options) {
+  const clock2 = options.clock ?? systemClock;
+  const tokenFor = federatedTokenProviders({
+    clientId: config.clientId,
+    assertion: config.assertion,
+    now: () => Date.parse(clock2()),
+    ...options.fetch ? { fetch: options.fetch } : {}
+  });
+  const deps = {
+    tokenFor,
+    resolveTenant: connectionTenantResolver(options.store),
+    clock: clock2,
+    ...options.fetch ? { fetch: options.fetch } : {}
+  };
+  return {
+    harvester: liveAzureHarvester({ ...deps, fallback: options.fallback }),
+    harvestClients: liveAzureClients(deps),
+    roleLister: liveRoleLister({ tokenFor, ...options.fetch ? { fetch: options.fetch } : {} }),
+    tokenFor
+  };
+}
+function azureLiveFromEnv(env, options) {
+  const config = azureLiveConfigFromEnv(env);
+  if (!config) {
+    return null;
+  }
+  return azureLiveWiring({ clientId: config.clientId, assertion: fileAssertionSource(config.assertionFile) }, options);
+}
+
+// backend/src/error-detail.ts
+var SAFE_TOKEN = /^[A-Za-z0-9_:.-]{1,64}$/;
+function errorDetail(error) {
+  if (typeof error !== "object" || error === null) {
+    return { name: "UnknownError" };
+  }
+  const fields = error;
+  const token = (value) => typeof value === "string" && SAFE_TOKEN.test(value) ? value : void 0;
+  const name = token(fields.name) ?? "Error";
+  const code = token(fields.code);
+  const step = token(fields.step);
+  return {
+    name,
+    ...typeof fields.status === "number" && Number.isFinite(fields.status) ? { status: fields.status } : {},
+    ...code ? { code } : {},
+    ...step ? { step } : {}
+  };
+}
+
+// backend/src/gcp-live-harvester.ts
+import { readFile as readFile3 } from "node:fs/promises";
+
+// backend/src/cloud-asset.ts
+var ASSET_PAGE_LIMIT = 50;
+var LAUNCH_ASSET_TYPES = [
+  "compute.googleapis.com/Disk",
+  "compute.googleapis.com/Address",
+  "compute.googleapis.com/Snapshot",
+  "compute.googleapis.com/Image",
+  "compute.googleapis.com/Instance",
+  "sqladmin.googleapis.com/Instance",
+  "container.googleapis.com/Cluster",
+  "certificatemanager.googleapis.com/Certificate",
+  "recommender.googleapis.com/Recommendation"
+];
+var TYPE_CHECK_IDS2 = {
+  "compute.googleapis.com/Disk": [
+    "gcp-inventory-all-assets",
+    "gcp-inventory-no-owner-label",
+    "gcp-waste-unattached-disks"
+  ],
+  "compute.googleapis.com/Address": [
+    "gcp-inventory-all-assets",
+    "gcp-inventory-no-owner-label",
+    "gcp-waste-unused-external-ips"
+  ],
+  "compute.googleapis.com/Snapshot": [
+    "gcp-inventory-all-assets",
+    "gcp-inventory-no-owner-label",
+    "gcp-waste-old-snapshots-and-images"
+  ],
+  "compute.googleapis.com/Image": [
+    "gcp-inventory-all-assets",
+    "gcp-inventory-no-owner-label",
+    "gcp-waste-old-snapshots-and-images"
+  ],
+  "compute.googleapis.com/Instance": ["gcp-inventory-all-assets", "gcp-inventory-no-owner-label"],
+  "sqladmin.googleapis.com/Instance": [
+    "gcp-inventory-all-assets",
+    "gcp-inventory-no-owner-label",
+    "gcp-resilience-sql-ha-or-backup",
+    "gcp-lifecycle-sql-gke-support"
+  ],
+  "container.googleapis.com/Cluster": [
+    "gcp-inventory-all-assets",
+    "gcp-inventory-no-owner-label",
+    "gcp-lifecycle-sql-gke-support"
+  ],
+  "certificatemanager.googleapis.com/Certificate": [
+    "gcp-inventory-all-assets",
+    "gcp-inventory-no-owner-label",
+    "gcp-lifecycle-expiring-certs"
+  ],
+  "recommender.googleapis.com/Recommendation": [
+    "gcp-inventory-all-assets",
+    "gcp-inventory-no-owner-label",
+    "gcp-waste-idle-vm-and-disk-recommendations"
+  ]
+};
+var CloudAssetThrottleError = class extends Error {
+  constructor() {
+    super("Cloud Asset Inventory throttled the list");
+    this.name = "CloudAssetThrottleError";
+  }
+};
+function assetToItem(asset) {
+  const item = {
+    id: asset.id,
+    project: asset.project,
+    type: asset.assetType,
+    title: asset.displayName,
+    region: asset.location,
+    labels: { ...asset.labels }
+  };
+  if (asset.properties) {
+    item.properties = { ...asset.properties };
+  }
+  return item;
+}
+function inventoryFromAssets(assets, ownerLabelKey, observedAt) {
+  const inventory = applyOwnerLabel(
+    {
+      cloud: "gcp",
+      observedAt,
+      resources: assets.map((asset) => toGcpInventoryRecord(assetToItem(asset), ownerLabelKey))
+    },
+    ownerLabelKey
+  );
+  assertValid(validateInventory(inventory));
+  return inventory;
+}
+function factsFromAssets(assets) {
+  return factsFromGcpManifest({
+    ownerLabelKey: "owner",
+    items: assets.map(assetToItem)
+  });
+}
+function coverageFor2(projectId, checkIds, state, causeId) {
+  return checkIds.map(
+    (checkId) => recordCoverageScope({
+      subscriptionOrProject: projectId,
+      checkId,
+      state,
+      ...causeId ? { causeId } : {}
+    })
+  );
+}
+function assessedInventoryCoverage2(projectId) {
+  return GCP_LAUNCH_CHECK_IDS.map(
+    (checkId) => recordCoverageScope({
+      subscriptionOrProject: projectId,
+      checkId,
+      state: GCP_HARVEST_ASSESSED_CHECK_IDS.has(checkId) ? "assessed" : "unassessed",
+      ...GCP_HARVEST_ASSESSED_CHECK_IDS.has(checkId) ? {} : { causeId: "not_run" }
+    })
+  );
+}
+async function harvestCloudAssets(input) {
+  const settings = input.settings ?? DEFAULT_SETTINGS;
+  const observedAt = input.observedAt ?? "1970-01-01T00:00:00.000Z";
+  const assets = [];
+  const queriedTypes = [];
+  for (const assetType of LAUNCH_ASSET_TYPES) {
+    try {
+      let pageToken;
+      for (let safety = 0; safety < ASSET_PAGE_LIMIT; safety += 1) {
+        const page = await input.client.list(
+          pageToken ? { projectId: input.projectId, assetType, pageToken } : { projectId: input.projectId, assetType }
+        );
+        assets.push(...page.assets);
+        if (!page.pageToken) {
+          break;
+        }
+        pageToken = page.pageToken;
+      }
+      queriedTypes.push(assetType);
+    } catch (error) {
+      const reason = error instanceof CloudAssetThrottleError ? "throttling" : "failed_call";
+      const remaining = LAUNCH_ASSET_TYPES.filter((item) => !queriedTypes.includes(item));
+      const checkIds = [...new Set(remaining.flatMap((item) => TYPE_CHECK_IDS2[item]))];
+      return {
+        ok: false,
+        reason,
+        cause: error,
+        inventory: inventoryFromAssets(assets, settings.ownerTagKey, observedAt),
+        facts: factsFromAssets(assets),
+        coverage: coverageFor2(input.projectId, checkIds, "undetermined", reason),
+        assets,
+        queriedTypes
+      };
+    }
+  }
+  return {
+    ok: true,
+    inventory: inventoryFromAssets(assets, settings.ownerTagKey, observedAt),
+    facts: factsFromAssets(assets),
+    coverage: assessedInventoryCoverage2(input.projectId),
+    assets,
+    queriedTypes
+  };
+}
+
+// backend/src/gcp-federation.ts
+import { readFile as readFile2 } from "node:fs/promises";
+var STS_TOKEN_URL = "https://sts.googleapis.com/v1/token";
+var IAM_CREDENTIALS_ORIGIN = "https://iamcredentials.googleapis.com";
+var READ_ONLY_SCOPE = "https://www.googleapis.com/auth/cloud-platform.read-only";
+var FEDERATION_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
+var JWT_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:jwt";
+var TOKEN_REFRESH_SKEW_MS = 5 * 6e4;
+var REQUEST_TIMEOUT_MS2 = 3e4;
+var DEFAULT_LIFETIME_SECONDS = 3600;
+var GcpFederationError = class extends Error {
+  constructor(step, status) {
+    super(
+      `GCP federated credential exchange failed at ${step}${status === null ? "" : ` (HTTP ${status})`}`
+    );
+    this.step = step;
+    this.status = status;
+    this.name = "GcpFederationError";
+  }
+  step;
+  status;
+};
+var PROJECT_NUMBER = /^\d{1,20}$/;
+var POOL_OR_PROVIDER_ID = /^[a-z0-9-]{4,32}$/;
+var SERVICE_ACCOUNT = /^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$/;
+function federationAudience(config) {
+  if (!PROJECT_NUMBER.test(config.poolProjectNumber) || !POOL_OR_PROVIDER_ID.test(config.poolId) || !POOL_OR_PROVIDER_ID.test(config.providerId)) {
+    throw new Error("workload identity pool project number, pool id or provider id is malformed");
+  }
+  return `//iam.googleapis.com/projects/${config.poolProjectNumber}/locations/global/workloadIdentityPools/${config.poolId}/providers/${config.providerId}`;
+}
+function impersonationUrl(serviceAccount) {
+  if (!SERVICE_ACCOUNT.test(serviceAccount)) {
+    throw new Error("service account must be a <name>@<project>.iam.gserviceaccount.com email");
+  }
+  return `${IAM_CREDENTIALS_ORIGIN}/v1/projects/-/serviceAccounts/${encodeURIComponent(serviceAccount)}:generateAccessToken`;
+}
+function fileSubjectToken(path, read = (p) => readFile2(p, "utf8")) {
+  return async () => {
+    let token;
+    try {
+      token = (await read(path)).trim();
+    } catch {
+      throw new GcpFederationError("subject_token", null);
+    }
+    if (token.length === 0) {
+      throw new GcpFederationError("subject_token", null);
+    }
+    return token;
+  };
+}
+async function post(call, url, step, headers, body) {
+  let response;
+  try {
+    response = await call(url, {
+      method: "POST",
+      redirect: "error",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS2),
+      headers: { accept: "application/json", "content-type": "application/json", ...headers },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    throw new GcpFederationError(step, null);
+  }
+  if (!response.ok) {
+    throw new GcpFederationError(step, response.status);
+  }
+  const parsed = await response.json().catch(() => null);
+  if (!parsed || typeof parsed !== "object") {
+    throw new GcpFederationError(step, response.status);
+  }
+  return parsed;
+}
+function gcpFederatedTokenProvider(config) {
+  const audience = federationAudience(config);
+  const target = impersonationUrl(config.serviceAccount);
+  const scopes = config.scopes ?? [READ_ONLY_SCOPE];
+  const lifetime = config.lifetimeSeconds ?? DEFAULT_LIFETIME_SECONDS;
+  if (!Number.isInteger(lifetime) || lifetime < 300 || lifetime > 3600) {
+    throw new Error("token lifetime must be 300 to 3600 seconds");
+  }
+  const call = config.fetch ?? ((input, init) => fetch(input, init));
+  const now = config.now ?? (() => /* @__PURE__ */ new Date());
+  let cached = null;
+  let inflight = null;
+  async function exchange() {
+    const subject = await config.subjectToken();
+    const sts = await post(
+      call,
+      STS_TOKEN_URL,
+      "sts",
+      {},
+      {
+        grantType: "urn:ietf:params:oauth:grant-type:token-exchange",
+        audience,
+        scope: FEDERATION_SCOPE,
+        requestedTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        subjectToken: subject,
+        subjectTokenType: config.subjectTokenType ?? JWT_TOKEN_TYPE
+      }
+    );
+    const federated = sts.access_token;
+    if (typeof federated !== "string" || federated.length === 0) {
+      throw new GcpFederationError("sts", null);
+    }
+    const issued = await post(
+      call,
+      target,
+      "impersonation",
+      { authorization: `Bearer ${federated}` },
+      { scope: scopes, lifetime: `${lifetime}s` }
+    );
+    const token = issued.accessToken;
+    const expireTime = typeof issued.expireTime === "string" ? Date.parse(issued.expireTime) : Number.NaN;
+    if (typeof token !== "string" || token.length === 0 || !Number.isFinite(expireTime)) {
+      throw new GcpFederationError("impersonation", null);
+    }
+    cached = { token, expiresAt: expireTime };
+    return token;
+  }
+  return async () => {
+    if (cached && cached.expiresAt - TOKEN_REFRESH_SKEW_MS > now().getTime()) {
+      return cached.token;
+    }
+    if (!inflight) {
+      inflight = exchange().finally(() => {
+        inflight = null;
+      });
+    }
+    return inflight;
+  };
+}
+
+// backend/src/gcp-cost.ts
+var MissingBillingExportRoleError = class extends Error {
+  constructor() {
+    super("BigQuery access to the billing export is missing");
+    this.name = "MissingBillingExportRoleError";
+  }
+};
+
+// backend/src/gcp-live.ts
+var GCP_ORIGINS = [
+  "https://cloudasset.googleapis.com",
+  "https://bigquery.googleapis.com",
+  "https://recommender.googleapis.com",
+  "https://sqladmin.googleapis.com",
+  "https://container.googleapis.com",
+  "https://certificatemanager.googleapis.com",
+  "https://cloudresourcemanager.googleapis.com"
+];
+var REQUEST_TIMEOUT_MS3 = 3e4;
+var MAX_ATTEMPTS2 = 3;
+var MAX_RETRY_WAIT_MS2 = 5e3;
+var MAX_PAGES3 = 50;
+var DAY_MS4 = 864e5;
+var SQL_ASSET_TYPE = "sqladmin.googleapis.com/Instance";
+var GKE_ASSET_TYPE = "container.googleapis.com/Cluster";
+var CERT_ASSET_TYPE = "certificatemanager.googleapis.com/Certificate";
+var NOT_IN_CLOUD_ASSET = /* @__PURE__ */ new Set([REC_TYPE]);
+var GcpAccessDeniedError = class extends Error {
+  constructor() {
+    super("GCP refused the read (HTTP 403)");
+    this.name = "GcpAccessDeniedError";
+  }
+};
+var GcpAuthError = class extends Error {
+  constructor() {
+    super("GCP rejected the access token (HTTP 401)");
+    this.name = "GcpAuthError";
+  }
+};
+var GcpApiError = class extends Error {
+  constructor(status) {
+    super(`GCP returned HTTP ${status}`);
+    this.status = status;
+    this.name = "GcpApiError";
+  }
+  status;
+};
+var GcpThrottledError = class extends Error {
+  constructor() {
+    super("GCP throttled the read after retries");
+    this.name = "GcpThrottledError";
+  }
+};
+var MissingRecommenderRoleError = class extends Error {
+  constructor() {
+    super("Recommender Viewer is missing");
+    this.name = "MissingRecommenderRoleError";
+  }
+};
+var PROJECT_ID = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
+var LOCATION = /^[a-z0-9-]{1,40}$/;
+var RECOMMENDER_ID = /^google\.[A-Za-z0-9.]{1,100}$/;
+var TABLE = /^([a-z][a-z0-9-]{4,28}[a-z0-9])\.([A-Za-z0-9_]{1,1024})\.([A-Za-z0-9_]{1,1024})$/;
+function safeProjectId(projectId) {
+  if (!PROJECT_ID.test(projectId)) {
+    throw new Error("not a GCP project id");
+  }
+  return projectId;
+}
+function safeLocation(location) {
+  if (!LOCATION.test(location)) {
+    throw new Error("not a GCP location");
+  }
+  return location;
+}
+function parseBillingTable(table) {
+  const match = TABLE.exec(table);
+  if (!match?.[1] || !match[2] || !match[3]) {
+    throw new Error("billing export table must be <project>.<dataset>.<table>");
+  }
+  return { project: match[1], dataset: match[2], table: match[3] };
+}
+function isGcpUrl(url) {
+  return GCP_ORIGINS.some((origin) => url.startsWith(`${origin}/`));
+}
+function nowOf(options) {
+  return (options.now ?? (() => /* @__PURE__ */ new Date()))();
+}
+async function pause2(options, ms) {
+  await (options.sleep ?? ((wait) => new Promise((resolve) => setTimeout(resolve, wait))))(ms);
+}
+function retryWait2(response, attempt) {
+  const header = Number(response.headers.get("retry-after"));
+  const wait = Number.isFinite(header) && header > 0 ? header * 1e3 : 500 * 2 ** attempt;
+  return Math.min(wait, MAX_RETRY_WAIT_MS2);
+}
+async function gcpJson(options, method, url, body) {
+  if (!isGcpUrl(url)) {
+    throw new Error("refusing to send credentials outside the GCP read APIs");
+  }
+  const call = options.fetch ?? ((input, init) => fetch(input, init));
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await call(url, {
+      method,
+      redirect: "error",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS3),
+      headers: {
+        authorization: `Bearer ${await options.token()}`,
+        accept: "application/json",
+        ...body === void 0 ? {} : { "content-type": "application/json" }
+      },
+      ...body === void 0 ? {} : { body: JSON.stringify(body) }
+    });
+    if (response.status === 401) {
+      throw new GcpAuthError();
+    }
+    if (response.status === 403) {
+      throw new GcpAccessDeniedError();
+    }
+    const throttled = response.status === 429 || response.status === 503;
+    if (throttled) {
+      if (attempt + 1 < MAX_ATTEMPTS2) {
+        await pause2(options, retryWait2(response, attempt));
+        continue;
+      }
+      throw new GcpThrottledError();
+    }
+    if (!response.ok) {
+      throw new GcpApiError(response.status);
+    }
+    const parsed = await response.json();
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new GcpApiError(502);
+    }
+    return parsed;
+  }
+}
+function obj(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+function text2(value) {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+function numeric(value) {
+  const parsed = typeof value === "string" ? Number(value) : value;
+  return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : null;
+}
+function lastSegment(value) {
+  return value.split("/").filter(Boolean).pop() ?? value;
+}
+function stringLabels(value) {
+  return Object.fromEntries(
+    Object.entries(obj(value)).filter(
+      (entry) => typeof entry[1] === "string"
+    )
+  );
+}
+function wholeDaysBetween(from, to) {
+  return Math.floor((to - from) / DAY_MS4);
+}
+function sizeGbFromBytes(bytes, fallbackGb) {
+  const raw = numeric(bytes);
+  return raw !== null && raw > 0 ? Math.ceil(raw / 2 ** 30) : numeric(fallbackGb);
+}
+function gkeMinorVersion(version) {
+  const match = version ? /^(\d+\.\d+)/.exec(version) : null;
+  return match?.[1] ?? null;
+}
+function gcpProperties(assetType, data, now) {
+  const users = Array.isArray(data.users) ? data.users.length : 0;
+  const age = (stamp) => {
+    const parsed = typeof stamp === "string" ? Date.parse(stamp) : Number.NaN;
+    return Number.isFinite(parsed) ? wholeDaysBetween(parsed, now.getTime()) : null;
+  };
+  switch (assetType) {
+    case "compute.googleapis.com/Disk":
+      return { usersCount: users, sizeGb: numeric(data.sizeGb) };
+    case "compute.googleapis.com/Address":
+      return {
+        status: text2(data.status),
+        usersCount: users,
+        address: text2(data.address),
+        addressType: text2(data.addressType)
+      };
+    case "compute.googleapis.com/Snapshot":
+      return {
+        creationTimestamp: text2(data.creationTimestamp),
+        ageDays: age(data.creationTimestamp),
+        sizeGb: sizeGbFromBytes(data.storageBytes, data.diskSizeGb)
+      };
+    case "compute.googleapis.com/Image":
+      return {
+        creationTimestamp: text2(data.creationTimestamp),
+        ageDays: age(data.creationTimestamp),
+        sizeGb: sizeGbFromBytes(data.archiveSizeBytes, data.diskSizeGb)
+      };
+    case "compute.googleapis.com/Instance":
+      return { status: text2(data.status) };
+    case SQL_ASSET_TYPE: {
+      const settings = obj(data.settings);
+      const backup = obj(settings.backupConfiguration).enabled;
+      return {
+        databaseVersion: text2(data.databaseVersion),
+        availabilityType: text2(settings.availabilityType),
+        backupEnabled: typeof backup === "boolean" ? backup : null
+      };
+    }
+    case GKE_ASSET_TYPE:
+      return { currentMasterVersion: gkeMinorVersion(text2(data.currentMasterVersion)) };
+    case CERT_ASSET_TYPE: {
+      const expireTime = text2(data.expireTime);
+      const expires = expireTime ? Date.parse(expireTime) : Number.NaN;
+      return {
+        expireTime,
+        daysRemaining: Number.isFinite(expires) ? wholeDaysBetween(now.getTime(), expires) : null
+      };
+    }
+    default:
+      return {};
+  }
+}
+function labelsOf(assetType, data) {
+  if (assetType === SQL_ASSET_TYPE) {
+    return stringLabels(obj(data.settings).userLabels);
+  }
+  if (assetType === GKE_ASSET_TYPE) {
+    return stringLabels(data.resourceLabels);
+  }
+  return stringLabels(data.labels);
+}
+function locationOf(data, fallback) {
+  const raw = text2(fallback) ?? text2(data.location) ?? text2(data.zone) ?? text2(data.region);
+  return raw ? lastSegment(raw) : "global";
+}
+function assetFromResource(input) {
+  const id = lastSegment(input.name);
+  return {
+    id,
+    name: input.name,
+    assetType: input.assetType,
+    project: input.projectId,
+    displayName: id,
+    location: locationOf(input.data, input.location),
+    labels: labelsOf(input.assetType, input.data),
+    properties: gcpProperties(input.assetType, input.data, input.now)
+  };
+}
+var CLOUD_ASSET_PAGE_SIZE = "500";
+function liveCloudAssetClient(options) {
+  return {
+    async list(input) {
+      if (NOT_IN_CLOUD_ASSET.has(input.assetType)) {
+        return { assets: [] };
+      }
+      const query = new URLSearchParams({
+        assetTypes: input.assetType,
+        contentType: "RESOURCE",
+        pageSize: CLOUD_ASSET_PAGE_SIZE,
+        ...input.pageToken ? { pageToken: input.pageToken } : {}
+      });
+      const url = `https://cloudasset.googleapis.com/v1/projects/${safeProjectId(input.projectId)}/assets?${query}`;
+      let body;
+      try {
+        body = await gcpJson(options, "GET", url);
+      } catch (error) {
+        if (error instanceof GcpThrottledError) {
+          throw new CloudAssetThrottleError();
+        }
+        throw error;
+      }
+      const now = nowOf(options);
+      const raw = Array.isArray(body.assets) ? body.assets : [];
+      const assets = raw.flatMap((entry) => {
+        const asset = obj(entry);
+        const name = text2(asset.name);
+        if (!name) {
+          return [];
+        }
+        const resource = obj(asset.resource);
+        return [
+          assetFromResource({
+            name,
+            assetType: text2(asset.assetType) ?? input.assetType,
+            projectId: input.projectId,
+            data: obj(resource.data),
+            location: resource.location,
+            now
+          })
+        ];
+      });
+      const next = text2(body.nextPageToken);
+      return next ? { assets, pageToken: next } : { assets };
+    }
+  };
+}
+async function pagedList(options, base, key) {
+  const items = [];
+  let pageToken = null;
+  for (let page = 0; page < MAX_PAGES3; page += 1) {
+    const url = pageToken ? `${base}${base.includes("?") ? "&" : "?"}pageToken=${encodeURIComponent(pageToken)}` : base;
+    const body = await gcpJson(options, "GET", url);
+    const list = body[key];
+    items.push(...Array.isArray(list) ? list.map(obj) : []);
+    pageToken = text2(body.nextPageToken);
+    if (!pageToken) {
+      return items;
+    }
+  }
+  throw new Error("GCP list exceeded page limit");
+}
+function liveServiceReads(options) {
+  const locations = options.certificateLocations ?? ["global"];
+  return {
+    async listSqlInstances(projectId) {
+      const project = safeProjectId(projectId);
+      const rows = await pagedList(
+        options,
+        `https://sqladmin.googleapis.com/v1/projects/${project}/instances`,
+        "items"
+      );
+      const now = nowOf(options);
+      return rows.flatMap((row) => {
+        const name = text2(row.name);
+        return name ? [
+          assetFromResource({
+            name: `//cloudsql.googleapis.com/projects/${project}/instances/${name}`,
+            assetType: SQL_ASSET_TYPE,
+            projectId,
+            data: row,
+            location: row.region,
+            now
+          })
+        ] : [];
+      });
+    },
+    async listGkeClusters(projectId) {
+      const project = safeProjectId(projectId);
+      const body = await gcpJson(
+        options,
+        "GET",
+        `https://container.googleapis.com/v1/projects/${project}/locations/-/clusters`
+      );
+      const now = nowOf(options);
+      const rows = Array.isArray(body.clusters) ? body.clusters.map(obj) : [];
+      return rows.flatMap((row) => {
+        const name = text2(row.name);
+        const location = text2(row.location) ?? "global";
+        return name ? [
+          assetFromResource({
+            name: `//container.googleapis.com/projects/${project}/locations/${location}/clusters/${name}`,
+            assetType: GKE_ASSET_TYPE,
+            projectId,
+            data: row,
+            location,
+            now
+          })
+        ] : [];
+      });
+    },
+    async listCertificates(projectId) {
+      const project = safeProjectId(projectId);
+      const now = nowOf(options);
+      const out = [];
+      for (const location of locations) {
+        const rows = await pagedList(
+          options,
+          `https://certificatemanager.googleapis.com/v1/projects/${project}/locations/${safeLocation(location)}/certificates`,
+          "certificates"
+        );
+        for (const row of rows) {
+          const name = text2(row.name);
+          if (name) {
+            out.push(
+              assetFromResource({
+                name: `//certificatemanager.googleapis.com/${name}`,
+                assetType: CERT_ASSET_TYPE,
+                projectId,
+                data: row,
+                location,
+                now
+              })
+            );
+          }
+        }
+      }
+      return out;
+    }
+  };
+}
+var IDLE_RECOMMENDERS = [
+  "google.compute.instance.IdleResourceRecommender",
+  "google.compute.disk.IdleResourceRecommender"
+];
+function moneyAmount(value) {
+  const money2 = obj(value);
+  const units = numeric(money2.units) ?? 0;
+  const nanos = numeric(money2.nanos) ?? 0;
+  if (money2.units === void 0 && money2.nanos === void 0) {
+    return null;
+  }
+  return units + nanos / 1e9;
+}
+function recommendationFrom(row, projectId, recommenderId, ceiling = false) {
+  const name = text2(row.name);
+  if (!name) {
+    return null;
+  }
+  const state = text2(obj(row.stateInfo).state);
+  if (state && state !== "ACTIVE") {
+    return null;
+  }
+  const groups = Array.isArray(obj(row.content).operationGroups) ? obj(row.content).operationGroups : [];
+  const operations = groups.flatMap((group) => {
+    const list = obj(group).operations;
+    return Array.isArray(list) ? list.map(obj) : [];
+  });
+  const resourceName = operations.map((operation) => text2(operation.resource)).find((value) => value !== null) ?? null;
+  const cost = obj(obj(row.primaryImpact).costProjection).cost;
+  const amount = moneyAmount(cost);
+  const currency = text2(obj(cost).currencyCode);
+  return {
+    recommendationId: lastSegment(name),
+    recommenderId,
+    resourceName: resourceName ?? name,
+    subtype: text2(row.recommenderSubtype) ?? "",
+    projectId,
+    ...amount !== null && amount < 0 ? ceiling ? { savingsMin: 0, savingsMax: Math.round(-amount * 100) / 100, savingsCeiling: true } : { savingsMax: Math.round(-amount * 100) / 100 } : {},
+    ...currency ? { currency } : {}
+  };
+}
+function liveRecommenderClient(options) {
+  return {
+    async list(input) {
+      if (!RECOMMENDER_ID.test(input.recommenderId)) {
+        throw new Error("not a recommender id");
+      }
+      const base = `https://recommender.googleapis.com/v1/projects/${safeProjectId(input.projectId)}/locations/${safeLocation(input.location)}/recommenders/${input.recommenderId}/recommendations`;
+      let rows;
+      try {
+        rows = await pagedList(options, base, "recommendations");
+      } catch (error) {
+        if (error instanceof GcpAccessDeniedError) {
+          throw new MissingRecommenderRoleError();
+        }
+        throw error;
+      }
+      return rows.flatMap((row) => {
+        const rec = recommendationFrom(
+          row,
+          input.projectId,
+          input.recommenderId,
+          options.recommenderCeiling === true
+        );
+        return rec ? [rec] : [];
+      });
+    }
+  };
+}
+var BILLING_EXPORT_DAYS = 92;
+var QUERY_POLLS = 10;
+var QUERY_POLL_MS = 1e3;
+function billingExportQuery(table) {
+  const { project, dataset, table: name } = parseBillingTable(table);
+  return [
+    "SELECT FORMAT_DATE('%Y-%m-%d', DATE(usage_start_time)) AS date,",
+    "project.id AS projectId,",
+    "service.description AS serviceName,",
+    "FORMAT('%.2f', SUM(cost) + SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0))) AS costAmount,",
+    "currency",
+    `FROM \`${project}.${dataset}.${name}\``,
+    "WHERE project.id = @projectId AND DATE(usage_start_time) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)",
+    "GROUP BY date, projectId, serviceName, currency",
+    "ORDER BY date, serviceName"
+  ].join(" ");
+}
+function encodeCursor(cursor) {
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+function decodeCursor(token) {
+  const parsed = obj(JSON.parse(Buffer.from(token, "base64url").toString("utf8")));
+  const jobId = text2(parsed.jobId);
+  const location = text2(parsed.location);
+  if (!jobId || !/^[A-Za-z0-9_-]{1,1024}$/.test(jobId) || !location || !LOCATION.test(location.toLowerCase())) {
+    throw new Error("not a BigQuery page cursor");
+  }
+  const pageToken = text2(parsed.pageToken);
+  return pageToken ? { jobId, location, pageToken } : { jobId, location };
+}
+async function runQuery(options, jobProject, query, parameters, cursor) {
+  const root = `https://bigquery.googleapis.com/bigquery/v2/projects/${safeProjectId(jobProject)}/queries`;
+  const results = (at) => {
+    const params = new URLSearchParams({
+      location: at.location,
+      maxResults: "1000",
+      timeoutMs: "20000"
+    });
+    if (at.pageToken) {
+      params.set("pageToken", at.pageToken);
+    }
+    return gcpJson(options, "GET", `${root}/${encodeURIComponent(at.jobId)}?${params}`);
+  };
+  let body = cursor ? await results(cursor) : await gcpJson(options, "POST", root, {
+    query,
+    useLegacySql: false,
+    parameterMode: "NAMED",
+    queryParameters: parameters.map((parameter) => ({
+      name: parameter.name,
+      parameterType: { type: parameter.type },
+      parameterValue: { value: parameter.value }
+    })),
+    maxResults: 1e3,
+    timeoutMs: 2e4
+  });
+  const reference = obj(body.jobReference);
+  const jobId = text2(reference.jobId) ?? cursor?.jobId;
+  const location = text2(reference.location) ?? cursor?.location;
+  if (!jobId || !location) {
+    throw new GcpApiError(502);
+  }
+  for (let poll = 0; body.jobComplete === false; poll += 1) {
+    if (poll >= QUERY_POLLS) {
+      throw new GcpApiError(504);
+    }
+    await pause2(options, QUERY_POLL_MS);
+    body = await results({
+      jobId,
+      location,
+      ...cursor?.pageToken ? { pageToken: cursor.pageToken } : {}
+    });
+  }
+  return { body, cursor: { jobId, location } };
+}
+function cells(row) {
+  const fields = obj(row).f;
+  return Array.isArray(fields) ? fields.map((cell) => obj(cell).v) : [];
+}
+function liveBigQueryExportClient(options) {
+  const query = billingExportQuery(options.table);
+  const days = options.days ?? BILLING_EXPORT_DAYS;
+  if (!Number.isInteger(days) || days < 1 || days > 400) {
+    throw new Error("billing export window must be 1 to 400 days");
+  }
+  return {
+    async query(input) {
+      safeProjectId(input.projectId);
+      let result;
+      try {
+        result = await runQuery(
+          options,
+          options.jobProjectId,
+          query,
+          [
+            { name: "projectId", type: "STRING", value: input.projectId },
+            { name: "days", type: "INT64", value: String(days) }
+          ],
+          input.pageToken ? decodeCursor(input.pageToken) : void 0
+        );
+      } catch (error) {
+        if (error instanceof GcpAccessDeniedError) {
+          throw new MissingBillingExportRoleError();
+        }
+        throw error;
+      }
+      const raw = Array.isArray(result.body.rows) ? result.body.rows : [];
+      const rows = raw.map((row) => {
+        const [date, projectId, serviceName, costAmount, currency] = cells(row);
+        if (typeof date !== "string" || typeof projectId !== "string" || typeof serviceName !== "string" || typeof costAmount !== "string" || !/^-?\d+\.\d{2}$/.test(costAmount) || typeof currency !== "string") {
+          throw new GcpApiError(502);
+        }
+        return { date, projectId, serviceName, costAmount, currency };
+      });
+      const next = text2(result.body.pageToken);
+      return next ? { rows, pageToken: encodeCursor({ ...result.cursor, pageToken: next }) } : { rows };
+    }
+  };
+}
+function liveBillingExportDetector(options) {
+  const { project, dataset, table } = parseBillingTable(options.table);
+  return {
+    async detect() {
+      let meta;
+      try {
+        meta = await gcpJson(
+          options,
+          "GET",
+          `https://bigquery.googleapis.com/bigquery/v2/projects/${project}/datasets/${dataset}/tables/${table}`
+        );
+      } catch (error) {
+        if (error instanceof GcpApiError && error.status === 404) {
+          return { state: "absent" };
+        }
+        if (error instanceof GcpAccessDeniedError) {
+          return { state: "unreadable" };
+        }
+        throw error;
+      }
+      const created = numeric(meta.creationTime);
+      if (created === null) {
+        throw new GcpApiError(502);
+      }
+      const enabledOn = new Date(created).toISOString().slice(0, 10);
+      let body;
+      try {
+        ({ body } = await runQuery(
+          options,
+          options.jobProjectId,
+          `SELECT DISTINCT FORMAT_DATE('%Y-%m-%d', DATE(usage_start_time)) AS day FROM \`${project}.${dataset}.${table}\` WHERE DATE(usage_start_time) < CURRENT_DATE() ORDER BY day`,
+          []
+        ));
+      } catch (error) {
+        if (error instanceof GcpAccessDeniedError) {
+          return { state: "unreadable" };
+        }
+        throw error;
+      }
+      const rows = Array.isArray(body.rows) ? body.rows : [];
+      const completedDays = rows.map((row) => cells(row)[0]).filter((day) => typeof day === "string");
+      return completedDays.length === 0 ? { state: "empty", enabledOn } : { state: "readable", enabledOn, completedDays };
+    }
+  };
+}
+function grantedFrom(body, asked) {
+  const list = Array.isArray(body.permissions) ? body.permissions : [];
+  const wanted = new Set(asked);
+  return list.filter(
+    (permission) => typeof permission === "string" && wanted.has(permission)
+  );
+}
+function liveGcpPermissionTester(options) {
+  return {
+    async project(projectId, permissions) {
+      const body = await gcpJson(
+        options,
+        "POST",
+        `https://cloudresourcemanager.googleapis.com/v1/projects/${safeProjectId(projectId)}:testIamPermissions`,
+        { permissions }
+      );
+      return grantedFrom(body, permissions);
+    },
+    async table(tableName, permissions) {
+      const { project, dataset, table } = parseBillingTable(tableName);
+      try {
+        const body = await gcpJson(
+          options,
+          "POST",
+          `https://bigquery.googleapis.com/bigquery/v2/projects/${project}/datasets/${dataset}/tables/${table}:testIamPermissions`,
+          { permissions }
+        );
+        return grantedFrom(body, permissions);
+      } catch (error) {
+        if (error instanceof GcpAccessDeniedError || error instanceof GcpApiError && error.status === 404) {
+          return [];
+        }
+        throw error;
+      }
+    }
+  };
+}
+
+// backend/src/gcp-live-harvester.ts
+var GCP_LIVE_ENV = {
+  flag: "FARSIDE_GCP_LIVE",
+  projectId: "FARSIDE_GCP_PROJECT_ID",
+  poolProjectNumber: "FARSIDE_GCP_POOL_PROJECT_NUMBER",
+  poolId: "FARSIDE_GCP_POOL_ID",
+  providerId: "FARSIDE_GCP_PROVIDER_ID",
+  serviceAccount: "FARSIDE_GCP_SERVICE_ACCOUNT",
+  subjectTokenFile: "FARSIDE_GCP_SUBJECT_TOKEN_FILE",
+  awsWebIdentityTokenFile: "AWS_WEB_IDENTITY_TOKEN_FILE",
+  billingTable: "FARSIDE_GCP_BILLING_EXPORT_TABLE",
+  jobProjectId: "FARSIDE_GCP_BIGQUERY_JOB_PROJECT",
+  /** Optional. "1" reports a Recommender figure as 0 up to it (#199). */
+  recommenderCeiling: "FARSIDE_GCP_RECOMMENDER_CEILING"
+};
+var GcpLiveConfigError = class extends Error {
+  constructor(missing) {
+    super(`FARSIDE_GCP_LIVE=1 but these are not set: ${missing.join(", ")}`);
+    this.missing = missing;
+    this.name = "GcpLiveConfigError";
+  }
+  missing;
+};
+function gcpLiveConfigFromEnv(env = process.env) {
+  if (env[GCP_LIVE_ENV.flag] !== "1") {
+    return null;
+  }
+  const read = (name) => {
+    const value = env[name];
+    return typeof value === "string" && value.trim().length > 0 ? value.trim() : void 0;
+  };
+  const required = {
+    projectId: read(GCP_LIVE_ENV.projectId),
+    poolProjectNumber: read(GCP_LIVE_ENV.poolProjectNumber),
+    poolId: read(GCP_LIVE_ENV.poolId),
+    providerId: read(GCP_LIVE_ENV.providerId),
+    serviceAccount: read(GCP_LIVE_ENV.serviceAccount),
+    subjectTokenPath: read(GCP_LIVE_ENV.subjectTokenFile) ?? read(GCP_LIVE_ENV.awsWebIdentityTokenFile)
+  };
+  const missing = Object.entries(required).filter(([, value]) => value === void 0).map(
+    ([key]) => key === "subjectTokenPath" ? `${GCP_LIVE_ENV.subjectTokenFile} or ${GCP_LIVE_ENV.awsWebIdentityTokenFile}` : GCP_LIVE_ENV[key]
+  );
+  if (missing.length > 0) {
+    throw new GcpLiveConfigError(missing);
+  }
+  const projectId = safeProjectId(required.projectId ?? "");
+  const billingTable = read(GCP_LIVE_ENV.billingTable);
+  if (billingTable) {
+    parseBillingTable(billingTable);
+  }
+  return {
+    projectId,
+    poolProjectNumber: required.poolProjectNumber ?? "",
+    poolId: required.poolId ?? "",
+    providerId: required.providerId ?? "",
+    serviceAccount: required.serviceAccount ?? "",
+    subjectTokenPath: required.subjectTokenPath ?? "",
+    ...billingTable ? { billingTable } : {},
+    jobProjectId: safeProjectId(read(GCP_LIVE_ENV.jobProjectId) ?? projectId),
+    ...env[GCP_LIVE_ENV.recommenderCeiling] === "1" ? { recommenderCeiling: true } : {}
+  };
+}
+function gcpLiveClients(config, deps = {}) {
+  const token = gcpFederatedTokenProvider({
+    poolProjectNumber: config.poolProjectNumber,
+    poolId: config.poolId,
+    providerId: config.providerId,
+    serviceAccount: config.serviceAccount,
+    subjectToken: fileSubjectToken(
+      config.subjectTokenPath,
+      deps.readFile ?? ((path) => readFile3(path, "utf8"))
+    ),
+    ...deps.fetch ? { fetch: deps.fetch } : {},
+    ...deps.now ? { now: deps.now } : {}
+  });
+  const options = {
+    token,
+    ...deps.fetch ? { fetch: deps.fetch } : {},
+    ...deps.now ? { now: deps.now } : {},
+    ...deps.sleep ? { sleep: deps.sleep } : {},
+    ...config.recommenderCeiling ? { recommenderCeiling: true } : {}
+  };
+  const billing = config.billingTable ? {
+    bigQuery: liveBigQueryExportClient({
+      ...options,
+      table: config.billingTable,
+      jobProjectId: config.jobProjectId
+    }),
+    billingExport: liveBillingExportDetector({
+      ...options,
+      table: config.billingTable,
+      jobProjectId: config.jobProjectId
+    })
+  } : {};
+  return {
+    token,
+    cloudAsset: liveCloudAssetClient(options),
+    serviceReads: liveServiceReads(options),
+    recommender: liveRecommenderClient(options),
+    permissions: liveGcpPermissionTester(options),
+    ...billing
+  };
+}
+var DETAIL_TYPES = [
+  [SQL_ASSET_TYPE, "listSqlInstances"],
+  [GKE_ASSET_TYPE, "listGkeClusters"],
+  [CERT_ASSET_TYPE, "listCertificates"]
+];
+function definedProps(asset) {
+  return Object.fromEntries(
+    Object.entries(asset.properties ?? {}).filter(([, value]) => value !== null)
+  );
+}
+async function overlayServiceReads(assets, reads, projectId) {
+  let out = [...assets];
+  for (const [assetType, method] of DETAIL_TYPES) {
+    let direct;
+    try {
+      direct = await reads[method](projectId);
+    } catch (error) {
+      if (error instanceof GcpAccessDeniedError || error instanceof GcpApiError) {
+        continue;
+      }
+      throw error;
+    }
+    for (const asset of direct) {
+      const index = out.findIndex((item) => item.assetType === assetType && item.id === asset.id);
+      if (index === -1) {
+        out = [...out, asset];
+        continue;
+      }
+      const current = out[index];
+      out[index] = {
+        ...current,
+        labels: Object.keys(current.labels).length > 0 ? current.labels : asset.labels,
+        properties: { ...current.properties ?? {}, ...definedProps(asset) }
+      };
+    }
+  }
+  return out;
+}
+var ZONE = /-[a-z]$/;
+function recommenderZones(assets) {
+  return [
+    ...new Set(
+      assets.filter(
+        (asset) => asset.assetType === "compute.googleapis.com/Disk" || asset.assetType === "compute.googleapis.com/Instance"
+      ).map((asset) => asset.location).filter((location) => ZONE.test(location))
+    )
+  ].sort();
+}
+async function harvestLiveRecommendations(client, projectId, zones) {
+  const recommendations = [];
+  try {
+    for (const location of zones) {
+      for (const recommenderId of IDLE_RECOMMENDERS) {
+        const rows = await client.list({ projectId, location, recommenderId });
+        recommendations.push(...rows.map((row) => ({ ...row, location })));
+      }
+    }
+  } catch (error) {
+    if (error instanceof MissingRecommenderRoleError) {
+      return { ok: false, missingRole: true };
+    }
+    throw error;
+  }
+  return { ok: true, recommendations };
+}
+function recommendationAsset(row) {
+  return {
+    id: row.recommendationId,
+    name: `//recommender.googleapis.com/projects/${row.projectId}/locations/${row.location}/recommendations/${row.recommendationId}`,
+    assetType: REC_TYPE,
+    project: row.projectId,
+    displayName: row.recommendationId,
+    location: row.location,
+    labels: {},
+    properties: {
+      recommenderId: row.recommenderId,
+      resourceName: row.resourceName,
+      subtype: row.subtype,
+      ...row.savingsMin === void 0 ? {} : { savingsMin: row.savingsMin },
+      ...row.savingsMax === void 0 ? {} : { savingsMax: row.savingsMax },
+      ...row.currency === void 0 ? {} : { currency: row.currency },
+      ...row.savingsCeiling ? { savingsCeiling: true } : {}
+    }
+  };
+}
+function liveGcpHarvester(clients, clock2, log) {
+  return {
+    async harvest(input) {
+      const projectId = safeProjectId(input.subscriptionId);
+      const observedAt = clock2 ? clock2() : (/* @__PURE__ */ new Date()).toISOString();
+      const cai = await harvestCloudAssets({
+        client: clients.cloudAsset,
+        projectId,
+        settings: input.settings,
+        observedAt
+      });
+      if (!cai.ok) {
+        log?.(
+          { event: "gcp.harvest.failed", projectId, reason: cai.reason, ...errorDetail(cai.cause) },
+          "gcp harvest failed"
+        );
+      }
+      let assets = cai.assets;
+      let coverage = cai.coverage;
+      if (cai.ok) {
+        assets = await overlayServiceReads(assets, clients.serviceReads, projectId);
+        const recs = await harvestLiveRecommendations(
+          clients.recommender,
+          projectId,
+          recommenderZones(assets)
+        );
+        if (recs.ok) {
+          assets = [...assets, ...recs.recommendations.map(recommendationAsset)];
+        } else {
+          coverage = applyCoverageResults(coverage, [
+            {
+              subscriptionOrProject: projectId,
+              checkId: GCP_IDLE_RECS,
+              state: "unassessed",
+              causeId: "missing_role",
+              closer: RECOMMENDER_ROLE_CLOSER
+            }
+          ]);
+        }
+      }
+      return {
+        inventory: inventoryFromAssets(assets, input.settings.ownerTagKey, observedAt),
+        coverage,
+        coveredScopes: coverage.filter((entry) => entry.state === "assessed").map((entry) => entry.id),
+        facts: factsFromAssets(assets)
+      };
+    }
+  };
+}
+
+// backend/src/cli-live.ts
+var CLI_AZURE_TENANT_ENV = "FARSIDE_AZURE_TENANT_ID";
+var CliLiveConfigError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "CliLiveConfigError";
+  }
+};
+function liveRequested(cloud, env) {
+  return cloud === "gcp" ? env.FARSIDE_GCP_LIVE === "1" : env.FARSIDE_AZURE_LIVE === "1";
+}
+async function cliLiveSources(input) {
+  if (!liveRequested(input.cloud, input.env)) {
+    return null;
+  }
+  try {
+    return input.cloud === "gcp" ? gcpSources(input) : await azureSources(input);
+  } catch (error) {
+    if (error instanceof AzureLiveConfigError || error instanceof GcpLiveConfigError) {
+      throw new CliLiveConfigError(error.message);
+    }
+    throw error;
+  }
+}
+async function azureSources(input) {
+  if (!azureLiveConfigFromEnv(input.env)) {
+    return null;
+  }
+  if (!isGuid(input.scope)) {
+    throw new CliLiveConfigError("--scope must be the Azure subscription id (a GUID)");
+  }
+  const tenantId = input.env[CLI_AZURE_TENANT_ENV]?.trim() ?? "";
+  if (!isTenantId(tenantId)) {
+    throw new CliLiveConfigError(
+      `FARSIDE_AZURE_LIVE=1 also needs ${CLI_AZURE_TENANT_ENV} (the tenant GUID or domain)`
+    );
+  }
+  const wiring = azureLiveFromEnv(input.env, {
+    store: input.store,
+    fallback: unconfiguredHarvester(),
+    clock: input.clock,
+    ...input.fetch ? { fetch: input.fetch } : {}
+  });
+  if (!wiring) {
+    return null;
+  }
+  const grantedRoles = await wiring.roleLister.list({
+    tenantId,
+    subscriptionId: input.scope,
+    cloud: "azure"
+  });
+  await input.store.putConnection(input.orgId, {
+    tenantId,
+    subscriptionId: input.scope,
+    cloud: "azure",
+    grantedRoles
+  });
+  return { harvester: wiring.harvester, clients: wiring.harvestClients, grantedRoles };
+}
+var FIXTURE_ONLY_GCP_CHECKS = /* @__PURE__ */ new Map([
+  [GCP_COMMITTED_USE, CUD_EXPORT_CLOSER]
+]);
+function isFailure(entry) {
+  return entry.state !== "assessed" && entry.causeId !== void 0 && entry.causeId !== "not_run";
+}
+function countStates(coverage, scope4) {
+  const own = coverage.filter((entry) => entry.subscriptionOrProject === scope4);
+  const count = (state) => own.filter((entry) => entry.state === state).length;
+  return {
+    assessed: count("assessed"),
+    unassessed: count("unassessed"),
+    undetermined: count("undetermined")
+  };
+}
+function gcpSources(input) {
+  let config;
+  try {
+    config = gcpLiveConfigFromEnv(input.env);
+  } catch (error) {
+    if (error instanceof GcpLiveConfigError) {
+      throw error;
+    }
+    throw new CliLiveConfigError(
+      "the GCP live settings are invalid: check FARSIDE_GCP_PROJECT_ID and FARSIDE_GCP_BILLING_EXPORT_TABLE"
+    );
+  }
+  if (!config) {
+    return null;
+  }
+  if (input.scope !== config.projectId) {
+    throw new CliLiveConfigError(
+      `--scope must be the configured project (${config.projectId}); live GCP reads only that project`
+    );
+  }
+  const clients = gcpLiveClients(config, {
+    ...input.fetch ? { fetch: input.fetch } : {},
+    ...input.readFile ? { readFile: input.readFile } : {},
+    now: () => new Date(input.clock())
+  });
+  let failedRead = null;
+  let harvestCoverage = [];
+  const inner = liveGcpHarvester(clients, input.clock, (fields, message) => {
+    if (fields.event === "gcp.harvest.failed") {
+      failedRead = {
+        name: String(fields.name ?? "Error"),
+        ...typeof fields.status === "number" ? { status: fields.status } : {},
+        ...typeof fields.code === "string" ? { code: fields.code } : {},
+        ...typeof fields.step === "string" ? { step: fields.step } : {}
+      };
+    }
+    input.log?.(fields, message);
+  });
+  const harvester = {
+    async harvest(harvestInput) {
+      const result = await inner.harvest(harvestInput);
+      if (failedRead) {
+        throw new ScanFailedError("gcp cloud asset read failed", [], {
+          cause: Object.assign(new Error("gcp read failed"), failedRead)
+        });
+      }
+      harvestCoverage = result.coverage.filter(isFailure);
+      return result;
+    }
+  };
+  return {
+    harvester,
+    clients: {},
+    finalize(output, scope4, before) {
+      const unassessed = /* @__PURE__ */ new Map();
+      for (const entry of harvestCoverage) {
+        unassessed.set(entry.checkId, entry);
+      }
+      const adjust = new Map(unassessed);
+      for (const [checkId, closer] of FIXTURE_ONLY_GCP_CHECKS) {
+        adjust.set(
+          checkId,
+          recordCoverageScope({
+            subscriptionOrProject: scope4,
+            checkId,
+            state: "unassessed",
+            causeId: "not_run",
+            closer
+          })
+        );
+      }
+      const ownFinding = (finding) => finding.scope.subscriptionOrProject === scope4;
+      const ownIssue = (issue) => issue.subscriptionOrProject === scope4;
+      const dropFinding = (finding) => ownFinding(finding) && adjust.has(finding.checkId);
+      const dropIssue = (issue) => ownIssue(issue) && adjust.has(issue.checkId);
+      const keptFindings = before.findings.filter(
+        (finding) => ownFinding(finding) && unassessed.has(finding.checkId)
+      );
+      const keptIssues = before.issues.filter((issue) => ownIssue(issue) && unassessed.has(issue.checkId)).map((issue) => {
+        if (issue.status === "closed") {
+          return issue;
+        }
+        const entry = unassessed.get(issue.checkId);
+        const { closingScanId: _closing, ...rest } = issue;
+        return {
+          ...rest,
+          status: "not_confirmed",
+          coverage: entry?.state ?? "unassessed",
+          notConfirmedReason: entry?.reason ?? "This scan did not cover the issue scope, so Farside could not confirm it."
+        };
+      });
+      const coverage = [
+        ...output.coverage.filter(
+          (entry) => !(entry.subscriptionOrProject === scope4 && adjust.has(entry.checkId))
+        ),
+        ...adjust.values()
+      ];
+      const adjusted = {
+        findings: [...output.findings.filter((finding) => !dropFinding(finding)), ...keptFindings],
+        issues: [...output.issues.filter((issue) => !dropIssue(issue)), ...keptIssues],
+        coverage
+      };
+      return { output: adjusted, summary: countStates(coverage, scope4) };
+    }
+  };
+}
+function causeChain(error, depth = 6) {
+  const chain = [];
+  let current = error;
+  for (let index = 0; index < depth && current !== void 0 && current !== null; index += 1) {
+    chain.push(errorDetail(current));
+    current = typeof current === "object" ? current.cause : void 0;
+  }
+  return chain;
+}
+function failureSink(write) {
+  return {
+    info: () => void 0,
+    error: (fields) => {
+      const { event, errorCode, err } = fields;
+      if (event === "scan.failed" || event === "scan.execution_failed") {
+        write({ failed: errorCode ?? event, cause: causeChain(err) });
+      }
+    }
   };
 }
 
@@ -5712,8 +8166,8 @@ function nextClaim(current, input) {
 
 // backend/src/store.ts
 var MemoryStore = class {
-  constructor(clock = systemClock) {
-    this.clock = clock;
+  constructor(clock2 = systemClock) {
+    this.clock = clock2;
   }
   clock;
   #orgs = /* @__PURE__ */ new Map();
@@ -6224,8 +8678,9 @@ async function runScan(flags, io) {
     return EXIT_USAGE;
   }
   const dir = resolveWorkspace(flags, io);
-  const clock = io.clock ?? systemClock;
-  if (!flags.fixture) {
+  const clock2 = io.clock ?? systemClock;
+  const liveWanted = !flags.fixture && liveRequested(flags.cloud, io.env ?? process.env);
+  if (!flags.fixture && !liveWanted) {
     const probe = io.probe?.(flags.cloud) ?? probeLocalCredentials(flags.cloud, io.env ?? process.env);
     if (!probe.present) {
       writeLine(stderr, probe.error ?? "signed-in Azure CLI / DefaultAzureCredential or GCP Application Default Credentials required");
@@ -6236,10 +8691,44 @@ async function runScan(flags, io) {
       writeLine(stderr, { missingRoles: gaps });
     }
   }
-  const store = new MemoryStore(clock);
+  const store = new MemoryStore(clock2);
   const state = readWorkspaceState(dir);
+  const holdsLive = state.scans.some((scan) => scan.source === "live");
+  if (liveWanted && state.scans.some((scan) => scan.source !== "live")) {
+    writeLine(stderr, "this workspace holds fixture scans; use a new --workspace for a live scan");
+    return EXIT_FAILED;
+  }
+  if (flags.fixture && holdsLive) {
+    writeLine(stderr, "this workspace holds live scans; use a new --workspace for a fixture scan");
+    return EXIT_FAILED;
+  }
   await restoreWorkspace(store, dir, state);
-  const harvester = flags.fixture ? providerFor(flags.cloud).harvester(clock) : unconfiguredHarvester();
+  let live = null;
+  if (liveWanted) {
+    try {
+      live = await cliLiveSources({
+        cloud: flags.cloud,
+        scope: flags.scope,
+        env: io.env ?? process.env,
+        store,
+        clock: clock2,
+        orgId: CLI_ORG_ID,
+        ...io.liveDeps ?? {},
+        log: (fields, message) => {
+          const { event, projectId, reason, name, status, code, step } = fields;
+          writeLine(stderr, { message, event, projectId, reason, name, status, code, step });
+        }
+      });
+    } catch (error) {
+      writeLine(stderr, error instanceof CliLiveConfigError ? error.message : { failed: "live_setup", cause: causeChain(error) });
+      return EXIT_FAILED;
+    }
+    const gaps = live?.grantedRoles ? missingRoles(flags.cloud, live.grantedRoles) : [];
+    if (gaps.length > 0) {
+      writeLine(stderr, { missingRoles: gaps });
+    }
+  }
+  const harvester = flags.fixture ? providerFor(flags.cloud).harvester(clock2) : live?.harvester ?? unconfiguredHarvester();
   const runner = new ScanRunner(
     store,
     harvester,
@@ -6247,9 +8736,11 @@ async function runScan(flags, io) {
       costClient: fixtureCostClient(),
       commitmentClient: fixtureCommitmentClient(),
       budgetClient: fixtureBudgetClient()
-    } : {},
-    clock
+    } : live?.clients ?? {},
+    clock2,
+    live ? failureSink((fields) => writeLine(stderr, fields)) : void 0
   );
+  const before = live?.finalize ? await store.read(CLI_ORG_ID, "findings", "issues").then((rows) => structuredClone({ findings: asMutable(rows.findings), issues: asMutable(rows.issues) })) : null;
   const { done } = await runner.start({
     orgId: CLI_ORG_ID,
     subscriptionId: flags.scope,
@@ -6271,28 +8762,37 @@ async function runScan(flags, io) {
     "costs"
   );
   const inventory = org.inventories[flags.cloud] ?? org.inventory;
+  const adjusted = live?.finalize?.(
+    {
+      findings: asMutable(org.findings),
+      issues: asMutable(org.issues),
+      coverage: asMutable(org.coverage)
+    },
+    flags.scope,
+    before ?? { findings: [], issues: [] }
+  );
   const nextState = {
     version: 1,
     scans: [
       ...state.scans,
-      { id: job.id, cloud: flags.cloud, scope: flags.scope, status: job.status, finishedAt: job.finishedAt ?? null }
+      { id: job.id, cloud: flags.cloud, scope: flags.scope, status: job.status, finishedAt: job.finishedAt ?? null, ...live ? { source: "live" } : {} }
     ],
     inventories: asMutable(org.inventories),
     costs: asMutable(org.costs)
   };
   mkdirSync(dir, { recursive: true });
   writeWorkspaceFile(dir, WORKSPACE_FILES.state, nextState);
-  writeWorkspaceFile(dir, WORKSPACE_FILES.findings, asMutable(org.findings));
+  writeWorkspaceFile(dir, WORKSPACE_FILES.findings, adjusted ? adjusted.output.findings : asMutable(org.findings));
   writeWorkspaceFile(dir, WORKSPACE_FILES.inventory, asMutable(inventory));
-  writeWorkspaceFile(dir, WORKSPACE_FILES.coverage, asMutable(org.coverage));
-  writeWorkspaceFile(dir, WORKSPACE_FILES.issues, asMutable(org.issues));
+  writeWorkspaceFile(dir, WORKSPACE_FILES.coverage, adjusted ? adjusted.output.coverage : asMutable(org.coverage));
+  writeWorkspaceFile(dir, WORKSPACE_FILES.issues, adjusted ? adjusted.output.issues : asMutable(org.issues));
   writeWorkspaceFile(dir, WORKSPACE_FILES.cost, asMutable(org.cost));
   writeLine(stdout, {
     status: job.status,
     scanId: job.id,
     cloud: flags.cloud,
     scope: flags.scope,
-    coverageSummary: job.coverageSummary
+    coverageSummary: adjusted ? adjusted.summary : job.coverageSummary
   });
   return EXIT_OK;
 }
@@ -6339,9 +8839,9 @@ function runExport(flags, io) {
   const stdout = io.stdout ?? process.stdout;
   const stderr = io.stderr ?? process.stderr;
   const dir = resolveWorkspace(flags, io);
-  const clock = io.clock ?? systemClock;
+  const clock2 = io.clock ?? systemClock;
   try {
-    const { envelopes } = writeExportFiles(dir, clock());
+    const { envelopes } = writeExportFiles(dir, clock2());
     writeLine(
       stdout,
       envelopes.map((envelope) => exportFilename(envelope.kind))
@@ -6356,9 +8856,9 @@ function runReport(flags, io) {
   const stdout = io.stdout ?? process.stdout;
   const stderr = io.stderr ?? process.stderr;
   const dir = resolveWorkspace(flags, io);
-  const clock = io.clock ?? systemClock;
+  const clock2 = io.clock ?? systemClock;
   try {
-    const exportedAt = clock();
+    const exportedAt = clock2();
     const { issues, cost, envelopes } = writeExportFiles(dir, exportedAt);
     const findings = readWorkspaceFile(dir, WORKSPACE_FILES.findings);
     const coverage = readWorkspaceFile(dir, WORKSPACE_FILES.coverage);

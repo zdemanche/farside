@@ -26,6 +26,7 @@ import {
   type CredentialProbe,
   type RoleGap,
 } from "./cli-credentials.js";
+import { CliLiveConfigError, causeChain, cliLiveSources, failureSink, liveRequested, type CliLive } from "./cli-live.js";
 import { ScanRunner, providerFor, unconfiguredHarvester } from "./lib.js";
 import { asMutable } from "./readonly.js";
 import { assertNoSecrets } from "./secrets.js";
@@ -68,7 +69,8 @@ const WORKSPACE_FILES = {
  */
 export type WorkspaceState = {
   version: 1;
-  scans: Array<{ id: string; cloud: Cloud; scope: string; status: string; finishedAt: string | null }>;
+  /** `source: "live"` marks a scan of a real cloud. Fixture scans carry no marker, as before. */
+  scans: Array<{ id: string; cloud: Cloud; scope: string; status: string; finishedAt: string | null; source?: "live" }>;
   inventories: Partial<Record<Cloud, Inventory>>;
   costs: Record<string, CostSnapshot>;
 };
@@ -122,6 +124,8 @@ export type CliIo = {
   env?: NodeJS.Dict<string>;
   probe?: (cloud: Cloud) => CredentialProbe;
   grantedRoles?: readonly string[];
+  /** Test seams for live scanning (a fake network and token file). Production leaves this unset. */
+  liveDeps?: { fetch?: (input: string, init: RequestInit) => Promise<Response>; readFile?: (path: string) => Promise<string> };
 };
 
 type Flags = {
@@ -282,7 +286,9 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
   }
   const dir = resolveWorkspace(flags, io);
   const clock = io.clock ?? systemClock;
-  if (!flags.fixture) {
+  // Live scanning uses federated credentials from the environment, not a local sign-in, so the local probe does not apply.
+  const liveWanted = !flags.fixture && liveRequested(flags.cloud, io.env ?? process.env);
+  if (!flags.fixture && !liveWanted) {
     const probe = io.probe?.(flags.cloud) ?? probeLocalCredentials(flags.cloud, io.env ?? process.env);
     if (!probe.present) {
       writeLine(stderr, probe.error ?? "signed-in Azure CLI / DefaultAzureCredential or GCP Application Default Credentials required");
@@ -295,8 +301,48 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
   }
   const store = new MemoryStore(clock);
   const state = readWorkspaceState(dir);
+  // Fixture and live results must not share a workspace: synthetic issues would sit beside real ones in one report, and a
+  // fixture scan of a real scope would replace its real inventory and close its real issues. Only live scans are marked,
+  // so a workspace that never held one behaves exactly as before.
+  const holdsLive = state.scans.some((scan) => scan.source === "live");
+  if (liveWanted && state.scans.some((scan) => scan.source !== "live")) {
+    writeLine(stderr, "this workspace holds fixture scans; use a new --workspace for a live scan");
+    return EXIT_FAILED;
+  }
+  if (flags.fixture && holdsLive) {
+    writeLine(stderr, "this workspace holds live scans; use a new --workspace for a fixture scan");
+    return EXIT_FAILED;
+  }
   await restoreWorkspace(store, dir, state);
-  const harvester = flags.fixture ? providerFor(flags.cloud).harvester(clock) : unconfiguredHarvester();
+  let live: CliLive | null = null;
+  if (liveWanted) {
+    try {
+      live = await cliLiveSources({
+        cloud: flags.cloud,
+        scope: flags.scope,
+        env: io.env ?? process.env,
+        store,
+        clock,
+        orgId: CLI_ORG_ID,
+        ...(io.liveDeps ?? {}),
+        log: (fields, message) => {
+          // Only these fields are printed, so a field added to the harvester's log later cannot reach stderr by accident.
+          const { event, projectId, reason, name, status, code, step } = fields;
+          writeLine(stderr, { message, event, projectId, reason, name, status, code, step });
+        },
+      });
+    } catch (error) {
+      writeLine(stderr, error instanceof CliLiveConfigError ? error.message : { failed: "live_setup", cause: causeChain(error) });
+      return EXIT_FAILED;
+    }
+    const gaps = live?.grantedRoles ? missingRoles(flags.cloud, live.grantedRoles) : [];
+    if (gaps.length > 0) {
+      writeLine(stderr, { missingRoles: gaps });
+    }
+  }
+  const harvester = flags.fixture
+    ? providerFor(flags.cloud).harvester(clock)
+    : (live?.harvester ?? unconfiguredHarvester());
   const runner = new ScanRunner(
     store,
     harvester,
@@ -306,9 +352,13 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
           commitmentClient: fixtureCommitmentClient(),
           budgetClient: fixtureBudgetClient(),
         }
-      : {},
+      : (live?.clients ?? {}),
     clock,
+    live ? failureSink((fields) => writeLine(stderr, fields)) : undefined,
   );
+  const before = live?.finalize
+    ? await store.read(CLI_ORG_ID, "findings", "issues").then((rows) => structuredClone({ findings: asMutable<Finding[]>(rows.findings), issues: asMutable<StoredIssue[]>(rows.issues) }))
+    : null;
   const { done } = await runner.start({
     orgId: CLI_ORG_ID,
     subscriptionId: flags.scope,
@@ -330,28 +380,37 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
     "costs",
   );
   const inventory = org.inventories[flags.cloud] ?? org.inventory;
+  const adjusted = live?.finalize?.(
+    {
+      findings: asMutable<Finding[]>(org.findings),
+      issues: asMutable<StoredIssue[]>(org.issues),
+      coverage: asMutable<CoverageEntry[]>(org.coverage),
+    },
+    flags.scope,
+    before ?? { findings: [], issues: [] },
+  );
   const nextState: WorkspaceState = {
     version: 1,
     scans: [
       ...state.scans,
-      { id: job.id, cloud: flags.cloud, scope: flags.scope, status: job.status, finishedAt: job.finishedAt ?? null },
+      { id: job.id, cloud: flags.cloud, scope: flags.scope, status: job.status, finishedAt: job.finishedAt ?? null, ...(live ? { source: "live" as const } : {}) },
     ],
     inventories: asMutable<WorkspaceState["inventories"]>(org.inventories),
     costs: asMutable<WorkspaceState["costs"]>(org.costs),
   };
   mkdirSync(dir, { recursive: true });
   writeWorkspaceFile(dir, WORKSPACE_FILES.state, nextState);
-  writeWorkspaceFile(dir, WORKSPACE_FILES.findings, asMutable(org.findings));
+  writeWorkspaceFile(dir, WORKSPACE_FILES.findings, adjusted ? adjusted.output.findings : asMutable(org.findings));
   writeWorkspaceFile(dir, WORKSPACE_FILES.inventory, asMutable(inventory));
-  writeWorkspaceFile(dir, WORKSPACE_FILES.coverage, asMutable(org.coverage));
-  writeWorkspaceFile(dir, WORKSPACE_FILES.issues, asMutable(org.issues));
+  writeWorkspaceFile(dir, WORKSPACE_FILES.coverage, adjusted ? adjusted.output.coverage : asMutable(org.coverage));
+  writeWorkspaceFile(dir, WORKSPACE_FILES.issues, adjusted ? adjusted.output.issues : asMutable(org.issues));
   writeWorkspaceFile(dir, WORKSPACE_FILES.cost, asMutable(org.cost));
   writeLine(stdout, {
     status: job.status,
     scanId: job.id,
     cloud: flags.cloud,
     scope: flags.scope,
-    coverageSummary: job.coverageSummary,
+    coverageSummary: adjusted ? adjusted.summary : job.coverageSummary,
   });
   return EXIT_OK;
 }
