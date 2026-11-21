@@ -1,10 +1,14 @@
 import type { Clock } from "./clock.js";
+import type { Finding } from "@farside/scan-contracts";
+import { recordCoverageScope, type CoverageEntry } from "./coverage.js";
+import { CUD_EXPORT_CLOSER, GCP_COMMITTED_USE } from "./gcp-commitments.js";
+import type { StoredIssue } from "./issues.js";
 import {
   azureLiveConfigFromEnv,
   azureLiveFromEnv,
   AzureLiveConfigError,
 } from "./azure-live-harvest.js";
-import { isTenantId } from "./azure-federated.js";
+import { isGuid, isTenantId } from "./azure-federated.js";
 import type { FetchLike } from "./azure-live.js";
 import { errorDetail, type ErrorDetail } from "./error-detail.js";
 import {
@@ -17,6 +21,7 @@ import type { LogSink } from "./observability.js";
 import type { Harvester } from "./providers/types.js";
 import type { OrgRepository } from "./repository.js";
 import {
+  ScanFailedError,
   unconfiguredHarvester,
   type HarvestClientSource,
   type ScanHarvestClients,
@@ -36,11 +41,22 @@ export class CliLiveConfigError extends Error {
   }
 }
 
+/** What a scan saves. Live GCP adjusts it so the saved result says only what was really assessed. */
+export type ScanOutput = { findings: Finding[]; issues: StoredIssue[]; coverage: CoverageEntry[] };
+
 export type CliLive = {
   harvester: Harvester;
   clients: ScanHarvestClients | HarvestClientSource;
   /** Roles the scan identity holds on the scope, when the cloud can list them. Undefined when it cannot. */
   grantedRoles?: readonly string[];
+  /** Returns the output to save, and the coverage counts to print. Absent when the scan result needs no adjusting. */
+  finalize?: (
+    output: ScanOutput,
+    scope: string,
+  ) => {
+    output: ScanOutput;
+    summary: { assessed: number; unassessed: number; undetermined: number };
+  };
 };
 
 /** True when live scanning is switched on for this cloud, whether or not the rest of its configuration is valid. */
@@ -80,6 +96,9 @@ async function azureSources(input: CliLiveInput): Promise<CliLive | null> {
   if (!azureLiveConfigFromEnv(input.env)) {
     return null;
   }
+  if (!isGuid(input.scope)) {
+    throw new CliLiveConfigError("--scope must be the Azure subscription id (a GUID)");
+  }
   const tenantId = input.env[CLI_AZURE_TENANT_ENV]?.trim() ?? "";
   if (!isTenantId(tenantId)) {
     throw new CliLiveConfigError(
@@ -109,8 +128,39 @@ async function azureSources(input: CliLiveInput): Promise<CliLive | null> {
   return { harvester: wiring.harvester, clients: wiring.harvestClients, grantedRoles };
 }
 
+/** Checks whose registered implementation reads fixture data, so they must not report on a real project. */
+const FIXTURE_ONLY_GCP_CHECKS: ReadonlyMap<string, string> = new Map([
+  [GCP_COMMITTED_USE, CUD_EXPORT_CLOSER],
+]);
+
+/** A harvest failure that is a real cause, not just "this check is not run by the harvest". */
+function isFailure(entry: CoverageEntry): boolean {
+  return entry.state !== "assessed" && entry.causeId !== undefined && entry.causeId !== "not_run";
+}
+
+function countStates(coverage: readonly CoverageEntry[], scope: string) {
+  const own = coverage.filter((entry) => entry.subscriptionOrProject === scope);
+  const count = (state: CoverageEntry["state"]) =>
+    own.filter((entry) => entry.state === state).length;
+  return {
+    assessed: count("assessed"),
+    unassessed: count("unassessed"),
+    undetermined: count("undetermined"),
+  };
+}
+
 function gcpSources(input: CliLiveInput): CliLive | null {
-  const config = gcpLiveConfigFromEnv(input.env);
+  let config;
+  try {
+    config = gcpLiveConfigFromEnv(input.env);
+  } catch (error) {
+    if (error instanceof GcpLiveConfigError) {
+      throw error;
+    }
+    throw new CliLiveConfigError(
+      "the GCP live settings are invalid: check FARSIDE_GCP_PROJECT_ID and FARSIDE_GCP_BILLING_EXPORT_TABLE",
+    );
+  }
   if (!config) {
     return null;
   }
@@ -125,9 +175,66 @@ function gcpSources(input: CliLiveInput): CliLive | null {
     ...(input.readFile ? { readFile: input.readFile } : {}),
     now: () => new Date(input.clock()),
   });
+  let failedRead: ErrorDetail | null = null;
+  let harvestCoverage: CoverageEntry[] = [];
+  const inner = liveGcpHarvester(clients, input.clock, (fields, message) => {
+    if (fields.event === "gcp.harvest.failed") {
+      failedRead = {
+        name: String(fields.name ?? "Error"),
+        ...(typeof fields.status === "number" ? { status: fields.status } : {}),
+        ...(typeof fields.code === "string" ? { code: fields.code } : {}),
+        ...(typeof fields.step === "string" ? { step: fields.step } : {}),
+      };
+    }
+    input.log?.(fields, message);
+  });
+  const harvester: Harvester = {
+    async harvest(harvestInput) {
+      const result = await inner.harvest(harvestInput);
+      if (failedRead) {
+        // The harvest reads as an empty, undetermined project. Saved as a scan it would show nothing and close every
+        // earlier issue, so fail the scan and keep its cause instead.
+        throw new ScanFailedError("gcp cloud asset read failed", [], {
+          cause: Object.assign(new Error("gcp read failed"), failedRead),
+        });
+      }
+      harvestCoverage = result.coverage.filter(isFailure);
+      return result;
+    },
+  };
   return {
-    harvester: liveGcpHarvester(clients, input.clock, input.log),
+    harvester,
     clients: {},
+    finalize(output, scope) {
+      const adjust = new Map<string, CoverageEntry>();
+      for (const entry of harvestCoverage) {
+        adjust.set(entry.checkId, entry);
+      }
+      for (const [checkId, closer] of FIXTURE_ONLY_GCP_CHECKS) {
+        adjust.set(
+          checkId,
+          recordCoverageScope({
+            subscriptionOrProject: scope,
+            checkId,
+            state: "unassessed",
+            causeId: "not_run",
+            closer,
+          }),
+        );
+      }
+      const coverage = [
+        ...output.coverage.filter(
+          (entry) => !(entry.subscriptionOrProject === scope && adjust.has(entry.checkId)),
+        ),
+        ...adjust.values(),
+      ];
+      const adjusted: ScanOutput = {
+        findings: output.findings.filter((finding) => !adjust.has(finding.checkId)),
+        issues: output.issues.filter((issue) => !adjust.has(issue.checkId)),
+        coverage,
+      };
+      return { output: adjusted, summary: countStates(coverage, scope) };
+    },
   };
 }
 

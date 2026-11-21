@@ -1,7 +1,10 @@
-import { existsSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import manifestJson from "../../docs/gcp/ground-truth.json" with { type: "json" };
+import { fixtureAssetsFromManifest } from "./cloud-asset.js";
+import type { GcpGroundTruthManifest } from "./gcp-inventory.js";
 import {
   FAKE_CLIENT_ID,
   FAKE_SUBSCRIPTIONS,
@@ -42,6 +45,8 @@ function capture() {
 }
 
 const azureEnv = (extra: Record<string, string> = {}) => ({
+  // An empty home, so a ~/.azure on the machine running the tests cannot stand in for the live credentials.
+  HOME: tmp("farside-cli-home-"),
   FARSIDE_AZURE_LIVE: "1",
   FARSIDE_AZURE_CLIENT_ID: FAKE_CLIENT_ID,
   AWS_WEB_IDENTITY_TOKEN_FILE: assertionFile(),
@@ -204,17 +209,292 @@ describe("farside CLI: a live GCP scan", () => {
     expect(calls).toBe(0);
   });
 
-  it("reports a refused federation with its step and status, and never the token", async () => {
-    const { io, run } = gcpScan("farside-test", async () =>
+  it("fails the scan on a refused federation: exit 1, the cause named, and the workspace left untouched", async () => {
+    const { io, dir, run } = gcpScan("farside-test", async () =>
       Response.json({ error: "invalid_target" }, { status: 400 }),
     );
-    await run();
+    // An earlier live scan with an open issue. A refused read must not close it or empty the findings.
+    const prior = {
+      "state.json": JSON.stringify({
+        version: 1,
+        scans: [
+          {
+            id: "scan-1",
+            cloud: "gcp",
+            scope: "farside-test",
+            status: "succeeded",
+            finishedAt: null,
+            source: "live",
+          },
+        ],
+        inventories: {},
+        costs: {},
+      }),
+      "issues.json": JSON.stringify([
+        { id: "i-1", checkId: "gcp-waste-unattached-disks", status: "open" },
+      ]),
+      "findings.json": JSON.stringify([{ checkId: "gcp-waste-unattached-disks", result: "fail" }]),
+    };
+    for (const [name, text] of Object.entries(prior)) {
+      writeFileSync(join(dir, name), text);
+    }
+    expect(await run()).toBe(EXIT_FAILED);
     expect(io.err()).toContain("gcp harvest failed");
-    expect(io.err()).toContain("GcpFederationError");
-    expect(io.err()).toContain('"step":"sts"');
+    expect(io.err()).toContain('"failed":"harvest_failed"');
+    const chain = io
+      .err()
+      .split("\n")
+      .filter(Boolean)
+      .flatMap((line) => {
+        try {
+          return [
+            JSON.parse(line) as { cause?: Array<{ name: string; status?: number; step?: string }> },
+          ];
+        } catch {
+          return [];
+        }
+      })
+      .find((line) => line.cause !== undefined);
+    expect(chain?.cause?.map((item) => item.name)).toEqual([
+      "ScanFailedError",
+      "GcpFederationError",
+    ]);
+    expect(chain?.cause?.at(-1)).toMatchObject({ status: 400, step: "sts" });
+    expect(io.out()).toBe("");
+    for (const [name, text] of Object.entries(prior)) {
+      expect(readFileSync(join(dir, name), "utf8")).toBe(text);
+    }
     for (const secret of ["SECRET-OIDC-TOKEN", "invalid_target"]) {
       expect(io.out() + io.err()).not.toContain(secret);
     }
+  });
+
+  describe("a successful scan of a seeded project", () => {
+    const assets = fixtureAssetsFromManifest(manifestJson as GcpGroundTruthManifest).filter(
+      (asset) => asset.id !== "gke-stale" && !asset.assetType.startsWith("recommender"),
+    );
+    const fetch = async (url: string) => {
+      if (url.startsWith("https://sts.googleapis.com/")) {
+        return Response.json({ access_token: "federated" });
+      }
+      if (url.startsWith("https://iamcredentials.googleapis.com/")) {
+        return Response.json({ accessToken: "impersonated", expireTime: "2026-12-01T10:00:00Z" });
+      }
+      if (url.startsWith("https://cloudasset.googleapis.com/")) {
+        const type = new URL(url).searchParams.get("assetTypes");
+        return Response.json({
+          assets: assets
+            .filter((asset) => asset.assetType === type)
+            .map((asset) => ({
+              name: asset.name,
+              assetType: asset.assetType,
+              resource: { location: asset.location, data: { labels: asset.labels } },
+            })),
+        });
+      }
+      if (url.startsWith("https://recommender.googleapis.com/")) {
+        return Response.json({}, { status: 403 }); // Recommender Viewer is not granted
+      }
+      return Response.json({});
+    };
+
+    it("writes a marked live scan, and says nothing about the committed-use check it cannot assess", async () => {
+      const { io, dir, run } = gcpScan("farside-test", fetch);
+      expect(await run()).toBe(EXIT_OK);
+      const findings = JSON.parse(readFileSync(join(dir, "findings.json"), "utf8")) as Array<{
+        checkId: string;
+      }>;
+      const coverage = JSON.parse(readFileSync(join(dir, "coverage.json"), "utf8")) as Array<{
+        checkId: string;
+        state: string;
+        causeId?: string;
+        closer?: string;
+      }>;
+      const issues = JSON.parse(readFileSync(join(dir, "issues.json"), "utf8")) as Array<{
+        checkId: string;
+      }>;
+      // The registered committed-use check reads fixture commitments for any project, so nothing from it may be saved.
+      expect(findings.some((finding) => finding.checkId === "gcp-cost-committed-use")).toBe(false);
+      expect(issues.some((issue) => issue.checkId === "gcp-cost-committed-use")).toBe(false);
+      expect(coverage.find((entry) => entry.checkId === "gcp-cost-committed-use")).toMatchObject({
+        state: "unassessed",
+        causeId: "not_run",
+        closer: "Enable the BigQuery billing export",
+      });
+      // The Recommender read was refused, so the idle check is unassessed for a named reason, not "assessed, none found".
+      expect(
+        coverage.find((entry) => entry.checkId === "gcp-waste-idle-vm-and-disk-recommendations"),
+      ).toMatchObject({
+        state: "unassessed",
+        causeId: "missing_role",
+      });
+      expect(
+        findings.some(
+          (finding) => finding.checkId === "gcp-waste-idle-vm-and-disk-recommendations",
+        ),
+      ).toBe(false);
+      // The checks that really ran on the live read still report.
+      // The mocked asset bodies carry no disk properties, so that check is undetermined, and stays undetermined.
+      expect(coverage.find((entry) => entry.checkId === "gcp-waste-unattached-disks")?.state).toBe(
+        "undetermined",
+      );
+      const state = JSON.parse(readFileSync(join(dir, "state.json"), "utf8")) as {
+        scans: Array<{ source?: string }>;
+      };
+      expect(state.scans.map((scan) => scan.source)).toEqual(["live"]);
+      const printed = JSON.parse(io.out()) as {
+        coverageSummary: { assessed: number; unassessed: number };
+      };
+      expect(printed.coverageSummary.unassessed).toBeGreaterThanOrEqual(2);
+      expect(io.out() + io.err()).not.toContain("SECRET-OIDC-TOKEN");
+    });
+  });
+
+  it("names invalid GCP settings with a fixed message, not an opaque failure", async () => {
+    const io = capture();
+    const code = await runCli(
+      ["scan", "--cloud", "gcp", "--scope", "farside-test", "--workspace", tmp("farside-cli-ws-")],
+      {
+        ...io,
+        env: { ...gcpEnv, FARSIDE_GCP_PROJECT_ID: "Bad_Project!" },
+        clock,
+        liveDeps: { fetch: async () => Response.json({}), readFile: async () => "x" },
+      },
+    );
+    expect(code).toBe(EXIT_FAILED);
+    expect(io.err()).toContain("FARSIDE_GCP_PROJECT_ID");
+    expect(io.err()).not.toContain("live_setup");
+    expect(io.err()).not.toContain("Bad_Project!");
+  });
+});
+
+describe("farside CLI: fixture and live scans never share a workspace", () => {
+  const SCOPE_ARGS = ["--cloud", "azure", "--scope", SUBSCRIPTION];
+
+  it("refuses a live scan into a workspace that holds a fixture scan, and leaves it untouched", async () => {
+    const dir = tmp("farside-cli-ws-");
+    const fixture = capture();
+    expect(
+      await runCli(["scan", ...SCOPE_ARGS, "--fixture", "--workspace", dir], { ...fixture, clock }),
+    ).toBe(EXIT_OK);
+    const before = readFileSync(join(dir, "state.json"), "utf8");
+    expect(
+      JSON.parse(before).scans.every((scan: { source?: string }) => scan.source === undefined),
+    ).toBe(true);
+
+    const azure = fakeAzure({ now: () => new Date(NOW) });
+    const live = capture();
+    const code = await runCli(["scan", ...SCOPE_ARGS, "--workspace", dir], {
+      ...live,
+      env: azureEnv(),
+      clock,
+      liveDeps: { fetch: azure.fetch },
+    });
+    expect(code).toBe(EXIT_FAILED);
+    expect(live.err()).toContain("holds fixture scans");
+    expect(azure.calls).toEqual([]);
+    expect(readFileSync(join(dir, "state.json"), "utf8")).toBe(before);
+  });
+
+  it("refuses a fixture scan into a workspace that holds a live scan, and keeps the real issues open", async () => {
+    const { azure, dir, run } = azureScan();
+    expect(await run()).toBe(EXIT_OK);
+    expect(
+      JSON.parse(readFileSync(join(dir, "state.json"), "utf8")).scans.map(
+        (scan: { source?: string }) => scan.source,
+      ),
+    ).toEqual(["live"]);
+    const before = {
+      state: readFileSync(join(dir, "state.json"), "utf8"),
+      issues: readFileSync(join(dir, "issues.json"), "utf8"),
+    };
+    const fixture = capture();
+    expect(
+      await runCli(["scan", ...SCOPE_ARGS, "--fixture", "--workspace", dir], { ...fixture, clock }),
+    ).toBe(EXIT_FAILED);
+    expect(fixture.err()).toContain("holds live scans");
+    expect(readFileSync(join(dir, "state.json"), "utf8")).toBe(before.state);
+    expect(readFileSync(join(dir, "issues.json"), "utf8")).toBe(before.issues);
+    expect(azure.tokensIssued()).toBeGreaterThan(0);
+  });
+
+  it("allows a second live scan into a live workspace", async () => {
+    const { dir, run } = azureScan();
+    expect(await run()).toBe(EXIT_OK);
+    expect(await run()).toBe(EXIT_OK);
+    expect(
+      JSON.parse(readFileSync(join(dir, "state.json"), "utf8")).scans.map(
+        (scan: { source?: string }) => scan.source,
+      ),
+    ).toEqual(["live", "live"]);
+  });
+});
+
+describe("farside CLI: the switches change nothing unless a live scan is asked for", () => {
+  it("a fixture scan with a switch set makes no network call and keeps the fixture path", async () => {
+    let calls = 0;
+    const io = capture();
+    const code = await runCli(
+      [
+        "scan",
+        "--cloud",
+        "azure",
+        "--scope",
+        SUBSCRIPTION,
+        "--fixture",
+        "--workspace",
+        tmp("farside-cli-ws-"),
+      ],
+      {
+        ...io,
+        env: azureEnv(),
+        clock,
+        liveDeps: {
+          fetch: async () => {
+            calls += 1;
+            return Response.json({});
+          },
+        },
+      },
+    );
+    expect(code).toBe(EXIT_OK);
+    expect(calls).toBe(0);
+    expect(JSON.parse(io.out())).toMatchObject({ status: "succeeded" });
+  });
+
+  it("a scan with no switch and no --fixture prints exactly the lines it printed before, and no live output", async () => {
+    const io = capture();
+    const code = await runCli(
+      ["scan", "--cloud", "azure", "--scope", SUBSCRIPTION, "--workspace", tmp("farside-cli-ws-")],
+      {
+        ...io,
+        env: {},
+        clock,
+        probe: () => ({ present: true, source: "environment" }),
+      },
+    );
+    expect(code).toBe(EXIT_FAILED);
+    const lines = io.err().split("\n").filter(Boolean);
+    expect(lines.at(-1)).toBe("No cloud provider is configured");
+    expect(lines.slice(0, -1).every((line) => line.startsWith('{"missingRoles"'))).toBe(true);
+    expect(io.err()).not.toContain("failed");
+    expect(io.err()).not.toContain("live_setup");
+  });
+
+  it("an Azure scope that is not a subscription id gets a fixed message", async () => {
+    const io = capture();
+    const code = await runCli(
+      ["scan", "--cloud", "azure", "--scope", "not-a-guid", "--workspace", tmp("farside-cli-ws-")],
+      {
+        ...io,
+        env: azureEnv(),
+        clock,
+        liveDeps: { fetch: async () => Response.json({}) },
+      },
+    );
+    expect(code).toBe(EXIT_FAILED);
+    expect(io.err()).toContain("subscription id");
+    expect(io.err()).not.toContain("live_setup");
   });
 });
 

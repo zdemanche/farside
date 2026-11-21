@@ -7953,6 +7953,9 @@ async function azureSources(input) {
   if (!azureLiveConfigFromEnv(input.env)) {
     return null;
   }
+  if (!isGuid(input.scope)) {
+    throw new CliLiveConfigError("--scope must be the Azure subscription id (a GUID)");
+  }
   const tenantId = input.env[CLI_AZURE_TENANT_ENV]?.trim() ?? "";
   if (!isTenantId(tenantId)) {
     throw new CliLiveConfigError(
@@ -7981,8 +7984,33 @@ async function azureSources(input) {
   });
   return { harvester: wiring.harvester, clients: wiring.harvestClients, grantedRoles };
 }
+var FIXTURE_ONLY_GCP_CHECKS = /* @__PURE__ */ new Map([
+  [GCP_COMMITTED_USE, CUD_EXPORT_CLOSER]
+]);
+function isFailure(entry) {
+  return entry.state !== "assessed" && entry.causeId !== void 0 && entry.causeId !== "not_run";
+}
+function countStates(coverage, scope4) {
+  const own = coverage.filter((entry) => entry.subscriptionOrProject === scope4);
+  const count = (state) => own.filter((entry) => entry.state === state).length;
+  return {
+    assessed: count("assessed"),
+    unassessed: count("unassessed"),
+    undetermined: count("undetermined")
+  };
+}
 function gcpSources(input) {
-  const config = gcpLiveConfigFromEnv(input.env);
+  let config;
+  try {
+    config = gcpLiveConfigFromEnv(input.env);
+  } catch (error) {
+    if (error instanceof GcpLiveConfigError) {
+      throw error;
+    }
+    throw new CliLiveConfigError(
+      "the GCP live settings are invalid: check FARSIDE_GCP_PROJECT_ID and FARSIDE_GCP_BILLING_EXPORT_TABLE"
+    );
+  }
   if (!config) {
     return null;
   }
@@ -7996,9 +8024,64 @@ function gcpSources(input) {
     ...input.readFile ? { readFile: input.readFile } : {},
     now: () => new Date(input.clock())
   });
+  let failedRead = null;
+  let harvestCoverage = [];
+  const inner = liveGcpHarvester(clients, input.clock, (fields, message) => {
+    if (fields.event === "gcp.harvest.failed") {
+      failedRead = {
+        name: String(fields.name ?? "Error"),
+        ...typeof fields.status === "number" ? { status: fields.status } : {},
+        ...typeof fields.code === "string" ? { code: fields.code } : {},
+        ...typeof fields.step === "string" ? { step: fields.step } : {}
+      };
+    }
+    input.log?.(fields, message);
+  });
+  const harvester = {
+    async harvest(harvestInput) {
+      const result = await inner.harvest(harvestInput);
+      if (failedRead) {
+        throw new ScanFailedError("gcp cloud asset read failed", [], {
+          cause: Object.assign(new Error("gcp read failed"), failedRead)
+        });
+      }
+      harvestCoverage = result.coverage.filter(isFailure);
+      return result;
+    }
+  };
   return {
-    harvester: liveGcpHarvester(clients, input.clock, input.log),
-    clients: {}
+    harvester,
+    clients: {},
+    finalize(output, scope4) {
+      const adjust = /* @__PURE__ */ new Map();
+      for (const entry of harvestCoverage) {
+        adjust.set(entry.checkId, entry);
+      }
+      for (const [checkId, closer] of FIXTURE_ONLY_GCP_CHECKS) {
+        adjust.set(
+          checkId,
+          recordCoverageScope({
+            subscriptionOrProject: scope4,
+            checkId,
+            state: "unassessed",
+            causeId: "not_run",
+            closer
+          })
+        );
+      }
+      const coverage = [
+        ...output.coverage.filter(
+          (entry) => !(entry.subscriptionOrProject === scope4 && adjust.has(entry.checkId))
+        ),
+        ...adjust.values()
+      ];
+      const adjusted = {
+        findings: output.findings.filter((finding) => !adjust.has(finding.checkId)),
+        issues: output.issues.filter((issue) => !adjust.has(issue.checkId)),
+        coverage
+      };
+      return { output: adjusted, summary: countStates(coverage, scope4) };
+    }
   };
 }
 function causeChain(error, depth = 6) {
@@ -8589,6 +8672,15 @@ async function runScan(flags, io) {
   }
   const store = new MemoryStore(clock2);
   const state = readWorkspaceState(dir);
+  const holdsLive = state.scans.some((scan) => scan.source === "live");
+  if (liveWanted && state.scans.some((scan) => scan.source !== "live")) {
+    writeLine(stderr, "this workspace holds fixture scans; use a new --workspace for a live scan");
+    return EXIT_FAILED;
+  }
+  if (flags.fixture && holdsLive) {
+    writeLine(stderr, "this workspace holds live scans; use a new --workspace for a fixture scan");
+    return EXIT_FAILED;
+  }
   await restoreWorkspace(store, dir, state);
   let live = null;
   if (liveWanted) {
@@ -8645,28 +8737,36 @@ async function runScan(flags, io) {
     "costs"
   );
   const inventory = org.inventories[flags.cloud] ?? org.inventory;
+  const adjusted = live?.finalize?.(
+    {
+      findings: asMutable(org.findings),
+      issues: asMutable(org.issues),
+      coverage: asMutable(org.coverage)
+    },
+    flags.scope
+  );
   const nextState = {
     version: 1,
     scans: [
       ...state.scans,
-      { id: job.id, cloud: flags.cloud, scope: flags.scope, status: job.status, finishedAt: job.finishedAt ?? null }
+      { id: job.id, cloud: flags.cloud, scope: flags.scope, status: job.status, finishedAt: job.finishedAt ?? null, ...live ? { source: "live" } : {} }
     ],
     inventories: asMutable(org.inventories),
     costs: asMutable(org.costs)
   };
   mkdirSync(dir, { recursive: true });
   writeWorkspaceFile(dir, WORKSPACE_FILES.state, nextState);
-  writeWorkspaceFile(dir, WORKSPACE_FILES.findings, asMutable(org.findings));
+  writeWorkspaceFile(dir, WORKSPACE_FILES.findings, adjusted ? adjusted.output.findings : asMutable(org.findings));
   writeWorkspaceFile(dir, WORKSPACE_FILES.inventory, asMutable(inventory));
-  writeWorkspaceFile(dir, WORKSPACE_FILES.coverage, asMutable(org.coverage));
-  writeWorkspaceFile(dir, WORKSPACE_FILES.issues, asMutable(org.issues));
+  writeWorkspaceFile(dir, WORKSPACE_FILES.coverage, adjusted ? adjusted.output.coverage : asMutable(org.coverage));
+  writeWorkspaceFile(dir, WORKSPACE_FILES.issues, adjusted ? adjusted.output.issues : asMutable(org.issues));
   writeWorkspaceFile(dir, WORKSPACE_FILES.cost, asMutable(org.cost));
   writeLine(stdout, {
     status: job.status,
     scanId: job.id,
     cloud: flags.cloud,
     scope: flags.scope,
-    coverageSummary: job.coverageSummary
+    coverageSummary: adjusted ? adjusted.summary : job.coverageSummary
   });
   return EXIT_OK;
 }
