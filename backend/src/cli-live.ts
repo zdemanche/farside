@@ -49,10 +49,14 @@ export type CliLive = {
   clients: ScanHarvestClients | HarvestClientSource;
   /** Roles the scan identity holds on the scope, when the cloud can list them. Undefined when it cannot. */
   grantedRoles?: readonly string[];
-  /** Returns the output to save, and the coverage counts to print. Absent when the scan result needs no adjusting. */
+  /**
+   * Returns the output to save, and the coverage counts to print. `before` is what the workspace held before this scan.
+   * Absent when the scan result needs no adjusting.
+   */
   finalize?: (
     output: ScanOutput,
     scope: string,
+    before: Pick<ScanOutput, "findings" | "issues">,
   ) => {
     output: ScanOutput;
     summary: { assessed: number; unassessed: number; undetermined: number };
@@ -205,11 +209,15 @@ function gcpSources(input: CliLiveInput): CliLive | null {
   return {
     harvester,
     clients: {},
-    finalize(output, scope) {
-      const adjust = new Map<string, CoverageEntry>();
+    finalize(output, scope, before) {
+      // Fixture-only checks never report on a real project, so nothing of theirs is kept. Harvest-failure checks could not
+      // be assessed this scan, so what an earlier scan found for them is kept exactly as it was, not closed and not dropped.
+      const fixtureOnly = new Set(FIXTURE_ONLY_GCP_CHECKS.keys());
+      const unassessed = new Map<string, CoverageEntry>();
       for (const entry of harvestCoverage) {
-        adjust.set(entry.checkId, entry);
+        unassessed.set(entry.checkId, entry);
       }
+      const adjust = new Map(unassessed);
       for (const [checkId, closer] of FIXTURE_ONLY_GCP_CHECKS) {
         adjust.set(
           checkId,
@@ -222,6 +230,21 @@ function gcpSources(input: CliLiveInput): CliLive | null {
           }),
         );
       }
+      // Only rows of the scanned project are touched. Another project in the same workspace keeps everything it had.
+      const ownFinding = (finding: Finding) => finding.scope.subscriptionOrProject === scope;
+      const ownIssue = (issue: StoredIssue) => issue.subscriptionOrProject === scope;
+      const dropFinding = (finding: Finding) => ownFinding(finding) && adjust.has(finding.checkId);
+      const dropIssue = (issue: StoredIssue) => ownIssue(issue) && adjust.has(issue.checkId);
+      const keptFindings = before.findings.filter(
+        (finding) =>
+          ownFinding(finding) &&
+          unassessed.has(finding.checkId) &&
+          !fixtureOnly.has(finding.checkId),
+      );
+      const keptIssues = before.issues.filter(
+        (issue) =>
+          ownIssue(issue) && unassessed.has(issue.checkId) && !fixtureOnly.has(issue.checkId),
+      );
       const coverage = [
         ...output.coverage.filter(
           (entry) => !(entry.subscriptionOrProject === scope && adjust.has(entry.checkId)),
@@ -229,8 +252,8 @@ function gcpSources(input: CliLiveInput): CliLive | null {
         ...adjust.values(),
       ];
       const adjusted: ScanOutput = {
-        findings: output.findings.filter((finding) => !adjust.has(finding.checkId)),
-        issues: output.issues.filter((issue) => !adjust.has(issue.checkId)),
+        findings: [...output.findings.filter((finding) => !dropFinding(finding)), ...keptFindings],
+        issues: [...output.issues.filter((issue) => !dropIssue(issue)), ...keptIssues],
         coverage,
       };
       return { output: adjusted, summary: countStates(coverage, scope) };

@@ -8052,11 +8052,13 @@ function gcpSources(input) {
   return {
     harvester,
     clients: {},
-    finalize(output, scope4) {
-      const adjust = /* @__PURE__ */ new Map();
+    finalize(output, scope4, before) {
+      const fixtureOnly = new Set(FIXTURE_ONLY_GCP_CHECKS.keys());
+      const unassessed = /* @__PURE__ */ new Map();
       for (const entry of harvestCoverage) {
-        adjust.set(entry.checkId, entry);
+        unassessed.set(entry.checkId, entry);
       }
+      const adjust = new Map(unassessed);
       for (const [checkId, closer] of FIXTURE_ONLY_GCP_CHECKS) {
         adjust.set(
           checkId,
@@ -8069,6 +8071,16 @@ function gcpSources(input) {
           })
         );
       }
+      const ownFinding = (finding) => finding.scope.subscriptionOrProject === scope4;
+      const ownIssue = (issue) => issue.subscriptionOrProject === scope4;
+      const dropFinding = (finding) => ownFinding(finding) && adjust.has(finding.checkId);
+      const dropIssue = (issue) => ownIssue(issue) && adjust.has(issue.checkId);
+      const keptFindings = before.findings.filter(
+        (finding) => ownFinding(finding) && unassessed.has(finding.checkId) && !fixtureOnly.has(finding.checkId)
+      );
+      const keptIssues = before.issues.filter(
+        (issue) => ownIssue(issue) && unassessed.has(issue.checkId) && !fixtureOnly.has(issue.checkId)
+      );
       const coverage = [
         ...output.coverage.filter(
           (entry) => !(entry.subscriptionOrProject === scope4 && adjust.has(entry.checkId))
@@ -8076,8 +8088,8 @@ function gcpSources(input) {
         ...adjust.values()
       ];
       const adjusted = {
-        findings: output.findings.filter((finding) => !adjust.has(finding.checkId)),
-        issues: output.issues.filter((issue) => !adjust.has(issue.checkId)),
+        findings: [...output.findings.filter((finding) => !dropFinding(finding)), ...keptFindings],
+        issues: [...output.issues.filter((issue) => !dropIssue(issue)), ...keptIssues],
         coverage
       };
       return { output: adjusted, summary: countStates(coverage, scope4) };
@@ -8693,7 +8705,10 @@ async function runScan(flags, io) {
         clock: clock2,
         orgId: CLI_ORG_ID,
         ...io.liveDeps ?? {},
-        log: (fields, message) => writeLine(stderr, { message, ...fields })
+        log: (fields, message) => {
+          const { event, projectId, reason, name, status, code, step } = fields;
+          writeLine(stderr, { message, event, projectId, reason, name, status, code, step });
+        }
       });
     } catch (error) {
       writeLine(stderr, error instanceof CliLiveConfigError ? error.message : { failed: "live_setup", cause: causeChain(error) });
@@ -8716,6 +8731,7 @@ async function runScan(flags, io) {
     clock2,
     live ? failureSink((fields) => writeLine(stderr, fields)) : void 0
   );
+  const before = live?.finalize ? await store.read(CLI_ORG_ID, "findings", "issues").then((rows) => structuredClone({ findings: asMutable(rows.findings), issues: asMutable(rows.issues) })) : null;
   const { done } = await runner.start({
     orgId: CLI_ORG_ID,
     subscriptionId: flags.scope,
@@ -8743,7 +8759,8 @@ async function runScan(flags, io) {
       issues: asMutable(org.issues),
       coverage: asMutable(org.coverage)
     },
-    flags.scope
+    flags.scope,
+    before ?? { findings: [], issues: [] }
   );
   const nextState = {
     version: 1,

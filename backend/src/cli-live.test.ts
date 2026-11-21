@@ -15,6 +15,7 @@ import {
 } from "./azure-fake.js";
 import { EXIT_FAILED, EXIT_OK, runCli } from "./cli.js";
 import { causeChain, liveRequested } from "./cli-live.js";
+import { issueIdentity, resourceIdFromFinding } from "./issues.js";
 import { FederatedExchangeError } from "./azure-federated.js";
 import { GcpFederationError } from "./gcp-federation.js";
 
@@ -348,7 +349,176 @@ describe("farside CLI: a live GCP scan", () => {
       expect(printed.coverageSummary.unassessed).toBeGreaterThanOrEqual(2);
       expect(io.out() + io.err()).not.toContain("SECRET-OIDC-TOKEN");
     });
+
+    const IDLE = "gcp-waste-idle-vm-and-disk-recommendations";
+    const idleFinding = (project: string) => ({
+      checkId: IDLE,
+      result: "fail",
+      evidence: { fields: { recommendationId: `rec-${project}` } },
+      scope: { id: `${project}:${IDLE}`, cloud: "gcp", subscriptionOrProject: project },
+      savings: { min: "0.00", max: "12.50", currency: "USD" },
+    });
+    const idleIssue = (project: string) => {
+      const finding = idleFinding(project) as unknown as Parameters<
+        typeof resourceIdFromFinding
+      >[0];
+      const resourceId = resourceIdFromFinding(finding);
+      return {
+        id: issueIdentity(IDLE, resourceId, `${project}:${IDLE}`),
+        checkId: IDLE,
+        resourceId,
+        scopeId: `${project}:${IDLE}`,
+        cloud: "gcp",
+        subscriptionOrProject: project,
+        status: "open",
+        coverage: "assessed",
+        firstSeen: "2026-10-01T00:00:00.000Z",
+        lastConfirmed: "2026-10-30T00:00:00.000Z",
+        savings: { min: "0.00", max: "12.50", currency: "USD" },
+      };
+    };
+    const idleCoverage = (project: string) => ({
+      id: `${project}:${IDLE}`,
+      checkId: IDLE,
+      cloud: "gcp",
+      subscriptionOrProject: project,
+      state: "assessed",
+    });
+    function seed(dir: string, projects: string[]) {
+      const files = {
+        "state.json": {
+          version: 1,
+          scans: projects.map((scope, index) => ({
+            id: `scan-${index + 1}`,
+            cloud: "gcp",
+            scope,
+            status: "succeeded",
+            finishedAt: null,
+            source: "live",
+          })),
+          inventories: {},
+          costs: {},
+        },
+        "findings.json": projects.map(idleFinding),
+        "issues.json": projects.map(idleIssue),
+        "coverage.json": projects.map(idleCoverage),
+      };
+      for (const [name, value] of Object.entries(files)) {
+        writeFileSync(join(dir, name), JSON.stringify(value));
+      }
+      return files;
+    }
+    const read = (dir: string, name: string) =>
+      JSON.parse(readFileSync(join(dir, name), "utf8")) as Array<Record<string, unknown>>;
+
+    it("keeps a real finding from a check that did run", async () => {
+      const { dir, run } = gcpScan("farside-test", fetch);
+      expect(await run()).toBe(EXIT_OK);
+      const findings = read(dir, "findings.json") as Array<{ checkId: string }>;
+      expect(findings.length).toBeGreaterThan(0);
+      expect(
+        findings.every(
+          (finding) => finding.checkId !== "gcp-cost-committed-use" && finding.checkId !== IDLE,
+        ),
+      ).toBe(true);
+    });
+
+    it("leaves another project's findings, issues and coverage exactly as they were", async () => {
+      const { dir, run } = gcpScan("farside-test", fetch);
+      const before = seed(dir, ["project-a"]);
+      expect(await run()).toBe(EXIT_OK);
+      expect(
+        read(dir, "findings.json").filter(
+          (row) =>
+            (row.scope as { subscriptionOrProject: string }).subscriptionOrProject === "project-a",
+        ),
+      ).toEqual(before["findings.json"]);
+      // The scan re-confirms an open issue whose finding is still stored (it refreshes lastConfirmed), so compare identity
+      // and status, which are what a wrongly dropped or closed issue would change.
+      const issues = read(dir, "issues.json").filter(
+        (row) => row.subscriptionOrProject === "project-a",
+      );
+      expect(issues.map((row) => [row.id, row.checkId, row.status])).toEqual(
+        (before["issues.json"] as Array<Record<string, unknown>>).map((row) => [
+          row.id,
+          row.checkId,
+          "open",
+        ]),
+      );
+      expect(
+        read(dir, "coverage.json").filter((row) => row.subscriptionOrProject === "project-a"),
+      ).toEqual(before["coverage.json"]);
+    });
+
+    it("does not close or drop the project's own earlier issue when a rescan cannot assess its check", async () => {
+      const { dir, run } = gcpScan("farside-test", fetch);
+      const before = seed(dir, ["farside-test"]);
+      expect(await run()).toBe(EXIT_OK);
+      expect(read(dir, "issues.json").filter((row) => row.checkId === IDLE)).toEqual(
+        before["issues.json"],
+      );
+      expect(read(dir, "findings.json").filter((row) => row.checkId === IDLE)).toEqual(
+        before["findings.json"],
+      );
+      expect(read(dir, "coverage.json").find((row) => row.checkId === IDLE)).toMatchObject({
+        state: "unassessed",
+        causeId: "missing_role",
+      });
+    });
   });
+
+  it.each([
+    ["Cloud Asset answers 401", "https://cloudasset.googleapis.com/", 401, "GcpAuthError"],
+    ["Cloud Asset answers 403", "https://cloudasset.googleapis.com/", 403, "GcpAccessDeniedError"],
+    ["Cloud Asset answers 500", "https://cloudasset.googleapis.com/", 500, "GcpApiError"],
+    [
+      "the service account token call answers 500",
+      "https://iamcredentials.googleapis.com/",
+      500,
+      "GcpFederationError",
+    ],
+  ])(
+    "fails the scan and leaves a prior workspace byte-identical when %s",
+    async (_name, prefix, status, errorName) => {
+      const { io, dir, run } = gcpScan("farside-test", async (url: string) => {
+        if (url.startsWith("https://sts.googleapis.com/")) {
+          return Response.json({ access_token: "federated" });
+        }
+        if (url.startsWith("https://iamcredentials.googleapis.com/") && !url.startsWith(prefix)) {
+          return Response.json({ accessToken: "impersonated", expireTime: "2026-12-01T10:00:00Z" });
+        }
+        return url.startsWith(prefix) ? Response.json({}, { status }) : Response.json({});
+      });
+      const files = {
+        "state.json": JSON.stringify({
+          version: 1,
+          scans: [
+            {
+              id: "scan-1",
+              cloud: "gcp",
+              scope: "farside-test",
+              status: "succeeded",
+              finishedAt: null,
+              source: "live",
+            },
+          ],
+          inventories: {},
+          costs: {},
+        }),
+        "issues.json": "[]",
+        "findings.json": "[]",
+      };
+      for (const [name, text] of Object.entries(files)) {
+        writeFileSync(join(dir, name), text);
+      }
+      expect(await run()).toBe(EXIT_FAILED);
+      expect(io.out()).toBe("");
+      expect(io.err()).toContain(errorName);
+      for (const [name, text] of Object.entries(files)) {
+        expect(readFileSync(join(dir, name), "utf8")).toBe(text);
+      }
+    },
+  );
 
   it("names invalid GCP settings with a fixed message, not an opaque failure", async () => {
     const io = capture();

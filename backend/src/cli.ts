@@ -325,7 +325,11 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
         clock,
         orgId: CLI_ORG_ID,
         ...(io.liveDeps ?? {}),
-        log: (fields, message) => writeLine(stderr, { message, ...fields }),
+        log: (fields, message) => {
+          // Only these fields are printed, so a field added to the harvester's log later cannot reach stderr by accident.
+          const { event, projectId, reason, name, status, code, step } = fields;
+          writeLine(stderr, { message, event, projectId, reason, name, status, code, step });
+        },
       });
     } catch (error) {
       writeLine(stderr, error instanceof CliLiveConfigError ? error.message : { failed: "live_setup", cause: causeChain(error) });
@@ -352,6 +356,9 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
     clock,
     live ? failureSink((fields) => writeLine(stderr, fields)) : undefined,
   );
+  const before = live?.finalize
+    ? await store.read(CLI_ORG_ID, "findings", "issues").then((rows) => structuredClone({ findings: asMutable<Finding[]>(rows.findings), issues: asMutable<StoredIssue[]>(rows.issues) }))
+    : null;
   const { done } = await runner.start({
     orgId: CLI_ORG_ID,
     subscriptionId: flags.scope,
@@ -380,6 +387,7 @@ async function runScan(flags: Flags, io: CliIo): Promise<number> {
       coverage: asMutable<CoverageEntry[]>(org.coverage),
     },
     flags.scope,
+    before ?? { findings: [], issues: [] },
   );
   const nextState: WorkspaceState = {
     version: 1,

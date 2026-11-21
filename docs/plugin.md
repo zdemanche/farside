@@ -64,7 +64,7 @@ When a live read fails, stderr names the error and its causes with their status,
 What a successful live GCP scan saves is limited to what was really assessed:
 
 - The committed-use check is not saved. Its registered implementation reads fixture commitments for any project, so on a real project it would report fabricated findings. It is recorded as unassessed, with the closer "Enable the BigQuery billing export".
-- A read the harvest could not make, such as the Recommender when Recommender Viewer is not granted, is recorded as unassessed with its cause, never as "assessed, nothing found". The coverage counts printed on stdout come from this adjusted coverage.
+- A read the harvest could not make, such as the Recommender when Recommender Viewer is not granted, is recorded as unassessed with its cause, never as "assessed, nothing found". Issues and findings an earlier scan of the same project saved for that check are kept as they were, not closed and not dropped. Only the scanned project's rows are touched: another project in the same workspace keeps everything. The coverage counts printed on stdout come from this adjusted coverage.
 - Cloud SQL, GKE and Certificate Manager reads that fail are still skipped silently by the harvester (a known gap in the backend), so those checks can read as assessed on an empty read.
 
 A live scan and a fixture scan never share a workspace. Live scans are marked `source: "live"` in `state.json`. A live scan into a workspace that holds fixture scans, and a fixture scan into one that holds live scans, are refused with a message to use a new `--workspace`, and the workspace is left untouched. A workspace that never held a live scan behaves exactly as before.
