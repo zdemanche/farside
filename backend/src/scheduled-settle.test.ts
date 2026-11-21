@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ScanRunner } from "./scans.js";
 import { ScanScheduler } from "./scheduler.js";
-import { runScheduledTick, settleWindowMs } from "./scheduled.js";
+import { runScheduledTick, settleWindowMs, withRemainingTime, type TickDeps } from "./scheduled.js";
 import { MemoryStore } from "./store.js";
 
 const NOW = "2026-10-01T00:00:00.000Z";
@@ -31,7 +31,7 @@ describe("settleWindowMs", () => {
   });
 
   it("is capped by the time the runtime has left, minus a margin", () => {
-    expect(settleWindowMs(240_000, 100_000)).toBe(85_000);
+    expect(settleWindowMs(240_000, 100_000)).toBe(98_000);
   });
 
   it("never exceeds the configured window", () => {
@@ -39,8 +39,37 @@ describe("settleWindowMs", () => {
   });
 
   it("is zero, not negative, when almost no time is left", () => {
-    expect(settleWindowMs(240_000, 5_000)).toBe(0);
+    expect(settleWindowMs(240_000, 1_000)).toBe(0);
     expect(settleWindowMs(240_000, 0)).toBe(0);
+  });
+});
+
+describe("settleWindowMs with a bad remaining time", () => {
+  it("falls back to the configured window for NaN or Infinity, never abandoning everything", () => {
+    expect(settleWindowMs(240_000, Number.NaN)).toBe(240_000);
+    expect(settleWindowMs(240_000, Number.POSITIVE_INFINITY)).toBe(240_000);
+  });
+});
+
+describe("withRemainingTime", () => {
+  const base = { store: {}, scheduler: {}, clock, log: fakeLog() } as unknown as TickDeps;
+
+  it("attaches the runtime's function, called with its own context", () => {
+    const context = {
+      deadline: 5_000,
+      getRemainingTimeInMillis(this: { deadline: number }) {
+        return this.deadline;
+      },
+    };
+    const deps = withRemainingTime(base, context);
+    expect(deps.remainingMs?.()).toBe(5_000);
+    expect(deps.store).toBe(base.store);
+  });
+
+  it("returns the deps untouched when there is no context or no function", () => {
+    expect(withRemainingTime(base)).toBe(base);
+    expect(withRemainingTime(base, {})).toBe(base);
+    expect(base.remainingMs).toBeUndefined();
   });
 });
 

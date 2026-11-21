@@ -12,8 +12,9 @@ import { runRetentionSweep } from "./store.js";
 
 const SETTLE_MS = 240_000;
 const POLL_MS = 250;
-/** Time kept back from the Lambda's remaining time for the last audit lines and the return. */
-const SAFETY_MS = 15_000;
+/** Time kept back from the Lambda's remaining time for the last audit lines and the return. Kept small on purpose: any
+ * margin gives up scans that would finish in it, so it is only what logging and returning need. */
+const SAFETY_MS = 2_000;
 
 export type TickSummary = {
   orgs: Array<{ orgId: string; action: ScheduleTick["action"] }>;
@@ -40,7 +41,9 @@ async function isPending(store: OrgRepository, { orgId, jobId }: StartedScan): P
 
 /** How long to wait for started scans: the settle window, never more than the runtime has left minus a margin. */
 export function settleWindowMs(configuredMs: number, remainingMs: number | undefined): number {
-  return remainingMs === undefined ? configuredMs : Math.max(0, Math.min(configuredMs, remainingMs - SAFETY_MS));
+  return remainingMs === undefined || !Number.isFinite(remainingMs)
+    ? configuredMs
+    : Math.max(0, Math.min(configuredMs, remainingMs - SAFETY_MS));
 }
 
 async function settle(started: StartedScan[], deps: TickDeps): Promise<number> {
@@ -141,6 +144,15 @@ async function createDeps(): Promise<TickDeps> {
 
 let deps: Promise<TickDeps> | undefined;
 
+/** The deps with the runtime's remaining-time function attached, when the runtime has one. */
+export function withRemainingTime(
+  deps: TickDeps,
+  context?: { getRemainingTimeInMillis?: () => number },
+): TickDeps {
+  const remaining = context?.getRemainingTimeInMillis;
+  return remaining ? { ...deps, remainingMs: () => remaining.call(context) } : deps;
+}
+
 export async function handler(
   _event?: unknown,
   context?: { getRemainingTimeInMillis?: () => number },
@@ -149,9 +161,5 @@ export async function handler(
     deps = undefined;
     throw error;
   });
-  const remaining = context?.getRemainingTimeInMillis;
-  return runScheduledTick({
-    ...(await deps),
-    ...(remaining ? { remainingMs: () => remaining.call(context) } : {}),
-  });
+  return runScheduledTick(withRemainingTime(await deps, context));
 }
