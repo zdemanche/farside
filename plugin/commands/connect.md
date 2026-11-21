@@ -14,4 +14,4 @@ node ${CLAUDE_PLUGIN_ROOT}/bin/farside.mjs connect --cloud azure --workspace "$H
 
 Read `connect.json` in that workspace. Name every `missingRoles` entry and the `blockedCheckIds` it blocks. If `roleListing` is `unverified`, say the `closer` and list `expectedRoles` — do not claim those roles are granted.
 
-If the command exits with a non-zero status, show its error output and stop. Do not read or summarise any workspace file: what is there is from an earlier run, not this one.
+This command exits non-zero when credentials or required roles are missing, and in that case it has still written `connect.json` for this run. Read it and name the missing roles as above. Stop and show the error output only on a usage error, or when `connect.json` was not written.
