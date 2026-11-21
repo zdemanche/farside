@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
+import { fixtureCostClient } from "./cost.js";
 import { inventoryFromGcpManifest, type GcpGroundTruthManifest } from "./gcp-inventory.js";
 import { inventoryFromManifest, type GroundTruthManifest } from "./inventory.js";
 import { ACTOR_HEADER, ORG_HEADER } from "./session.js";
@@ -18,27 +19,37 @@ const GCP = JSON.parse(
 ) as GcpGroundTruthManifest;
 const ORG = { [ORG_HEADER]: "org-a", [ACTOR_HEADER]: "actor-a" };
 
-describe("export of the inventory covers every cloud", () => {
-  const store = new MemoryStore(fixedClock);
-  const app = buildApp(store, TEST_APP_OPTIONS);
-  afterAll(() => app.close());
+const apps: Array<ReturnType<typeof buildApp>> = [];
 
+function fresh(options: Parameters<typeof buildApp>[1] = TEST_APP_OPTIONS) {
+  const store = new MemoryStore(fixedClock);
+  const app = buildApp(store, options);
+  apps.push(app);
+  return { store, app };
+}
+
+afterEach(async () => {
+  await Promise.all(apps.splice(0).map((app) => app.close()));
+});
+
+describe("export of the inventory covers every cloud", () => {
   const azure = inventoryFromManifest(AZURE);
   const gcp = inventoryFromGcpManifest(GCP);
 
-  const put = (payload: unknown) =>
+  const put = (app: ReturnType<typeof buildApp>, payload: unknown) =>
     app.inject({
       method: "PUT",
       url: "/v1/orgs/org-a/inventory",
       headers: ORG,
       payload: payload as object,
     });
-  const exported = (query = "") =>
+  const exported = (app: ReturnType<typeof buildApp>, query = "") =>
     app.inject({ method: "GET", url: `/v1/orgs/org-a/export/inventory${query}`, headers: ORG });
 
   it("is just that cloud's rows for an org with one cloud, as before", async () => {
-    await put(azure);
-    const response = await exported();
+    const { app } = fresh();
+    await put(app, azure);
+    const response = await exported(app);
     expect(response.json().rows).toHaveLength(azure.resources.length);
     expect(new Set(response.json().rows.map((row: { cloud: string }) => row.cloud))).toEqual(
       new Set(["azure"]),
@@ -46,37 +57,40 @@ describe("export of the inventory covers every cloud", () => {
   });
 
   it("holds the rows of both clouds with no cloud given, and one cloud's with ?cloud=", async () => {
-    await put(azure);
-    await put(gcp);
-    const all = (await exported()).json().rows as Array<{ cloud: string }>;
+    const { app } = fresh();
+    await put(app, azure);
+    await put(app, gcp);
+    const all = (await exported(app)).json().rows as Array<{ cloud: string }>;
     expect(all).toHaveLength(azure.resources.length + gcp.resources.length);
     expect(new Set(all.map((row) => row.cloud))).toEqual(new Set(["azure", "gcp"]));
 
-    const onlyGcp = (await exported("?cloud=gcp")).json().rows as Array<{ cloud: string }>;
+    const onlyGcp = (await exported(app, "?cloud=gcp")).json().rows as Array<{ cloud: string }>;
     expect(onlyGcp).toHaveLength(gcp.resources.length);
     expect(onlyGcp.every((row) => row.cloud === "gcp")).toBe(true);
-    const onlyAzure = (await exported("?cloud=azure")).json().rows as Array<{ cloud: string }>;
+    const onlyAzure = (await exported(app, "?cloud=azure")).json().rows as Array<{ cloud: string }>;
     expect(onlyAzure).toHaveLength(azure.resources.length);
   });
 });
 
-describe("cost-waste under another cloud keeps the waste list readable", () => {
-  const store = new MemoryStore(fixedClock);
-  const app = buildApp(store, TEST_APP_OPTIONS);
-  afterAll(() => app.close());
-
-  it("stays readable for ?cloud=gcp when the org only has Azure cost, as on main", async () => {
-    const response = await app.inject({
-      method: "GET",
-      url: "/v1/orgs/org-a/cost-waste?cloud=gcp",
+describe("cost-waste for another cloud is unchanged: still readable when the org has Azure cost", () => {
+  it("answers the same for ?cloud=gcp as for no cloud, with readable true, once Azure cost is stored", async () => {
+    const { app, store } = fresh({ ...TEST_APP_OPTIONS, costClient: fixtureCostClient() });
+    await store.putConnection("org-a", { tenantId: "tenant-1", subscriptionId: "main" });
+    const stored = await app.inject({
+      method: "POST",
+      url: "/v1/orgs/org-a/cost",
       headers: ORG,
+      payload: { subscriptionId: "main" },
     });
-    expect(response.statusCode).toBe(200);
-    const before = response.json();
-    // The route is unchanged by this PR: it must give the same answer for gcp as for no cloud on an org with no cost.
+    expect(stored.statusCode).toBeLessThan(300);
+    const gcp = (
+      await app.inject({ method: "GET", url: "/v1/orgs/org-a/cost-waste?cloud=gcp", headers: ORG })
+    ).json();
     const all = (
       await app.inject({ method: "GET", url: "/v1/orgs/org-a/cost-waste", headers: ORG })
     ).json();
-    expect(before.readable).toBe(all.readable);
+    // The console hides Azure spend under GCP itself, and shows the GCP waste list only when readable is true.
+    expect(gcp.readable).toBe(true);
+    expect(all.readable).toBe(true);
   });
 });
