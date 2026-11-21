@@ -383,7 +383,10 @@ export async function main(io: RunMainIo = {}): Promise<number> {
   const clients = gcpLiveClients(config, io.deps);
   const record = await runGcpLiveChecks({
     projectId: config.projectId,
-    harvester: liveGcpHarvester(clients),
+    // Report why a Cloud Asset read failed (safe fields only), since the result alone reads as an empty harvest.
+    harvester: liveGcpHarvester(clients, undefined, (fields, message) =>
+      out(`${message} ${JSON.stringify(fields)}`),
+    ),
     ...(clients.bigQuery ? { costClient: clients.bigQuery } : {}),
     connection: describeGcpLiveConfig(config),
     ...(io.deps?.now ? { now: io.deps.now } : {}),
