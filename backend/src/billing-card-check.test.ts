@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertNoCardData, CardDataError } from "./billing.js";
+import { assertNoCardData, CardDataError, keysOf } from "./billing.js";
 
 describe("assertNoCardData", () => {
   it("still rejects a card-like key", () => {
@@ -58,15 +58,28 @@ describe("assertNoCardData", () => {
     expect(() => assertNoCardData({ note: "x4111111111111111" })).toThrow(CardDataError);
   });
 
-  it("walks a very deep or cyclic body without overflowing the stack", () => {
+  it("walks a very deep body for keys without recursing, so it cannot overflow the stack", () => {
     let deep: Record<string, unknown> = { leaf: "ok" };
-    for (let index = 0; index < 5000; index += 1) {
+    for (let index = 0; index < 100_000; index += 1) {
       deep = { next: deep };
     }
-    expect(() => assertNoCardData(deep)).not.toThrow(RangeError);
+    const keys = keysOf(deep);
+    expect(keys).toHaveLength(100_001);
+    expect(keys.at(-1)).toBe("leaf");
+  });
+
+  it("walks a cyclic body for keys once, without looping", () => {
     const cyclic: Record<string, unknown> = { a: 1 };
     cyclic.self = cyclic;
-    expect(() => assertNoCardData(cyclic)).not.toThrow(RangeError);
+    expect(keysOf(cyclic).sort()).toEqual(["a", "self"]);
+  });
+
+  it("still checks a moderately deep body end to end", () => {
+    let deep: Record<string, unknown> = { cardNumber: "x" };
+    for (let index = 0; index < 300; index += 1) {
+      deep = { next: deep };
+    }
+    expect(() => assertNoCardData(deep)).toThrow(CardDataError);
   });
 
   it("does not take several short groups for a card number", () => {

@@ -28,7 +28,7 @@ const CARD_KEY = /card|pan|cvv|cvc|cardnumber|card_number/i;
 const DIGIT_RUN = /\d+(?:[ .-]\d+)*/g;
 
 /** Every key in the value, at any depth. Iterative with a visited set, so a deep or cyclic body cannot overflow the stack. */
-function keysOf(value: unknown): string[] {
+export function keysOf(value: unknown): string[] {
   const keys: string[] = [];
   const seen = new WeakSet<object>();
   const stack: unknown[] = [value];
